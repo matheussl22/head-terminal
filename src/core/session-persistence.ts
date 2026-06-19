@@ -1,3 +1,4 @@
+import { debounce } from "./debounce";
 import type { AgentSession, LayoutNode, SessionStatus } from "../types/session";
 import { collectPaneIds } from "./session-layout";
 
@@ -17,6 +18,7 @@ export interface PersistedSession {
   cwd: string;
   agentProfileId: string;
   layout: LayoutNode;
+  pinned?: boolean;
 }
 
 export interface PersistedWorkspace {
@@ -39,6 +41,7 @@ function toPersistedSession(session: AgentSession): PersistedSession {
     cwd: session.cwd,
     agentProfileId: session.agentProfileId,
     layout: session.layout,
+    pinned: session.pinned,
   };
 }
 
@@ -107,4 +110,15 @@ export function loadPersistedWorkspace(): PersistedWorkspace | null {
 
 export function savePersistedWorkspace(workspace: PersistedWorkspace): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+}
+
+const debouncedSave = debounce(savePersistedWorkspace, 400);
+
+export function schedulePersistedWorkspace(workspace: PersistedWorkspace): void {
+  debouncedSave(workspace);
+}
+
+export function flushPersistedWorkspace(workspace: PersistedWorkspace): void {
+  debouncedSave.flush();
+  savePersistedWorkspace(workspace);
 }

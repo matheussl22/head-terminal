@@ -1,18 +1,29 @@
 import { useEffect, useRef } from "react";
 import type { IDisposable } from "tauri-pty";
-import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import { Terminal } from "@xterm/xterm";
 
 import { getAgentProfile } from "../config/agents";
-import { createTerminalOptions } from "../config/theme";
+import { ActivityDetector } from "../core/activity-detector";
+import { dirname } from "../core/git-context-utils";
+import { fetchGitContextForPath } from "../core/git-watch-bridge";
+import {
+  fitPanes,
+  registerPaneFitter,
+  unregisterPaneFitter,
+} from "../core/pane-fit-registry";
 import {
   attachPtyDataListener,
   attachPtyExitListener,
   createPtyBridge,
 } from "../core/pty-bridge";
+import { PtyOutputBuffer } from "../core/pty-output-buffer";
 import { useSessionStore } from "../core/session-manager";
+import {
+  createConfiguredTerminal,
+  createRafPtyWriter,
+  fitTerminal,
+} from "../core/terminal-factory";
 import { attachOrphanCompositionEndGuard } from "../core/terminal-composition-guard";
+import { WorkspaceDetector } from "../core/workspace-detector";
 
 interface UseAgentSessionOptions {
   paneId: string;
@@ -20,18 +31,8 @@ interface UseAgentSessionOptions {
   cwd: string;
   agentProfileId: string;
   isVisible: boolean;
+  shouldSpawn: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
-}
-
-const MIN_COLS = 80;
-const MIN_ROWS = 24;
-
-function fitTerminal(fitAddon: FitAddon, terminal: Terminal): void {
-  fitAddon.fit();
-
-  if (terminal.cols < 2 || terminal.rows < 2) {
-    terminal.resize(MIN_COLS, MIN_ROWS);
-  }
 }
 
 export function useAgentSession({
@@ -40,6 +41,7 @@ export function useAgentSession({
   cwd,
   agentProfileId,
   isVisible,
+  shouldSpawn,
   containerRef,
 }: UseAgentSessionOptions): void {
   const registerPtyWriter = useSessionStore((state) => state.registerPtyWriter);
@@ -47,6 +49,10 @@ export function useAgentSession({
     (state) => state.unregisterPtyWriter,
   );
   const updatePaneStatus = useSessionStore((state) => state.updatePaneStatus);
+  const updatePaneActivity = useSessionStore((state) => state.updatePaneActivity);
+  const mergeSessionGitContext = useSessionStore(
+    (state) => state.mergeSessionGitContext,
+  );
   const restartKey = useSessionStore(
     (state) => state.paneRestartKeys[paneId] ?? 0,
   );
@@ -54,9 +60,18 @@ export function useAgentSession({
   const paneIdRef = useRef(paneId);
   paneIdRef.current = paneId;
 
-  const fitRef = useRef<(() => void) | null>(null);
+  const isVisibleRef = useRef(isVisible);
+  isVisibleRef.current = isVisible;
+
+  const outputBufferRef = useRef(new PtyOutputBuffer());
+  const flushBufferedRef = useRef<(() => void) | null>(null);
+  const pathDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (!shouldSpawn) {
+      return;
+    }
+
     const container = containerRef.current;
     if (!container) {
       return;
@@ -64,36 +79,62 @@ export function useAgentSession({
 
     let disposed = false;
 
-    const terminal = new Terminal(createTerminalOptions());
-    const fitAddon = new FitAddon();
-    const webLinksAddon = new WebLinksAddon();
-
-    terminal.loadAddon(fitAddon);
-    terminal.loadAddon(webLinksAddon);
+    const { terminal, fitAddon } = createConfiguredTerminal();
     terminal.open(container);
 
     const listeners: IDisposable[] = [];
     let bridge: ReturnType<typeof createPtyBridge> | null = null;
     let compositionGuardCleanup: (() => void) | null = null;
 
-    fitRef.current = () => {
-      if (disposed || !bridge) {
-        fitTerminal(fitAddon, terminal);
+    const activityDetector = new ActivityDetector((activity) => {
+      if (paneIdRef.current === paneId) {
+        updatePaneActivity(paneId, activity);
+      }
+    });
+
+    const workspaceDetector = new WorkspaceDetector((path) => {
+      if (pathDebounceRef.current) {
+        clearTimeout(pathDebounceRef.current);
+      }
+
+      pathDebounceRef.current = setTimeout(() => {
+        const lookupPath = path.startsWith("/") ? dirname(path) : cwd;
+        void fetchGitContextForPath(lookupPath).then((context) => {
+          mergeSessionGitContext(sessionId, context);
+        });
+      }, 400);
+    });
+
+    activityDetector.onStarting();
+    updatePaneActivity(paneId, "starting");
+
+    const flushBufferedOutput = () => {
+      for (const chunk of outputBufferRef.current.drain()) {
+        terminal.write(chunk);
+      }
+    };
+    flushBufferedRef.current = flushBufferedOutput;
+
+    const fitPane = () => {
+      if (disposed) {
         return;
       }
 
       fitTerminal(fitAddon, terminal);
-      if (terminal.cols > 0 && terminal.rows > 0) {
+
+      if (bridge && terminal.cols > 0 && terminal.rows > 0) {
         bridge.pty.resize(terminal.cols, terminal.rows);
       }
     };
+
+    registerPaneFitter(paneId, fitPane);
 
     const bootstrap = () => {
       if (disposed) {
         return;
       }
 
-      fitTerminal(fitAddon, terminal);
+      fitPane();
 
       try {
         const profile = getAgentProfile(agentProfileId);
@@ -112,9 +153,17 @@ export function useAgentSession({
           },
         );
 
+        const writePtyData = createRafPtyWriter(
+          terminal,
+          () => !isVisibleRef.current,
+          (data) => outputBufferRef.current.push(data),
+        );
+
         listeners.push(
           attachPtyDataListener(bridge.pty, (data) => {
-            terminal.write(data);
+            writePtyData(data);
+            activityDetector.onData(data);
+            workspaceDetector.onData(data);
           }),
           attachPtyExitListener(bridge.pty, (exitCode) => {
             if (paneIdRef.current === paneId) {
@@ -123,6 +172,7 @@ export function useAgentSession({
                 `[Processo encerrado com código ${exitCode}]`,
               );
               updatePaneStatus(paneId, "exited");
+              activityDetector.onExit(exitCode);
             }
           }),
           terminal.onData((data) => {
@@ -139,23 +189,24 @@ export function useAgentSession({
           bridge?.write(data);
         });
 
+        if (isVisibleRef.current) {
+          flushBufferedOutput();
+        }
+
         updatePaneStatus(paneId, "running");
+        activityDetector.onRunning();
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Falha ao iniciar o PTY";
         terminal.writeln(`\r\n[Erro] ${message}\r\n`);
         updatePaneStatus(paneId, "exited");
+        activityDetector.onError();
       }
     };
 
     requestAnimationFrame(() => {
       requestAnimationFrame(bootstrap);
     });
-
-    const resizeObserver = new ResizeObserver(() => {
-      fitRef.current?.();
-    });
-    resizeObserver.observe(container);
 
     const focusTerminal = () => {
       terminal.focus();
@@ -164,12 +215,17 @@ export function useAgentSession({
 
     return () => {
       disposed = true;
-      fitRef.current = null;
+      if (pathDebounceRef.current) {
+        clearTimeout(pathDebounceRef.current);
+        pathDebounceRef.current = null;
+      }
+      flushBufferedRef.current = null;
       container.removeEventListener("mousedown", focusTerminal);
-      resizeObserver.disconnect();
       compositionGuardCleanup?.();
       compositionGuardCleanup = null;
+      activityDetector.dispose();
       listeners.forEach((listener) => listener.dispose());
+      unregisterPaneFitter(paneId);
       unregisterPtyWriter(paneId);
       bridge?.dispose();
       terminal.dispose();
@@ -182,17 +238,21 @@ export function useAgentSession({
     registerPtyWriter,
     restartKey,
     sessionId,
+    shouldSpawn,
     unregisterPtyWriter,
+    mergeSessionGitContext,
+    updatePaneActivity,
     updatePaneStatus,
   ]);
 
   useEffect(() => {
-    if (!isVisible) {
+    if (!shouldSpawn || !isVisible) {
       return;
     }
 
     requestAnimationFrame(() => {
-      fitRef.current?.();
+      fitPanes([paneId]);
+      flushBufferedRef.current?.();
     });
-  }, [isVisible]);
+  }, [isVisible, paneId, shouldSpawn]);
 }

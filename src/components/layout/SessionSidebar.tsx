@@ -1,58 +1,22 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 
+import { buildAgentProfiles } from "../../config/agents";
+import { getSessionActivity } from "../../core/activity-utils";
 import { collectPaneIds } from "../../core/session-layout";
 import { useSessionStore } from "../../core/session-manager";
 import {
   loadSidebarCollapsed,
   saveSidebarCollapsed,
 } from "../../core/ui-preferences";
-import type { AgentSession, SessionStatus } from "../../types/session";
+import { ACTIVITY_LABEL } from "../../types/activity";
+import type { AgentSession } from "../../types/session";
+import { GitBranchBadge } from "../ui/GitBranchBadge";
 
 interface SessionSidebarProps {
   sessions: AgentSession[];
   onCreateSession: () => void;
-}
-
-function aggregateStatus(session: AgentSession): SessionStatus {
-  const statuses = collectPaneIds(session.layout).map(
-    (paneId) => session.paneStatuses[paneId] ?? "starting",
-  );
-
-  if (statuses.every((status) => status === "exited")) {
-    return "exited";
-  }
-
-  if (statuses.some((status) => status === "running")) {
-    return "running";
-  }
-
-  return "starting";
-}
-
-const STATUS_LABEL: Record<SessionStatus, string> = {
-  starting: "Iniciando",
-  running: "Ativo",
-  exited: "Encerrado",
-};
-
-function RenameIcon() {
-  return (
-    <svg
-      className="session-sidebar__rename-icon"
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  );
+  renameSessionId: string | null;
+  onRenameComplete: () => void;
 }
 
 function sessionInitial(title: string): string {
@@ -64,28 +28,54 @@ interface SessionListItemProps {
   session: AgentSession;
   isActive: boolean;
   collapsed: boolean;
+  forceRename: boolean;
   onSelect: () => void;
   onRename: (title: string) => void;
+  onRemove: () => void;
+  onAgentChange: (agentProfileId: string) => void;
+  onCwdChange: (cwd: string) => void;
+  onRenameComplete: () => void;
 }
 
-function SessionListItem({
+const SessionListItem = memo(function SessionListItem({
   session,
   isActive,
   collapsed,
+  forceRename,
   onSelect,
   onRename,
+  onRemove,
+  onAgentChange,
+  onCwdChange,
+  onRenameComplete,
 }: SessionListItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(session.title);
+  const [draftCwd, setDraftCwd] = useState(session.cwd);
   const inputRef = useRef<HTMLInputElement>(null);
+  const paneActivities = useSessionStore((state) => state.paneActivities);
+  const gitContext = useSessionStore(
+    (state) => state.sessionGitContext[session.id],
+  );
   const paneCount = collectPaneIds(session.layout).length;
-  const status = aggregateStatus(session);
+  const activity = getSessionActivity(session, paneActivities);
+  const profiles = Object.values(buildAgentProfiles());
+
+  useEffect(() => {
+    if (forceRename) {
+      setIsEditing(true);
+    }
+  }, [forceRename]);
 
   useEffect(() => {
     if (!isEditing) {
       setDraftTitle(session.title);
     }
   }, [isEditing, session.title]);
+
+  useEffect(() => {
+    setDraftCwd(session.cwd);
+  }, [session.cwd]);
 
   useEffect(() => {
     if (isEditing) {
@@ -102,6 +92,16 @@ function SessionListItem({
       setDraftTitle(session.title);
     }
     setIsEditing(false);
+    onRenameComplete();
+  };
+
+  const commitCwd = () => {
+    const nextCwd = draftCwd.trim();
+    if (nextCwd && nextCwd !== session.cwd) {
+      onCwdChange(nextCwd);
+    } else {
+      setDraftCwd(session.cwd);
+    }
   };
 
   if (collapsed) {
@@ -114,7 +114,7 @@ function SessionListItem({
               ? "session-sidebar__compact-item session-sidebar__compact-item--active"
               : "session-sidebar__compact-item"
           }
-          title={session.title}
+          title={`${session.title} — ${ACTIVITY_LABEL[activity]}${gitContext?.branch ? ` — ${gitContext.branch}` : ""}`}
           aria-label={session.title}
           onClick={onSelect}
         >
@@ -156,6 +156,7 @@ function SessionListItem({
                     event.preventDefault();
                     setDraftTitle(session.title);
                     setIsEditing(false);
+                    onRenameComplete();
                   }
                 }}
                 onClick={(event) => event.stopPropagation()}
@@ -185,30 +186,83 @@ function SessionListItem({
                   setIsEditing(true);
                 }}
               >
-                <RenameIcon />
+                ✎
               </button>
             )}
           </div>
 
           <span className="session-sidebar__meta">{session.cwd}</span>
+          <GitBranchBadge
+            context={gitContext}
+            className="session-sidebar__git-badge"
+          />
           <span className="session-sidebar__status">
-            {STATUS_LABEL[status]} · {paneCount} terminal
+            {ACTIVITY_LABEL[activity]} · {paneCount} terminal
             {paneCount === 1 ? "" : "s"}
           </span>
+        </button>
+
+        {isActive && (
+          <div className="session-sidebar__settings">
+            <select
+              className="session-sidebar__select-input"
+              value={session.agentProfileId}
+              onChange={(event) => onAgentChange(event.target.value)}
+              onClick={(event) => event.stopPropagation()}
+            >
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.label}
+                </option>
+              ))}
+            </select>
+
+            <input
+              className="session-sidebar__cwd-input"
+              value={draftCwd}
+              onChange={(event) => setDraftCwd(event.target.value)}
+              onBlur={commitCwd}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitCwd();
+                }
+              }}
+              onClick={(event) => event.stopPropagation()}
+            />
+          </div>
+        )}
+
+        <button
+          type="button"
+          className="session-sidebar__remove"
+          title="Fechar sessão"
+          aria-label={`Fechar ${session.title}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onRemove();
+          }}
+        >
+          ×
         </button>
       </div>
     </li>
   );
-}
+});
 
 export function SessionSidebar({
   sessions,
   onCreateSession,
+  renameSessionId,
+  onRenameComplete,
 }: SessionSidebarProps) {
   const [collapsed, setCollapsed] = useState(loadSidebarCollapsed);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setActiveSessionId = useSessionStore((state) => state.setActiveSessionId);
   const renameSession = useSessionStore((state) => state.renameSession);
+  const removeSession = useSessionStore((state) => state.removeSession);
+  const updateSessionAgent = useSessionStore((state) => state.updateSessionAgent);
+  const updateSessionCwd = useSessionStore((state) => state.updateSessionCwd);
 
   const toggleCollapsed = () => {
     setCollapsed((current) => {
@@ -261,8 +315,15 @@ export function SessionSidebar({
             session={session}
             collapsed={collapsed}
             isActive={session.id === activeSessionId}
+            forceRename={renameSessionId === session.id}
             onSelect={() => setActiveSessionId(session.id)}
             onRename={(title) => renameSession(session.id, title)}
+            onRemove={() => removeSession(session.id)}
+            onAgentChange={(agentProfileId) =>
+              updateSessionAgent(session.id, agentProfileId)
+            }
+            onCwdChange={(cwd) => updateSessionCwd(session.id, cwd)}
+            onRenameComplete={onRenameComplete}
           />
         ))}
       </ul>

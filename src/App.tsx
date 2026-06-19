@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   createInitialSession,
-  createNamedSession,
   resolveDefaultCwd,
 } from "./core/agent-launcher";
 import {
@@ -11,6 +10,7 @@ import {
 } from "./core/session-persistence";
 import { useSessionStore } from "./core/session-manager";
 import { AppShell } from "./components/layout/AppShell";
+import { CreateSessionDialog } from "./components/layout/CreateSessionDialog";
 
 import "./styles/global.css";
 
@@ -21,6 +21,7 @@ function App() {
   const hydrateWorkspaceState = useSessionStore((state) => state.hydrateWorkspace);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [defaultCwd, setDefaultCwd] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,23 +57,53 @@ function App() {
   }, [addSession, hydrateWorkspaceState]);
 
   const handleCreateSession = useCallback(() => {
-    if (!defaultCwd) {
-      return;
-    }
+    setCreateOpen(true);
+  }, []);
 
-    addSession(createNamedSession(defaultCwd, sessions.length + 1));
-  }, [addSession, defaultCwd, sessions.length]);
+  const handleCreateConfirm = useCallback(
+    (cwd: string, agentProfileId: string) => {
+      addSession(
+        createInitialSession(
+          cwd,
+          `Sessão ${sessions.length + 1}`,
+          agentProfileId,
+        ),
+      );
+    },
+    [addSession, sessions.length],
+  );
 
-  if (!bootstrapped || sessions.length === 0) {
-    return <div className="boot-screen">Iniciando Head Terminal...</div>;
+  if (!bootstrapped || sessions.length === 0 || !defaultCwd) {
+    return (
+      <div className="boot-screen">
+        <div className="boot-screen__content">
+          <span className="boot-screen__logo" aria-hidden>
+            ●
+          </span>
+          <h1 className="boot-screen__title">Head Terminal</h1>
+          <p className="boot-screen__subtitle">Iniciando sessões…</p>
+          <div className="boot-screen__progress" aria-hidden>
+            <div className="boot-screen__progress-bar" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <AppShell
-      sessions={sessions}
-      activeSessionId={activeSessionId}
-      onCreateSession={handleCreateSession}
-    />
+    <>
+      <AppShell
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onCreateSession={handleCreateSession}
+      />
+      <CreateSessionDialog
+        open={createOpen}
+        defaultCwd={defaultCwd}
+        onClose={() => setCreateOpen(false)}
+        onCreate={handleCreateConfirm}
+      />
+    </>
   );
 }
 

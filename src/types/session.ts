@@ -19,4 +19,5 @@ export interface AgentSession {
   agentProfileId: string;
   layout: LayoutNode;
   paneStatuses: Record<string, SessionStatus>;
+  pinned?: boolean;
 }

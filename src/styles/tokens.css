@@ -1,0 +1,48 @@
+:root {
+  /* Surfaces */
+  --surface-terminal: #000000;
+  --surface-sidebar: #050505;
+  --surface-toolbar: #0a0a0a;
+  --surface-overlay: rgba(0, 0, 0, 0.72);
+
+  /* Borders */
+  --border-subtle: #1a1a1a;
+  --border-default: #333333;
+  --border-active: rgba(248, 28, 229, 0.45);
+
+  /* Text */
+  --text-primary: #ffffff;
+  --text-secondary: rgba(255, 255, 255, 0.72);
+  --text-muted: rgba(255, 255, 255, 0.62);
+
+  /* Accent (Hyper magenta) */
+  --accent: #f81ce5;
+  --accent-muted: rgba(248, 28, 229, 0.35);
+  --accent-subtle: rgba(248, 28, 229, 0.12);
+
+  /* Activity states */
+  --status-idle: #686868;
+  --status-working: #67f86f;
+  --status-waiting: #fffa72;
+  --status-error: #fd6f6b;
+  --status-starting: #6a76fb;
+  --status-exited: #686868;
+
+  /* Buttons */
+  --button-bg: rgba(255, 255, 255, 0.06);
+  --button-border: rgba(255, 255, 255, 0.15);
+  --button-hover: rgba(255, 255, 255, 0.14);
+
+  /* Layout */
+  --sidebar-width: 220px;
+  --sidebar-collapsed-width: 52px;
+  --toolbar-height: 40px;
+  --pane-header-height: 24px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Motion */
+  --transition-fast: 120ms ease;
+  --transition-normal: 160ms ease;
+}

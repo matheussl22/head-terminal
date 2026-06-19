@@ -59,15 +59,34 @@ export function LayoutDividers({ sessionId, dividers }: LayoutDividersProps) {
         : (divider.height / 100) * rect.height;
       const areaStart = isHorizontal ? areaLeft : areaTop;
 
-      const onMove = (moveEvent: PointerEvent) => {
-        const pointer = isHorizontal ? moveEvent.clientX : moveEvent.clientY;
-        const nextRatio = (pointer - areaStart) / areaSize;
-        updateSplitRatio(sessionId, divider.path, nextRatio);
+      const snapRatio = (ratio: number): number => {
+        const clamped = Math.min(0.85, Math.max(0.15, ratio));
+        const snaps = [0.33, 0.5, 0.66];
+        for (const snap of snaps) {
+          if (Math.abs(clamped - snap) < 0.04) {
+            return snap;
+          }
+        }
+        return clamped;
       };
 
-      const onUp = () => {
+      const onMove = (moveEvent: PointerEvent) => {
+        const pointer = isHorizontal ? moveEvent.clientX : moveEvent.clientY;
+        const nextRatio = snapRatio((pointer - areaStart) / areaSize);
+        updateSplitRatio(sessionId, divider.path, nextRatio, {
+          persist: false,
+        });
+      };
+
+      const onUp = (upEvent: PointerEvent) => {
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
+
+        const pointer = isHorizontal ? upEvent.clientX : upEvent.clientY;
+        const nextRatio = snapRatio((pointer - areaStart) / areaSize);
+        updateSplitRatio(sessionId, divider.path, nextRatio, {
+          persist: true,
+        });
       };
 
       window.addEventListener("pointermove", onMove);
@@ -81,7 +100,7 @@ export function LayoutDividers({ sessionId, dividers }: LayoutDividersProps) {
       {dividers.map((divider) => (
         <div
           key={dividerKey(divider.path)}
-          className="layout-divider"
+          className="layout-divider layout-divider--draggable"
           style={dividerStyle(divider)}
           onPointerDown={(event) => onPointerDown(divider, event)}
           role="separator"
