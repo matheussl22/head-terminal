@@ -1,0 +1,11 @@
+{
+  "productName": "Head Terminal Dev",
+  "identifier": "com.matheus.head-terminal.dev",
+  "app": {
+    "windows": [
+      {
+        "title": "Head Terminal (Dev)"
+      }
+    ]
+  }
+}

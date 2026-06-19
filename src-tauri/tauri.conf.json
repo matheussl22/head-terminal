@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Head Terminal",
+  "version": "0.1.0",
+  "identifier": "com.matheus.head-terminal",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "enableGTKAppId": true,
+    "windows": [
+      {
+        "title": "Head Terminal",
+        "width": 1200,
+        "height": 800,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src blob: data: filesystem: ws: wss: http: https: tauri: 'unsafe-eval' 'unsafe-inline' 'self' img-src: 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb"],
+    "category": "DeveloperTool",
+    "shortDescription": "Terminal focado em AI coding agents",
+    "longDescription": "Head Terminal é um terminal desktop para Cursor Agent e outros coding agents.",
+    "linux": {
+      "deb": {
+        "desktopTemplate": "HeadTerminal.desktop.hbs"
+      }
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}
