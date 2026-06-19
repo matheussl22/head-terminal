@@ -163,7 +163,7 @@ pub fn start_git_watch(
     let cwd_for_callback = cwd.clone();
 
     let mut watcher = RecommendedWatcher::new(
-        move |result| {
+        move |result: Result<notify::Event, notify::Error>| {
             if let Ok(event) = result {
                 let is_relevant = matches!(
                     event.kind,
