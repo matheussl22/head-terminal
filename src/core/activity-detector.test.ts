@@ -28,11 +28,9 @@ describe("ActivityDetector", () => {
 
     detector.onRunning();
     detector.onData("Building project...\n");
+    expect(changes).toContain("working");
 
-    vi.advanceTimersByTime(1600);
-    expect(changes).toContain("idle");
-
-    vi.advanceTimersByTime(1600);
+    vi.advanceTimersByTime(3000);
     expect(changes).toContain("waiting_input");
   });
 
