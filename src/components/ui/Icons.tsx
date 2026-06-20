@@ -43,28 +43,6 @@ export function IconClose({ className, size = 14 }: IconProps) {
   );
 }
 
-export function IconServer({ className, size = 14 }: IconProps) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <rect x="2" y="2.5" width="12" height="4.5" rx="1" />
-      <rect x="2" y="9" width="12" height="4.5" rx="1" />
-      <path d="M4.5 4.75h.01M4.5 11.25h.01" />
-    </svg>
-  );
-}
-
 export function IconMic({ className, size = 14 }: IconProps) {
   return (
     <svg

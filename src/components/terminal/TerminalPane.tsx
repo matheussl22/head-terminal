@@ -64,8 +64,6 @@ export function TerminalPane({
           paneIndex={paneIndex}
           paneCount={paneCount}
           isActive={isActive}
-          cwd={cwd}
-          agentProfileId={agentProfileId}
           onFocus={onFocus}
           onClose={onClose}
         />
