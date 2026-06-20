@@ -17,3 +17,8 @@ export function sendAgentCommand(command: string): void {
     ptyWriters[paneId]?.(payload);
   }
 }
+
+export function sendTextToPane(paneId: string, text: string): void {
+  const { ptyWriters } = useSessionStore.getState();
+  ptyWriters[paneId]?.(text);
+}

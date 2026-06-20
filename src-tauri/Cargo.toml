@@ -19,3 +19,12 @@ tauri-plugin-os = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 notify = "8"
+
+# TEMP TEST: local fork of tauri-plugin-pty that offloads the blocking
+# pty read/write/wait calls to spawn_blocking, instead of running them
+# directly on tokio's fixed-size async worker pool. Upstream (0.3.0, latest
+# as of 2026-06) still blocks those worker threads, so opening enough
+# terminals at once starves the runtime and the whole app stops responding
+# to keystrokes. Revert this patch once confirmed/upstreamed.
+[patch.crates-io]
+tauri-plugin-pty = { path = "vendor/tauri-plugin-pty" }

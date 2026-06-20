@@ -30,6 +30,8 @@ interface SessionStore {
   paneActivities: Record<string, PaneActivity>;
   paneStatusIndex: Record<string, SessionStatus>;
   ptyWriters: Record<string, (data: string) => void>;
+  voiceRecordingPaneId: string | null;
+  voiceTranscribingPaneId: string | null;
   runEverything: boolean;
   spawnedSessionIds: Record<string, boolean>;
   sessionGitContext: Record<string, GitContext>;
@@ -64,6 +66,8 @@ interface SessionStore {
   updatePaneActivity: (paneId: string, activity: PaneActivity) => void;
   registerPtyWriter: (paneId: string, write: (data: string) => void) => void;
   unregisterPtyWriter: (paneId: string) => void;
+  setVoiceRecordingPaneId: (paneId: string | null) => void;
+  setVoiceTranscribingPaneId: (paneId: string | null) => void;
   setSessionGitContext: (sessionId: string, context: GitContext) => void;
   mergeSessionGitContext: (
     sessionId: string,
@@ -187,6 +191,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   paneActivities: {},
   paneStatusIndex: {},
   ptyWriters: {},
+  voiceRecordingPaneId: null,
+  voiceTranscribingPaneId: null,
   runEverything: loadRunEverything(),
   spawnedSessionIds: {},
   sessionGitContext: {},
@@ -688,6 +694,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       delete next[paneId];
       return { ptyWriters: next };
     }),
+
+  setVoiceRecordingPaneId: (paneId) => set({ voiceRecordingPaneId: paneId }),
+
+  setVoiceTranscribingPaneId: (paneId) =>
+    set({ voiceTranscribingPaneId: paneId }),
 
   setSessionGitContext: (sessionId, context) =>
     set((state) => ({

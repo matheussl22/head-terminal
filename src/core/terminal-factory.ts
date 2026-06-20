@@ -24,6 +24,11 @@ export function createConfiguredTerminal(): {
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(webLinksAddon);
 
+  // xterm sends F9 to the shell as a VT escape sequence and stops the
+  // keydown from bubbling, so the global F9 voice shortcut never fires
+  // while a terminal pane is focused. Tell xterm to ignore it.
+  terminal.attachCustomKeyEventHandler((event) => event.key !== "F9");
+
   const webglEnabled = shouldEnableWebglRenderer();
   logEvent("info", "terminal.renderer", {
     webgl: webglEnabled,

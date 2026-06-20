@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { getSessionActivity } from "../core/activity-utils";
 import { useSessionStore } from "../core/session-manager";
 import { notifySessionAttention } from "../core/notifications";
+import { toggleVoiceInput } from "../core/voice-input";
 
 export function useActivityNotifications(): void {
   const sessions = useSessionStore((state) => state.sessions);
@@ -48,6 +49,15 @@ export function useKeyboardShortcuts(options: {
       if (!isInput && event.key === "F2") {
         event.preventDefault();
         options.onRenameSession();
+        return;
+      }
+
+      if (event.key === "F9") {
+        event.preventDefault();
+        const paneId = useSessionStore.getState().activePaneId;
+        if (paneId) {
+          void toggleVoiceInput(paneId);
+        }
         return;
       }
 

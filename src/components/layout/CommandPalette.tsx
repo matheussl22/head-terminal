@@ -4,6 +4,7 @@ import { sendAgentCommand } from "../../actions/sendAgentCommand";
 import { PALETTE_ACTIONS } from "../../config/toolbar";
 import { exportDiagnosticBundle } from "../../core/export-diagnostic";
 import { useSessionStore } from "../../core/session-manager";
+import { toggleVoiceInput } from "../../core/voice-input";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -61,6 +62,10 @@ export function CommandPalette({
         }
       } else if (command === "__rename_session__") {
         onRenameRequest();
+      } else if (command === "__voice_input__") {
+        if (activePaneId) {
+          void toggleVoiceInput(activePaneId);
+        }
       } else if (command === "__export_diagnostic__") {
         void exportDiagnosticBundle();
       } else if (command.startsWith("/")) {

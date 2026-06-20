@@ -3,6 +3,7 @@ import { formatBranchLabel } from "../../core/git-context-utils";
 import { useSessionStore } from "../../core/session-manager";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import { IconClose } from "../ui/Icons";
+import { VoiceInputButton } from "./VoiceInputButton";
 
 interface TerminalPaneOverlayProps {
   paneId: string;
@@ -103,6 +104,7 @@ export function TerminalPaneHeader({
         <span className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}>
           {ACTIVITY_LABEL[activity]}
         </span>
+        <VoiceInputButton paneId={paneId} />
         {paneCount > 1 && (
           <button
             type="button"

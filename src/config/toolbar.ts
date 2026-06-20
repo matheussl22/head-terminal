@@ -1,6 +1,7 @@
 export const CLEAR_SHORTCUT = "Ctrl+Shift+L";
 export const HARD_CLEAR_SHORTCUT = "Ctrl+Shift+Alt+L";
 export const COMMAND_PALETTE_SHORTCUT = "Ctrl+Shift+P";
+export const VOICE_SHORTCUT = "F9";
 
 export interface ToolbarCommand {
   id: string;
@@ -73,5 +74,12 @@ export const PALETTE_ACTIONS: ToolbarCommand[] = [
     command: "__rename_session__",
     shortcut: "F2",
     description: "Renomeia a sessão ativa",
+  },
+  {
+    id: "voice-input",
+    label: "Gravar prompt por voz",
+    command: "__voice_input__",
+    shortcut: VOICE_SHORTCUT,
+    description: "Inicia ou para a gravação de voz no terminal ativo",
   },
 ];

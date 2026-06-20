@@ -42,3 +42,25 @@ export function IconClose({ className, size = 14 }: IconProps) {
     </svg>
   );
 }
+
+export function IconMic({ className, size = 14 }: IconProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" />
+      <path d="M3 7.5a5 5 0 0 0 10 0" />
+      <path d="M8 12.5v2M5.5 14.5h5" />
+    </svg>
+  );
+}

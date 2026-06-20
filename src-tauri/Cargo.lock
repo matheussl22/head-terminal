@@ -3341,8 +3341,6 @@ dependencies = [
 [[package]]
 name = "tauri-plugin-pty"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b9447e87691e859b7a4073dc84e92bd85c89a87e2cda4b64f27e8fd9d7a5f17"
 dependencies = [
  "portable-pty",
  "serde",

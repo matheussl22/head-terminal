@@ -2,6 +2,7 @@
 
 mod git;
 mod startup;
+mod voice;
 
 use startup::{
     acquire_instance_lock, append_checkpoint_cmd, append_log, export_diagnostic_bundle,
@@ -11,6 +12,7 @@ use tauri::{Manager, WindowEvent};
 
 use git::GitWatcherState;
 use std::sync::Mutex;
+use voice::VoiceRecordingState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -50,6 +52,7 @@ fn run_tauri() {
         .plugin(tauri_plugin_pty::init())
         .plugin(tauri_plugin_os::init())
         .manage(Mutex::new(GitWatcherState::new()))
+        .manage(Mutex::new(VoiceRecordingState::new()))
         .invoke_handler(tauri::generate_handler![
             frontend_log,
             append_log,
@@ -60,6 +63,8 @@ fn run_tauri() {
             git::get_git_context,
             git::start_git_watch,
             git::stop_git_watch,
+            voice::start_voice_recording,
+            voice::stop_and_transcribe_voice,
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
