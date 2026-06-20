@@ -10,7 +10,11 @@ import {
 import { useSessionStore } from "../core/session-manager";
 import type { AgentSession } from "../types/session";
 
-const POLL_INTERVAL_MS = 3000;
+// The fs watcher (start_git_watch) only observes .git/HEAD and .git/index,
+// so it catches commits/checkouts but not arbitrary working-tree edits that
+// flip the "dirty" flag. This poll is the fallback that catches those —
+// kept slow since each tick costs a few `git` subprocess invocations.
+const POLL_INTERVAL_MS = 8000;
 
 function sessionPaneIds(sessions: AgentSession[]): Set<string> {
   const paneIds = new Set<string>();

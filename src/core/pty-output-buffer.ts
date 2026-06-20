@@ -1,4 +1,7 @@
-const MAX_BUFFER_BYTES = 512 * 1024;
+// Only fills up while a pane is hidden (see createRafPtyWriter's isSuspended
+// check) — kept small since panes can stay hidden indefinitely and this is
+// memory held per inactive pane.
+const MAX_BUFFER_BYTES = 128 * 1024;
 
 export class PtyOutputBuffer {
   private chunks: Uint8Array[] = [];

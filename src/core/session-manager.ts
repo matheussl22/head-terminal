@@ -27,6 +27,7 @@ interface SessionStore {
   activePaneId: string | null;
   paneRestartKeys: Record<string, number>;
   paneActivities: Record<string, PaneActivity>;
+  paneStatusIndex: Record<string, SessionStatus>;
   ptyWriters: Record<string, (data: string) => void>;
   runEverything: boolean;
   spawnedSessionIds: Record<string, boolean>;
@@ -91,6 +92,18 @@ function syncActivePane(
   return paneIds[0] ?? null;
 }
 
+function flattenPaneStatuses(
+  sessions: AgentSession[],
+): Record<string, SessionStatus> {
+  const index: Record<string, SessionStatus> = {};
+  for (const session of sessions) {
+    for (const [paneId, status] of Object.entries(session.paneStatuses)) {
+      index[paneId] = status;
+    }
+  }
+  return index;
+}
+
 function sortSessions(sessions: AgentSession[]): AgentSession[] {
   const pinned = sessions.filter((session) => session.pinned);
   const unpinned = sessions.filter((session) => !session.pinned);
@@ -141,21 +154,27 @@ function cleanupPaneState(
   paneIds: string[],
 ): Pick<
   SessionStore,
-  "paneActivities" | "ptyWriters" | "paneRestartKeys" | "paneGitContext"
+  | "paneActivities"
+  | "ptyWriters"
+  | "paneRestartKeys"
+  | "paneGitContext"
+  | "paneStatusIndex"
 > {
   const paneActivities = { ...state.paneActivities };
   const ptyWriters = { ...state.ptyWriters };
   const paneRestartKeys = { ...state.paneRestartKeys };
   const paneGitContext = { ...state.paneGitContext };
+  const paneStatusIndex = { ...state.paneStatusIndex };
 
   for (const paneId of paneIds) {
     delete paneActivities[paneId];
     delete ptyWriters[paneId];
     delete paneRestartKeys[paneId];
     delete paneGitContext[paneId];
+    delete paneStatusIndex[paneId];
   }
 
-  return { paneActivities, ptyWriters, paneRestartKeys, paneGitContext };
+  return { paneActivities, ptyWriters, paneRestartKeys, paneGitContext, paneStatusIndex };
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
@@ -164,6 +183,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   activePaneId: null,
   paneRestartKeys: {},
   paneActivities: {},
+  paneStatusIndex: {},
   ptyWriters: {},
   runEverything: loadRunEverything(),
   spawnedSessionIds: {},
@@ -178,11 +198,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         paneActivities[paneId] = "starting";
       }
 
+      const nextSessions = sortSessions([...state.sessions, session]);
       const next = {
-        sessions: sortSessions([...state.sessions, session]),
+        sessions: nextSessions,
         activeSessionId: session.id,
         activePaneId: paneIds[0] ?? null,
         paneActivities,
+        paneStatusIndex: flattenPaneStatuses(nextSessions),
         spawnedSessionIds: {
           ...state.spawnedSessionIds,
           [session.id]: true,
@@ -206,12 +228,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       spawnedSessionIds[activeSessionId] = true;
     }
 
+    const sortedSessions = sortSessions(sessions);
     set({
-      sessions: sortSessions(sessions),
+      sessions: sortedSessions,
       activeSessionId,
       activePaneId,
       paneRestartKeys: {},
       paneActivities,
+      paneStatusIndex: flattenPaneStatuses(sortedSessions),
       ptyWriters: {},
       spawnedSessionIds,
     });
@@ -416,7 +440,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         };
       });
 
-      return { paneRestartKeys, paneActivities, sessions };
+      const paneStatusIndex = {
+        ...state.paneStatusIndex,
+        [paneId]: "starting" as SessionStatus,
+      };
+
+      return { paneRestartKeys, paneActivities, paneStatusIndex, sessions };
     }),
 
   restartTargetPanes: () =>
@@ -429,10 +458,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const paneIdSet = new Set(paneIds);
       const paneRestartKeys = { ...state.paneRestartKeys };
       const paneActivities = { ...state.paneActivities };
+      const paneStatusIndex = { ...state.paneStatusIndex };
 
       for (const paneId of paneIds) {
         paneRestartKeys[paneId] = (paneRestartKeys[paneId] ?? 0) + 1;
         paneActivities[paneId] = "starting";
+        if (paneId in paneStatusIndex) {
+          paneStatusIndex[paneId] = "starting";
+        }
       }
 
       const sessions = state.sessions.map((session) => {
@@ -456,7 +489,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         return { ...session, paneStatuses };
       });
 
-      return { paneRestartKeys, paneActivities, sessions };
+      return { paneRestartKeys, paneActivities, paneStatusIndex, sessions };
     }),
 
   splitActivePane: (direction) =>
@@ -493,7 +526,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         ...state.paneActivities,
         [newPaneId]: "starting" as PaneActivity,
       };
-      const next = { sessions: nextSessions, paneActivities };
+      const paneStatusIndex = {
+        ...state.paneStatusIndex,
+        [newPaneId]: "starting" as SessionStatus,
+      };
+      const next = { sessions: nextSessions, paneActivities, paneStatusIndex };
       persistWorkspaceState({ ...state, ...next }, { immediate: true });
       return next;
     }),
@@ -512,10 +549,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     set((state) => {
       const paneRestartKeys = { ...state.paneRestartKeys };
       const paneActivities = { ...state.paneActivities };
+      const paneStatusIndex = { ...state.paneStatusIndex };
 
       for (const paneId of paneIds) {
         paneRestartKeys[paneId] = (paneRestartKeys[paneId] ?? 0) + 1;
         paneActivities[paneId] = "starting";
+        paneStatusIndex[paneId] = "starting";
       }
 
       const sessions = state.sessions.map((item) => {
@@ -535,7 +574,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         return { ...item, paneStatuses };
       });
 
-      return { paneRestartKeys, paneActivities, sessions };
+      return { paneRestartKeys, paneActivities, paneStatusIndex, sessions };
     });
   },
 
@@ -559,21 +598,28 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }),
 
   updatePaneStatus: (paneId, status) =>
-    set((state) => ({
-      sessions: state.sessions.map((session) => {
-        if (!(paneId in session.paneStatuses)) {
-          return session;
-        }
+    set((state) => {
+      if (state.paneStatusIndex[paneId] === status) {
+        return state;
+      }
 
-        return {
-          ...session,
-          paneStatuses: {
-            ...session.paneStatuses,
-            [paneId]: status,
-          },
-        };
-      }),
-    })),
+      return {
+        sessions: state.sessions.map((session) => {
+          if (!(paneId in session.paneStatuses)) {
+            return session;
+          }
+
+          return {
+            ...session,
+            paneStatuses: {
+              ...session.paneStatuses,
+              [paneId]: status,
+            },
+          };
+        }),
+        paneStatusIndex: { ...state.paneStatusIndex, [paneId]: status },
+      };
+    }),
 
   updatePaneActivity: (paneId, activity) =>
     set((state) => {

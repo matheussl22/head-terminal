@@ -45,7 +45,7 @@ export class ActivityDetector {
     this.lastOutputAt = Date.now();
     this.recentText = (this.recentText + text).slice(-RECENT_TEXT_LIMIT);
 
-    const detected = this.detectFromRecentText(text);
+    const detected = this.detectFromRecentText();
     this.setActivity(detected ?? "working");
     this.scheduleIdleCheck();
   }
@@ -74,16 +74,15 @@ export class ActivityDetector {
     this.clearIdleTimer();
   }
 
-  private detectFromRecentText(chunk: string): PaneActivity | null {
+  private detectFromRecentText(): PaneActivity | null {
+    // this.recentText already ends with the latest chunk (see onData), so
+    // testing it alone covers matches that would otherwise require testing
+    // the chunk separately.
     if (ERROR_PATTERNS.some((pattern) => pattern.test(this.recentText))) {
       return "error";
     }
 
-    if (
-      WORKING_PATTERNS.some(
-        (pattern) => pattern.test(chunk) || pattern.test(this.recentText),
-      )
-    ) {
+    if (WORKING_PATTERNS.some((pattern) => pattern.test(this.recentText))) {
       return "working";
     }
 

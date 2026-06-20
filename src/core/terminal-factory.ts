@@ -1,7 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import { WebglAddon } from "@xterm/addon-webgl";
 
 import { createTerminalOptions } from "../config/theme";
 import { logEvent } from "./logger";
@@ -32,15 +31,19 @@ export function createConfiguredTerminal(): {
   });
 
   if (webglEnabled) {
-    try {
-      const webglAddon = new WebglAddon();
-      terminal.loadAddon(webglAddon);
-      webglAddon.onContextLoss(() => {
-        webglAddon.dispose();
-      });
-    } catch {
-      // WebGL unavailable — DOM renderer is the fallback.
-    }
+    // Dynamically imported so the ~300KB addon is never fetched/parsed on
+    // Linux, where it's disabled anyway (see shouldEnableWebglRenderer).
+    void import("@xterm/addon-webgl").then(({ WebglAddon }) => {
+      try {
+        const webglAddon = new WebglAddon();
+        terminal.loadAddon(webglAddon);
+        webglAddon.onContextLoss(() => {
+          webglAddon.dispose();
+        });
+      } catch {
+        // WebGL unavailable — DOM renderer is the fallback.
+      }
+    });
   }
 
   return { terminal, fitAddon };

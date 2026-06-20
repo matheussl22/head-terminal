@@ -12,7 +12,7 @@ const PATH_PATTERNS: RegExp[] = [
 ];
 
 function stripAnsi(text: string): string {
-  return text.replace(ANSI_PATTERN, "");
+  return text.includes("\x1b") ? text.replace(ANSI_PATTERN, "") : text;
 }
 
 export class WorkspaceDetector {

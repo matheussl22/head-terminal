@@ -13,14 +13,9 @@ export function TerminalPaneOverlay({ paneId }: TerminalPaneOverlayProps) {
   const activity = useSessionStore(
     (state) => state.paneActivities[paneId] ?? "starting",
   );
-  const status = useSessionStore((state) => {
-    for (const session of state.sessions) {
-      if (paneId in session.paneStatuses) {
-        return session.paneStatuses[paneId];
-      }
-    }
-    return "starting";
-  });
+  const status = useSessionStore(
+    (state) => state.paneStatusIndex[paneId] ?? "starting",
+  );
   const restartPane = useSessionStore((state) => state.restartPane);
 
   if (activity === "starting" && status === "starting") {

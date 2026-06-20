@@ -5,6 +5,7 @@ import {
   collectPaneRects,
   collectSplitDividers,
 } from "../../core/session-layout";
+import { debounce } from "../../core/debounce";
 import { fitPanes } from "../../core/pane-fit-registry";
 import { useSessionStore } from "../../core/session-manager";
 import type { AgentSession } from "../../types/session";
@@ -53,12 +54,16 @@ export const SessionWorkspace = memo(function SessionWorkspace({
       return;
     }
 
+    const debouncedFit = debounce(() => fitPanes(paneIds), 120);
     const resizeObserver = new ResizeObserver(() => {
-      fitPanes(paneIds);
+      debouncedFit();
     });
     resizeObserver.observe(canvas);
 
-    return () => resizeObserver.disconnect();
+    return () => {
+      resizeObserver.disconnect();
+      debouncedFit.cancel();
+    };
   }, [paneIds, shouldSpawn]);
 
   const focusPane = (paneId: string) => {
