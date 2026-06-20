@@ -11,6 +11,9 @@ interface McpServersPayload {
   error: string | null;
 }
 
-export async function fetchMcpServers(cwd: string): Promise<McpServersPayload> {
-  return invoke<McpServersPayload>("get_mcp_servers", { cwd });
+export async function fetchMcpServers(
+  cwd: string,
+  agent: string,
+): Promise<McpServersPayload> {
+  return invoke<McpServersPayload>("get_mcp_servers", { cwd, agent });
 }

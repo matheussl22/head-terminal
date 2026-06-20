@@ -10,22 +10,26 @@ interface SettingsDialogProps {
   onClose: () => void;
 }
 
+interface McpAgentState {
+  servers: McpServerStatus[];
+  error: string | null;
+  loading: boolean;
+}
+
 function statusClass(status: string): string {
   if (status.includes("✔")) return "settings-mcp-status--ok";
   if (status.includes("✘")) return "settings-mcp-status--error";
   return "settings-mcp-status--pending";
 }
 
-// Apenas a Claude Code CLI tem um comando de MCP verificado (`claude mcp
-// list`). Cursor e Codex não têm equivalente confirmado — revisar quando
-// expuserem algo parecido.
-const AGENTS_WITH_MCP_SUPPORT = new Set(["claude"]);
+// Claude Code (`claude mcp list`) e Cursor (`cursor-agent mcp list`) têm
+// comandos de MCP verificados. Codex CLI não está instalada e não tem
+// equivalente confirmado — revisar quando expuser algo parecido.
+const AGENTS_WITH_MCP_SUPPORT = new Set(["claude", "cursor"]);
 
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [apiKey, setApiKey] = useState("");
-  const [mcpServers, setMcpServers] = useState<McpServerStatus[]>([]);
-  const [mcpError, setMcpError] = useState<string | null>(null);
-  const [mcpLoading, setMcpLoading] = useState(false);
+  const [mcpByAgent, setMcpByAgent] = useState<Record<string, McpAgentState>>({});
 
   useEffect(() => {
     if (open) {
@@ -38,24 +42,43 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       return;
     }
 
-    setMcpLoading(true);
-    setMcpError(null);
-
     let cancelled = false;
-    resolveDefaultCwd()
-      .then(fetchMcpServers)
-      .then((payload) => {
-        if (cancelled) return;
-        setMcpServers(payload.servers);
-        setMcpError(payload.error);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setMcpError(String(err));
-      })
-      .finally(() => {
-        if (!cancelled) setMcpLoading(false);
-      });
+    const agentsToCheck = Object.values(buildAgentProfiles()).filter((profile) =>
+      AGENTS_WITH_MCP_SUPPORT.has(profile.id),
+    );
+
+    setMcpByAgent(
+      Object.fromEntries(
+        agentsToCheck.map((profile) => [
+          profile.id,
+          { servers: [], error: null, loading: true },
+        ]),
+      ),
+    );
+
+    resolveDefaultCwd().then((cwd) => {
+      for (const profile of agentsToCheck) {
+        fetchMcpServers(cwd, profile.id)
+          .then((payload) => {
+            if (cancelled) return;
+            setMcpByAgent((prev) => ({
+              ...prev,
+              [profile.id]: {
+                servers: payload.servers,
+                error: payload.error,
+                loading: false,
+              },
+            }));
+          })
+          .catch((err) => {
+            if (cancelled) return;
+            setMcpByAgent((prev) => ({
+              ...prev,
+              [profile.id]: { servers: [], error: String(err), loading: false },
+            }));
+          });
+      }
+    });
 
     return () => {
       cancelled = true;
@@ -91,36 +114,40 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         <ul className="settings-mcp-list">
           {Object.values(buildAgentProfiles())
             .filter((profile) => profile.id !== "shell")
-            .map((profile) => (
-              <li key={profile.id} className="settings-mcp-item">
-                <span className="settings-mcp-item__name">{profile.label}</span>
-                {!AGENTS_WITH_MCP_SUPPORT.has(profile.id) ? (
-                  <span className="settings-mcp-status--unsupported">
-                    Não suportado
-                  </span>
-                ) : mcpLoading ? (
-                  <span className="settings-mcp-item__detail">Verificando…</span>
-                ) : mcpError ? (
-                  <span className="settings-mcp-status--error">{mcpError}</span>
-                ) : mcpServers.length === 0 ? (
-                  <span className="settings-mcp-item__detail">
-                    Nenhum MCP server configurado
-                  </span>
-                ) : (
-                  <span className="settings-mcp-item__detail">
-                    {mcpServers.map((server) => (
-                      <span
-                        key={server.name}
-                        className={`${statusClass(server.status)}`}
-                        title={server.target}
-                      >
-                        {server.name} ({server.status}){" "}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </li>
-            ))}
+            .map((profile) => {
+              const state = mcpByAgent[profile.id];
+
+              return (
+                <li key={profile.id} className="settings-mcp-item">
+                  <span className="settings-mcp-item__name">{profile.label}</span>
+                  {!AGENTS_WITH_MCP_SUPPORT.has(profile.id) ? (
+                    <span className="settings-mcp-status--unsupported">
+                      Não suportado
+                    </span>
+                  ) : !state || state.loading ? (
+                    <span className="settings-mcp-item__detail">Verificando…</span>
+                  ) : state.error ? (
+                    <span className="settings-mcp-status--error">{state.error}</span>
+                  ) : state.servers.length === 0 ? (
+                    <span className="settings-mcp-item__detail">
+                      Nenhum MCP server configurado
+                    </span>
+                  ) : (
+                    <span className="settings-mcp-item__detail">
+                      {state.servers.map((server) => (
+                        <span
+                          key={server.name}
+                          className={statusClass(server.status)}
+                          title={server.target}
+                        >
+                          {server.name} ({server.status}){" "}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
         </ul>
 
         <div className="create-session-dialog__actions">
