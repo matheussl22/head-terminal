@@ -1,3 +1,5 @@
+import { pickGitContextForSession } from "../../core/git-context-utils";
+import { collectPaneIds } from "../../core/session-layout";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import { useSessionStore } from "../../core/session-manager";
 
@@ -6,13 +8,29 @@ interface TerminalStatusBarProps {
 }
 
 export function TerminalStatusBar({ sessionId }: TerminalStatusBarProps) {
-  const context = useSessionStore(
-    (state) => state.sessionGitContext[sessionId],
+  const session = useSessionStore((state) =>
+    state.sessions.find((item) => item.id === sessionId),
   );
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const activePaneId = useSessionStore((state) => state.activePaneId);
+  const paneGitContext = useSessionStore((state) => state.paneGitContext);
+  const sessionGitContext = useSessionStore((state) => state.sessionGitContext);
 
-  const branchLabel = context?.repoRoot;
+  const paneIds = session ? collectPaneIds(session.layout) : [];
+  const context = session
+    ? pickGitContextForSession(
+        sessionId,
+        paneIds,
+        paneGitContext,
+        sessionGitContext,
+        {
+          activePaneId,
+          isActiveSession: sessionId === activeSessionId,
+        },
+      )
+    : undefined;
 
-  if (!branchLabel) {
+  if (!context?.repoRoot) {
     return null;
   }
 

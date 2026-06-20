@@ -31,6 +31,7 @@ interface SessionStore {
   runEverything: boolean;
   spawnedSessionIds: Record<string, boolean>;
   sessionGitContext: Record<string, GitContext>;
+  paneGitContext: Record<string, GitContext>;
   addSession: (session: AgentSession) => void;
   hydrateWorkspace: (
     sessions: AgentSession[],
@@ -63,6 +64,11 @@ interface SessionStore {
   setSessionGitContext: (sessionId: string, context: GitContext) => void;
   mergeSessionGitContext: (
     sessionId: string,
+    partial: Partial<GitContext> & Pick<GitContext, "repoRoot" | "branch" | "headShort" | "headRef" | "isDirty" | "source">,
+  ) => void;
+  setPaneGitContext: (paneId: string, context: GitContext) => void;
+  mergePaneGitContext: (
+    paneId: string,
     partial: Partial<GitContext> & Pick<GitContext, "repoRoot" | "branch" | "headShort" | "headRef" | "isDirty" | "source">,
   ) => void;
   getActiveSession: () => AgentSession | null;
@@ -133,18 +139,23 @@ function persistWorkspaceState(
 function cleanupPaneState(
   state: SessionStore,
   paneIds: string[],
-): Pick<SessionStore, "paneActivities" | "ptyWriters" | "paneRestartKeys"> {
+): Pick<
+  SessionStore,
+  "paneActivities" | "ptyWriters" | "paneRestartKeys" | "paneGitContext"
+> {
   const paneActivities = { ...state.paneActivities };
   const ptyWriters = { ...state.ptyWriters };
   const paneRestartKeys = { ...state.paneRestartKeys };
+  const paneGitContext = { ...state.paneGitContext };
 
   for (const paneId of paneIds) {
     delete paneActivities[paneId];
     delete ptyWriters[paneId];
     delete paneRestartKeys[paneId];
+    delete paneGitContext[paneId];
   }
 
-  return { paneActivities, ptyWriters, paneRestartKeys };
+  return { paneActivities, ptyWriters, paneRestartKeys, paneGitContext };
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
@@ -157,6 +168,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   runEverything: loadRunEverything(),
   spawnedSessionIds: {},
   sessionGitContext: {},
+  paneGitContext: {},
 
   addSession: (session) =>
     set((state) => {
@@ -620,6 +632,38 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         sessionGitContext: {
           ...state.sessionGitContext,
           [sessionId]: nextContext,
+        },
+      };
+    }),
+
+  setPaneGitContext: (paneId, context) =>
+    set((state) => ({
+      paneGitContext: {
+        ...state.paneGitContext,
+        [paneId]: context,
+      },
+    })),
+
+  mergePaneGitContext: (paneId, partial) =>
+    set((state) => {
+      const current = state.paneGitContext[paneId];
+      const nextContext: GitContext = {
+        repoRoot: partial.repoRoot ?? current?.repoRoot ?? null,
+        branch: partial.branch ?? current?.branch ?? null,
+        headShort: partial.headShort ?? current?.headShort ?? null,
+        headRef: partial.headRef ?? current?.headRef ?? "",
+        isDirty: partial.isDirty ?? current?.isDirty ?? false,
+        lastTouchedPath:
+          partial.lastTouchedPath ?? current?.lastTouchedPath ?? null,
+        lastTouchedAt:
+          partial.lastTouchedAt ?? current?.lastTouchedAt ?? null,
+        source: partial.source,
+      };
+
+      return {
+        paneGitContext: {
+          ...state.paneGitContext,
+          [paneId]: nextContext,
         },
       };
     }),

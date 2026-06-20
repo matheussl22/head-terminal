@@ -5,6 +5,7 @@ const ANSI_PATTERN = /\x1b\[[0-9;]*[A-Za-z]/g;
 const PATH_PATTERNS: RegExp[] = [
   /Switched to branch ['"]?([^'"\s]+)['"]?/,
   /On branch ([^\s]+)/,
+  /\bcd\s+((?:\/|[A-Za-z]:\\)[\w./\\-]+)/,
   /(?:Edit(?:ing)?|Write|Wrote|Read(?:ing)?|Updated?|Modif(?:y|ied))\s+[`'"]?([^\s`'"']+)/i,
   /(?:^|\s)((?:\/|[A-Za-z]:\\)[\w./\\-]+\.(?:ts|tsx|js|jsx|rs|py|go|md|json|css|html|toml|yaml|yml|sh))\b/,
   /(?:^|\s)([\w./-]+\/[\w./-]+\.(?:ts|tsx|js|jsx|rs|py|go|md|json|css|html|toml|yaml|yml|sh))\b/,

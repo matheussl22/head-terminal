@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 
+import { collectPaneIds } from "../core/session-layout";
 import {
   fetchGitContext,
   startGitWatch,
@@ -11,12 +12,25 @@ import type { AgentSession } from "../types/session";
 
 const POLL_INTERVAL_MS = 3000;
 
+function sessionPaneIds(sessions: AgentSession[]): Set<string> {
+  const paneIds = new Set<string>();
+  for (const session of sessions) {
+    for (const paneId of collectPaneIds(session.layout)) {
+      paneIds.add(paneId);
+    }
+  }
+  return paneIds;
+}
+
 export function useGitContextWatchers(sessions: AgentSession[]): void {
   const setSessionGitContext = useSessionStore(
     (state) => state.setSessionGitContext,
   );
   const mergeSessionGitContext = useSessionStore(
     (state) => state.mergeSessionGitContext,
+  );
+  const mergePaneGitContext = useSessionStore(
+    (state) => state.mergePaneGitContext,
   );
 
   useEffect(() => {
@@ -27,11 +41,17 @@ export function useGitContextWatchers(sessions: AgentSession[]): void {
     const bootstrap = async () => {
       const unsubscribe = await subscribeGitContextChanges((watchId, context) => {
         const session = sessions.find((item) => item.id === watchId);
-        if (!session) {
+        if (session) {
+          mergeSessionGitContext(watchId, context);
           return;
         }
 
-        mergeSessionGitContext(watchId, context);
+        if (sessionPaneIds(sessions).has(watchId)) {
+          mergePaneGitContext(watchId, {
+            ...context,
+            source: "watcher",
+          });
+        }
       });
       unlisten = unsubscribe;
 
@@ -79,5 +99,5 @@ export function useGitContextWatchers(sessions: AgentSession[]): void {
         void stopGitWatch(session.id).catch(() => undefined);
       }
     };
-  }, [mergeSessionGitContext, sessions, setSessionGitContext]);
+  }, [mergePaneGitContext, mergeSessionGitContext, sessions, setSessionGitContext]);
 }

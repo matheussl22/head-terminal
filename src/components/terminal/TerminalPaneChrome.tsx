@@ -1,5 +1,7 @@
 import { ACTIVITY_LABEL, type PaneActivity } from "../../types/activity";
+import { formatBranchLabel } from "../../core/git-context-utils";
 import { useSessionStore } from "../../core/session-manager";
+import { GitBranchBadge } from "../ui/GitBranchBadge";
 
 interface TerminalPaneOverlayProps {
   paneId: string;
@@ -70,6 +72,8 @@ export function TerminalPaneHeader({
   const activity = useSessionStore(
     (state) => state.paneActivities[paneId] ?? "starting",
   );
+  const gitContext = useSessionStore((state) => state.paneGitContext[paneId]);
+  const branchLabel = formatBranchLabel(gitContext);
 
   return (
     <button
@@ -81,9 +85,22 @@ export function TerminalPaneHeader({
       }
       onClick={onFocus}
     >
-      <span>
-        Terminal {paneIndex + 1}
-        {paneCount > 1 ? `/${paneCount}` : ""}
+      <span className="terminal-pane-header__title">
+        <span>
+          Terminal {paneIndex + 1}
+          {paneCount > 1 ? `/${paneCount}` : ""}
+        </span>
+        {branchLabel && (
+          <>
+            <span className="terminal-pane-header__sep" aria-hidden>
+              ·
+            </span>
+            <GitBranchBadge
+              context={gitContext}
+              className="terminal-pane-header__branch"
+            />
+          </>
+        )}
       </span>
       <span className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}>
         {ACTIVITY_LABEL[activity]}

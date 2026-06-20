@@ -1,5 +1,40 @@
 import type { GitContext } from "../types/git-context";
 
+export function pickGitContextForSession(
+  sessionId: string,
+  paneIds: string[],
+  paneGitContext: Record<string, GitContext>,
+  sessionGitContext: Record<string, GitContext>,
+  options?: { activePaneId?: string | null; isActiveSession?: boolean },
+): GitContext | undefined {
+  const sessionFallback = sessionGitContext[sessionId];
+
+  if (options?.isActiveSession && options.activePaneId) {
+    const activePane = paneGitContext[options.activePaneId];
+    if (activePane?.repoRoot) {
+      return activePane;
+    }
+  }
+
+  let best: GitContext | undefined = sessionFallback;
+  let bestAt = sessionFallback?.lastTouchedAt ?? 0;
+
+  for (const paneId of paneIds) {
+    const ctx = paneGitContext[paneId];
+    if (!ctx?.repoRoot) {
+      continue;
+    }
+
+    const at = ctx.lastTouchedAt ?? 0;
+    if (at >= bestAt) {
+      best = ctx;
+      bestAt = at;
+    }
+  }
+
+  return best;
+}
+
 export function formatBranchLabel(context: GitContext | undefined): string | null {
   if (!context?.repoRoot) {
     return null;

@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from "react";
 
 import { buildAgentProfiles } from "../../config/agents";
 import { getSessionActivity } from "../../core/activity-utils";
+import { pickGitContextForSession } from "../../core/git-context-utils";
 import { collectPaneIds } from "../../core/session-layout";
 import { useSessionStore } from "../../core/session-manager";
 import {
@@ -55,10 +56,22 @@ const SessionListItem = memo(function SessionListItem({
   const [draftCwd, setDraftCwd] = useState(session.cwd);
   const inputRef = useRef<HTMLInputElement>(null);
   const paneActivities = useSessionStore((state) => state.paneActivities);
-  const gitContext = useSessionStore(
-    (state) => state.sessionGitContext[session.id],
-  );
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const activePaneId = useSessionStore((state) => state.activePaneId);
+  const paneGitContext = useSessionStore((state) => state.paneGitContext);
+  const sessionGitContext = useSessionStore((state) => state.sessionGitContext);
   const paneCount = collectPaneIds(session.layout).length;
+  const paneIds = collectPaneIds(session.layout);
+  const gitContext = pickGitContextForSession(
+    session.id,
+    paneIds,
+    paneGitContext,
+    sessionGitContext,
+    {
+      activePaneId,
+      isActiveSession: session.id === activeSessionId,
+    },
+  );
   const activity = getSessionActivity(session, paneActivities);
   const profiles = Object.values(buildAgentProfiles());
 

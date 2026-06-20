@@ -751,6 +751,25 @@ button {
   color: var(--text-primary);
 }
 
+.terminal-pane-header__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.terminal-pane-header__sep {
+  color: var(--text-muted);
+}
+
+.terminal-pane-header__branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .terminal-pane-header__status {
   font-weight: 600;
 }

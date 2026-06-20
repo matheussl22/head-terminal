@@ -6,7 +6,12 @@ import { ActivityDetector } from "../core/activity-detector";
 import { checkpoint, logError, logEvent } from "../core/logger";
 import { notifyUiReady } from "../core/startup-watchdog";
 import { dirname } from "../core/git-context-utils";
-import { fetchGitContextForPath } from "../core/git-watch-bridge";
+import {
+  fetchGitContext,
+  fetchGitContextForPath,
+  startGitWatch,
+  stopGitWatch,
+} from "../core/git-watch-bridge";
 import {
   fitPanes,
   registerPaneFitter,
@@ -52,9 +57,10 @@ export function useAgentSession({
   );
   const updatePaneStatus = useSessionStore((state) => state.updatePaneStatus);
   const updatePaneActivity = useSessionStore((state) => state.updatePaneActivity);
-  const mergeSessionGitContext = useSessionStore(
-    (state) => state.mergeSessionGitContext,
+  const mergePaneGitContext = useSessionStore(
+    (state) => state.mergePaneGitContext,
   );
+  const setPaneGitContext = useSessionStore((state) => state.setPaneGitContext);
   const restartKey = useSessionStore(
     (state) => state.paneRestartKeys[paneId] ?? 0,
   );
@@ -67,7 +73,30 @@ export function useAgentSession({
 
   const outputBufferRef = useRef(new PtyOutputBuffer());
   const flushBufferedRef = useRef<(() => void) | null>(null);
-  const pathDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pathDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const watchedRepoRef = useRef<string | null>(null);
+
+    const syncPaneGitWatch = (watchCwd: string) => {
+      const normalized = watchCwd.trim();
+      if (!normalized || watchedRepoRef.current === normalized) {
+        return;
+      }
+
+      watchedRepoRef.current = normalized;
+      void startGitWatch(paneId, normalized).catch(() => undefined);
+    };
+
+    const refreshPaneGitContext = (lookupPath: string, touchedPath?: string) => {
+      const current = useSessionStore.getState().paneGitContext[paneId];
+      void fetchGitContextForPath(lookupPath, current).then((context) => {
+        mergePaneGitContext(paneId, {
+          ...context,
+          lastTouchedPath: touchedPath ?? context.lastTouchedPath,
+          lastTouchedAt: Date.now(),
+        });
+        syncPaneGitWatch(context.repoRoot ?? lookupPath);
+      });
+    };
 
   useEffect(() => {
     if (!shouldSpawn) {
@@ -104,14 +133,21 @@ export function useAgentSession({
 
       pathDebounceRef.current = setTimeout(() => {
         const lookupPath = path.startsWith("/") ? dirname(path) : cwd;
-        void fetchGitContextForPath(lookupPath).then((context) => {
-          mergeSessionGitContext(sessionId, context);
-        });
+        refreshPaneGitContext(lookupPath, path.startsWith("/") ? path : undefined);
       }, 400);
     });
 
     activityDetector.onStarting();
     updatePaneActivity(paneId, "starting");
+
+    void fetchGitContext(cwd).then((context) => {
+      if (disposed) {
+        return;
+      }
+
+      setPaneGitContext(paneId, context);
+      syncPaneGitWatch(context.repoRoot ?? cwd);
+    });
 
     const flushBufferedOutput = () => {
       for (const chunk of outputBufferRef.current.drain()) {
@@ -250,6 +286,8 @@ export function useAgentSession({
         clearTimeout(pathDebounceRef.current);
         pathDebounceRef.current = null;
       }
+      watchedRepoRef.current = null;
+      void stopGitWatch(paneId).catch(() => undefined);
       flushBufferedRef.current = null;
       container.removeEventListener("mousedown", focusTerminal);
       compositionGuardCleanup?.();
@@ -271,7 +309,8 @@ export function useAgentSession({
     sessionId,
     shouldSpawn,
     unregisterPtyWriter,
-    mergeSessionGitContext,
+    mergePaneGitContext,
+    setPaneGitContext,
     updatePaneActivity,
     updatePaneStatus,
   ]);
