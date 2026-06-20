@@ -11,6 +11,7 @@ import {
 import { ACTIVITY_LABEL } from "../../types/activity";
 import type { AgentSession } from "../../types/session";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
+import { IconClose, IconPencil } from "../ui/Icons";
 
 interface SessionSidebarProps {
   sessions: AgentSession[];
@@ -173,22 +174,6 @@ const SessionListItem = memo(function SessionListItem({
                 {session.title}
               </span>
             )}
-
-            {!isEditing && (
-              <button
-                type="button"
-                className="session-sidebar__rename"
-                title="Renomear sessão"
-                aria-label={`Renomear ${session.title}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setIsEditing(true);
-                }}
-              >
-                ✎
-              </button>
-            )}
           </div>
 
           <span className="session-sidebar__meta">{session.cwd}</span>
@@ -233,18 +218,35 @@ const SessionListItem = memo(function SessionListItem({
           </div>
         )}
 
-        <button
-          type="button"
-          className="session-sidebar__remove"
-          title="Fechar sessão"
-          aria-label={`Fechar ${session.title}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove();
-          }}
-        >
-          ×
-        </button>
+        {!isEditing && (
+          <div className="session-sidebar__actions">
+            <button
+              type="button"
+              className="session-sidebar__action session-sidebar__action--rename"
+              title="Renomear sessão"
+              aria-label={`Renomear ${session.title}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setIsEditing(true);
+              }}
+            >
+              <IconPencil />
+            </button>
+            <button
+              type="button"
+              className="session-sidebar__action session-sidebar__action--remove"
+              title="Fechar sessão"
+              aria-label={`Fechar ${session.title}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onRemove();
+              }}
+            >
+              <IconClose />
+            </button>
+          </div>
+        )}
       </div>
     </li>
   );

@@ -492,6 +492,7 @@ button {
 }
 
 .session-sidebar__item {
+  position: relative;
   display: flex;
   align-items: stretch;
   border: 1px solid transparent;
@@ -534,7 +535,7 @@ button {
   flex-direction: column;
   gap: 4px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 8px 52px 8px 10px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -542,13 +543,28 @@ button {
   cursor: pointer;
 }
 
-.session-sidebar__rename {
+.session-sidebar__actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.session-sidebar__item:hover .session-sidebar__actions,
+.session-sidebar__item--active .session-sidebar__actions {
+  opacity: 1;
+}
+
+.session-sidebar__action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
@@ -557,13 +573,14 @@ button {
   cursor: pointer;
 }
 
-.session-sidebar__rename:hover {
+.session-sidebar__action:hover {
   color: rgba(255, 255, 255, 0.9);
   background: rgba(255, 255, 255, 0.1);
 }
 
-.session-sidebar__rename-icon {
-  display: block;
+.session-sidebar__action--remove:hover {
+  color: var(--status-error);
+  background: rgba(253, 111, 107, 0.15);
 }
 
 .session-sidebar__rename-input {
@@ -945,38 +962,6 @@ button {
   flex-direction: column;
   gap: 6px;
   padding: 0 10px 8px;
-}
-
-.session-sidebar__item {
-  position: relative;
-}
-
-.session-sidebar__remove {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.35);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.session-sidebar__item:hover .session-sidebar__remove,
-.session-sidebar__item--active .session-sidebar__remove {
-  opacity: 1;
-}
-
-.session-sidebar__remove:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
 }
 
 .terminal-overlay {
