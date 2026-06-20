@@ -998,6 +998,71 @@ button {
   margin-top: 16px;
 }
 
+.terminal-pane-header__mcp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.terminal-pane-header__mcp:hover {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mcp-servers-modal__hint {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.mcp-servers-modal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mcp-servers-modal__item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.mcp-servers-modal__name {
+  font-weight: 600;
+}
+
+.mcp-servers-modal__target {
+  flex: 1;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-servers-modal__status--ok {
+  color: var(--status-ok, #4caf50);
+}
+
+.mcp-servers-modal__status--error {
+  color: var(--status-error);
+}
+
+.mcp-servers-modal__status--pending {
+  color: var(--text-muted);
+}
+
 .command-palette {
   overflow: hidden;
 }

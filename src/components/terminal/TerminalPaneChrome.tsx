@@ -3,6 +3,7 @@ import { formatBranchLabel } from "../../core/git-context-utils";
 import { useSessionStore } from "../../core/session-manager";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import { IconClose } from "../ui/Icons";
+import { McpServersButton } from "./McpServersButton";
 import { VoiceInputButton } from "./VoiceInputButton";
 
 interface TerminalPaneOverlayProps {
@@ -56,6 +57,8 @@ interface TerminalPaneHeaderProps {
   paneIndex: number;
   paneCount: number;
   isActive: boolean;
+  cwd: string;
+  agentProfileId: string;
   onFocus: () => void;
   onClose: () => void;
 }
@@ -65,6 +68,8 @@ export function TerminalPaneHeader({
   paneIndex,
   paneCount,
   isActive,
+  cwd,
+  agentProfileId,
   onFocus,
   onClose,
 }: TerminalPaneHeaderProps) {
@@ -105,6 +110,7 @@ export function TerminalPaneHeader({
           {ACTIVITY_LABEL[activity]}
         </span>
         <VoiceInputButton paneId={paneId} />
+        {agentProfileId === "claude" && <McpServersButton cwd={cwd} />}
         {paneCount > 1 && (
           <button
             type="button"

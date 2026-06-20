@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 mod git;
+mod mcp;
 mod startup;
 mod voice;
 
@@ -63,6 +64,7 @@ fn run_tauri() {
             git::get_git_context,
             git::start_git_watch,
             git::stop_git_watch,
+            mcp::get_mcp_servers,
             voice::start_voice_recording,
             voice::stop_and_transcribe_voice,
         ])
