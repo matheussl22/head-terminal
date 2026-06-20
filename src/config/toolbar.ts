@@ -55,6 +55,12 @@ export const PALETTE_ACTIONS: ToolbarCommand[] = [
     description: "Divide o terminal ativo horizontalmente",
   },
   {
+    id: "export-diagnostic",
+    label: "Exportar diagnóstico de inicialização",
+    command: "__export_diagnostic__",
+    description: "Salva logs de boot e estado da UI em ~/.local/share/head-terminal/logs/",
+  },
+  {
     id: "rename-session",
     label: "Renomear sessão",
     command: "__rename_session__",

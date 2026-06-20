@@ -11,6 +11,8 @@ import {
 import { useSessionStore } from "./core/session-manager";
 import { AppShell } from "./components/layout/AppShell";
 import { CreateSessionDialog } from "./components/layout/CreateSessionDialog";
+import { BootScreen } from "./components/BootScreen";
+import { checkpoint, logError } from "./core/logger";
 
 import "./styles/global.css";
 
@@ -21,32 +23,74 @@ function App() {
   const hydrateWorkspaceState = useSessionStore((state) => state.hydrateWorkspace);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [defaultCwd, setDefaultCwd] = useState<string | null>(null);
+  const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [bootSlow, setBootSlow] = useState(false);
+  const [showDiagnosticActions, setShowDiagnosticActions] = useState(false);
+
+  useEffect(() => {
+    const slowTimer = window.setTimeout(() => setBootSlow(true), 8_000);
+    const diagTimer = window.setTimeout(() => setShowDiagnosticActions(true), 15_000);
+    return () => {
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(diagTimer);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
-      const cwd = await resolveDefaultCwd();
-      if (cancelled) {
-        return;
+      checkpoint("js.bootstrap.begin");
+
+      try {
+        const cwd = await resolveDefaultCwd();
+        if (cancelled) {
+          return;
+        }
+
+        checkpoint("js.bootstrap.cwd_ok", { cwd });
+        setDefaultCwd(cwd);
+        setBootstrapError(null);
+
+        const persisted = loadPersistedWorkspace();
+        if (persisted && persisted.sessions.length > 0) {
+          const restored = hydrateWorkspace(persisted);
+          hydrateWorkspaceState(
+            restored.sessions,
+            restored.activeSessionId,
+            restored.activePaneId,
+          );
+          checkpoint("js.bootstrap.workspace_ok", {
+            sessionCount: restored.sessions.length,
+            activeSessionId: restored.activeSessionId,
+            activePaneId: restored.activePaneId,
+          });
+        } else {
+          const session = createInitialSession(cwd);
+          addSession(session);
+          checkpoint("js.bootstrap.workspace_ok", {
+            sessionCount: 1,
+            activeSessionId: session.id,
+            created: true,
+          });
+        }
+
+        checkpoint("js.bootstrap.complete");
+        setBootstrapped(true);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        logError("bootstrap.failed", error);
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Falha ao iniciar o Head Terminal";
+        setBootstrapError(message);
+        setBootstrapped(true);
       }
-
-      setDefaultCwd(cwd);
-
-      const persisted = loadPersistedWorkspace();
-      if (persisted && persisted.sessions.length > 0) {
-        const restored = hydrateWorkspace(persisted);
-        hydrateWorkspaceState(
-          restored.sessions,
-          restored.activeSessionId,
-          restored.activePaneId,
-        );
-      } else {
-        addSession(createInitialSession(cwd));
-      }
-
-      setBootstrapped(true);
     }
 
     void bootstrap();
@@ -73,20 +117,21 @@ function App() {
     [addSession, sessions.length],
   );
 
-  if (!bootstrapped || sessions.length === 0 || !defaultCwd) {
+  if (!bootstrapped) {
     return (
-      <div className="boot-screen">
-        <div className="boot-screen__content">
-          <span className="boot-screen__logo" aria-hidden>
-            ●
-          </span>
-          <h1 className="boot-screen__title">Head Terminal</h1>
-          <p className="boot-screen__subtitle">Iniciando sessões…</p>
-          <div className="boot-screen__progress" aria-hidden>
-            <div className="boot-screen__progress-bar" />
-          </div>
-        </div>
-      </div>
+      <BootScreen
+        slow={bootSlow}
+        showDiagnosticActions={showDiagnosticActions}
+      />
+    );
+  }
+
+  if (bootstrapError || sessions.length === 0 || !defaultCwd) {
+    return (
+      <BootScreen
+        error={bootstrapError ?? "Não foi possível carregar as sessões."}
+        showDiagnosticActions
+      />
     );
   }
 

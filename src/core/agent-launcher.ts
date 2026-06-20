@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { homeDir } from "@tauri-apps/api/path";
 import { platform } from "@tauri-apps/plugin-os";
 
@@ -19,9 +20,17 @@ function basename(path: string): string {
   return parts[parts.length - 1] || "Head";
 }
 
+async function resolveHomeDocumentsDir(): Promise<string> {
+  try {
+    const home = (await homeDir()).replace(/\/$/, "");
+    return `${home}/Documentos`;
+  } catch {
+    return invoke<string>("get_default_cwd");
+  }
+}
+
 export async function resolveDefaultCwd(): Promise<string> {
-  const home = (await homeDir()).replace(/\/$/, "");
-  return `${home}/Documentos`;
+  return resolveHomeDocumentsDir();
 }
 
 export function createInitialSession(

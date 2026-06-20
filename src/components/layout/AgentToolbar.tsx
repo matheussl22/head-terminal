@@ -22,7 +22,11 @@ export function AgentToolbar({ onOpenCommandPalette }: AgentToolbarProps) {
   const splitActivePane = useSessionStore((state) => state.splitActivePane);
   const runEverything = useSessionStore((state) => state.runEverything);
   const setRunEverything = useSessionStore((state) => state.setRunEverything);
-  const activeSession = useSessionStore((state) => state.getActiveSession());
+  const activeSession = useSessionStore(
+    (state) =>
+      state.sessions.find((session) => session.id === state.activeSessionId) ??
+      null,
+  );
   const paneActivities = useSessionStore((state) => state.paneActivities);
 
   const activity = activeSession

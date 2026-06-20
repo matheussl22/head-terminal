@@ -3,6 +3,8 @@ import type { IDisposable } from "tauri-pty";
 
 import { getAgentProfile } from "../config/agents";
 import { ActivityDetector } from "../core/activity-detector";
+import { checkpoint, logError, logEvent } from "../core/logger";
+import { notifyUiReady } from "../core/startup-watchdog";
 import { dirname } from "../core/git-context-utils";
 import { fetchGitContextForPath } from "../core/git-watch-bridge";
 import {
@@ -78,9 +80,12 @@ export function useAgentSession({
     }
 
     let disposed = false;
+    let loggedFirstByte = false;
+    let loggedFitOk = false;
 
     const { terminal, fitAddon } = createConfiguredTerminal();
     terminal.open(container);
+    checkpoint("js.terminal.dom_opened", { paneId, sessionId });
 
     const listeners: IDisposable[] = [];
     let bridge: ReturnType<typeof createPtyBridge> | null = null;
@@ -122,6 +127,21 @@ export function useAgentSession({
 
       fitTerminal(fitAddon, terminal);
 
+      if (!loggedFitOk && terminal.cols > 0 && terminal.rows > 0) {
+        loggedFitOk = true;
+        checkpoint("js.terminal.fit_ok", {
+          paneId,
+          cols: terminal.cols,
+          rows: terminal.rows,
+        });
+      } else if (terminal.cols <= 0 || terminal.rows <= 0) {
+        logEvent("warn", "terminal.fit_zero", {
+          paneId,
+          cols: terminal.cols,
+          rows: terminal.rows,
+        });
+      }
+
       if (bridge && terminal.cols > 0 && terminal.rows > 0) {
         bridge.pty.resize(terminal.cols, terminal.rows);
       }
@@ -135,6 +155,7 @@ export function useAgentSession({
       }
 
       fitPane();
+      checkpoint("js.pty.spawn_begin", { paneId, sessionId, cwd });
 
       try {
         const profile = getAgentProfile(agentProfileId);
@@ -161,6 +182,14 @@ export function useAgentSession({
 
         listeners.push(
           attachPtyDataListener(bridge.pty, (data) => {
+            if (!loggedFirstByte && data.byteLength > 0) {
+              loggedFirstByte = true;
+              checkpoint("js.pty.first_byte", {
+                paneId,
+                bytes: data.byteLength,
+              });
+              notifyUiReady();
+            }
             writePtyData(data);
             activityDetector.onData(data);
             workspaceDetector.onData(data);
@@ -193,9 +222,11 @@ export function useAgentSession({
           flushBufferedOutput();
         }
 
+        checkpoint("js.pty.spawn_ok", { paneId, sessionId });
         updatePaneStatus(paneId, "running");
         activityDetector.onRunning();
       } catch (error) {
+        logError("js.pty.spawn_failed", error, { paneId, sessionId });
         const message =
           error instanceof Error ? error.message : "Falha ao iniciar o PTY";
         terminal.writeln(`\r\n[Erro] ${message}\r\n`);

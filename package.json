@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "start:dev": "bash scripts/head-terminal-dev.sh",
+    "start:debug": "bash scripts/head-terminal-dev.sh",
     "start:dev:watch": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "build:dev": "npm run build && tauri build --debug --no-bundle --config src-tauri/tauri.dev.conf.json && cp src-tauri/target/debug/head-terminal src-tauri/target/debug/head-terminal-dev",
     "build:release": "npm run build && tauri build --no-bundle",

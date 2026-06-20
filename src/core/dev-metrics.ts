@@ -14,7 +14,13 @@ const metrics: DevMetrics = {
 
 const listeners = new Set<() => void>();
 
+// useSyncExternalStore compares snapshots by reference, so getDevMetrics must
+// return a stable object between updates. We only rebuild the snapshot when a
+// metric actually changes, otherwise repeated renders would loop forever.
+let snapshot: DevMetrics = { ...metrics };
+
 function notify(): void {
+  snapshot = { ...metrics };
   for (const listener of listeners) {
     listener();
   }
@@ -33,7 +39,7 @@ export function recordPtyReadBatch(bytes: number): void {
 }
 
 export function getDevMetrics(): DevMetrics {
-  return { ...metrics };
+  return snapshot;
 }
 
 export function subscribeDevMetrics(listener: () => void): () => void {

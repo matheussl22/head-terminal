@@ -13,6 +13,7 @@ import {
   schedulePersistedWorkspace,
   workspaceFromStore,
 } from "./session-persistence";
+import { logEvent } from "./logger";
 import {
   loadRunEverything,
   saveRunEverything,
@@ -90,6 +91,27 @@ function sortSessions(sessions: AgentSession[]): AgentSession[] {
   return [...pinned, ...unpinned];
 }
 
+function logSpawnState(
+  event: string,
+  sessionId: string | null,
+  spawnedSessionIds: Record<string, boolean>,
+  meta?: Record<string, unknown>,
+): void {
+  logEvent("info", event, {
+    sessionId,
+    spawned: sessionId ? Boolean(spawnedSessionIds[sessionId]) : false,
+    spawnedSessionIds: Object.keys(spawnedSessionIds),
+    ...meta,
+  });
+}
+
+function checkpointSessionSpawn(sessionId: string | null): void {
+  if (!sessionId) {
+    return;
+  }
+  logEvent("info", "js.session.spawn_scheduled", { sessionId });
+}
+
 function persistWorkspaceState(
   state: SessionStore,
   options?: { immediate?: boolean },
@@ -155,6 +177,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         },
       };
       persistWorkspaceState({ ...state, ...next }, { immediate: true });
+      checkpointSessionSpawn(session.id);
       return next;
     }),
 
@@ -180,6 +203,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       ptyWriters: {},
       spawnedSessionIds,
     });
+    logSpawnState(
+      "session.spawn_state",
+      activeSessionId,
+      spawnedSessionIds,
+      { source: "hydrate" },
+    );
+    checkpointSessionSpawn(activeSessionId);
     persistWorkspaceState({
       ...get(),
       sessions,
@@ -200,6 +230,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         },
       };
       persistWorkspaceState({ ...state, ...next });
+      logSpawnState("session.spawn_state", sessionId, next.spawnedSessionIds, {
+        source: "activate",
+      });
+      checkpointSessionSpawn(sessionId);
       return next;
     }),
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { sendAgentCommand } from "../../actions/sendAgentCommand";
 import { PALETTE_ACTIONS } from "../../config/toolbar";
+import { exportDiagnosticBundle } from "../../core/export-diagnostic";
 import { useSessionStore } from "../../core/session-manager";
 
 interface CommandPaletteProps {
@@ -54,6 +55,8 @@ export function CommandPalette({
         splitActivePane("horizontal");
       } else if (command === "__rename_session__") {
         onRenameRequest();
+      } else if (command === "__export_diagnostic__") {
+        void exportDiagnosticBundle();
       } else if (command.startsWith("/")) {
         sendAgentCommand(command);
       }

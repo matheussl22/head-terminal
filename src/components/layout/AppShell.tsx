@@ -6,6 +6,7 @@ import {
   HARD_CLEAR_SHORTCUT,
 } from "../../config/toolbar";
 import type { AgentSession } from "../../types/session";
+import { checkpoint } from "../../core/logger";
 import { useSessionStore } from "../../core/session-manager";
 import {
   useActivityNotifications,
@@ -54,6 +55,13 @@ export function AppShell({
 
   useActivityNotifications();
   useGitContextWatchers(sessions);
+
+  useEffect(() => {
+    checkpoint("js.app_shell.visible", {
+      sessionCount: sessions.length,
+      activeSessionId,
+    });
+  }, [activeSessionId, sessions.length]);
 
   useKeyboardShortcuts({
     onCommandPalette: () => setPaletteOpen(true),

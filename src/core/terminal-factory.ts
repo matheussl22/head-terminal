@@ -4,6 +4,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 
 import { createTerminalOptions } from "../config/theme";
+import { logEvent } from "./logger";
 import { recordPtyReadBatch } from "./dev-metrics";
 
 const SCROLLBACK = 5000;
@@ -24,17 +25,30 @@ export function createConfiguredTerminal(): {
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(webLinksAddon);
 
-  try {
-    const webglAddon = new WebglAddon();
-    terminal.loadAddon(webglAddon);
-    webglAddon.onContextLoss(() => {
-      webglAddon.dispose();
-    });
-  } catch {
-    // WebGL unavailable — DOM renderer is the fallback.
+  const webglEnabled = shouldEnableWebglRenderer();
+  logEvent("info", "terminal.renderer", {
+    webgl: webglEnabled,
+    reason: webglEnabled ? "enabled" : "linux_disabled",
+  });
+
+  if (webglEnabled) {
+    try {
+      const webglAddon = new WebglAddon();
+      terminal.loadAddon(webglAddon);
+      webglAddon.onContextLoss(() => {
+        webglAddon.dispose();
+      });
+    } catch {
+      // WebGL unavailable — DOM renderer is the fallback.
+    }
   }
 
   return { terminal, fitAddon };
+}
+
+function shouldEnableWebglRenderer(): boolean {
+  // WebGL can crash WebKitGTK on Linux and leave a blank window.
+  return !/Linux/i.test(navigator.userAgent);
 }
 
 export function fitTerminal(fitAddon: FitAddon, terminal: Terminal): void {
