@@ -28,6 +28,7 @@ export const SessionWorkspace = memo(function SessionWorkspace({
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setActivePaneId = useSessionStore((state) => state.setActivePaneId);
   const setActiveSessionId = useSessionStore((state) => state.setActiveSessionId);
+  const closePane = useSessionStore((state) => state.closePane);
 
   const canvasRef = useRef<HTMLDivElement>(null);
 
@@ -113,6 +114,7 @@ export const SessionWorkspace = memo(function SessionWorkspace({
                   : undefined
               }
               onFocus={() => focusPane(paneId)}
+              onClose={() => closePane(paneId)}
             />
           );
         })}

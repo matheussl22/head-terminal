@@ -73,6 +73,29 @@ export function splitPaneInLayout(
   };
 }
 
+export function closePaneInLayout(
+  layout: LayoutNode,
+  targetPaneId: string,
+): LayoutNode {
+  if (layout.kind === "pane") {
+    return layout;
+  }
+
+  if (layout.first.kind === "pane" && layout.first.paneId === targetPaneId) {
+    return layout.second;
+  }
+
+  if (layout.second.kind === "pane" && layout.second.paneId === targetPaneId) {
+    return layout.first;
+  }
+
+  return {
+    ...layout,
+    first: closePaneInLayout(layout.first, targetPaneId),
+    second: closePaneInLayout(layout.second, targetPaneId),
+  };
+}
+
 export function collectPaneRects(
   node: LayoutNode,
   bounds: Bounds = FULL_BOUNDS,

@@ -19,6 +19,7 @@ interface TerminalPaneProps {
   paneCount: number;
   layoutStyle?: CSSProperties;
   onFocus: () => void;
+  onClose: () => void;
 }
 
 export function TerminalPane({
@@ -33,6 +34,7 @@ export function TerminalPane({
   paneCount,
   layoutStyle,
   onFocus,
+  onClose,
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const showHeader = loadPaneHeadersEnabled();
@@ -63,6 +65,7 @@ export function TerminalPane({
           paneCount={paneCount}
           isActive={isActive}
           onFocus={onFocus}
+          onClose={onClose}
         />
       )}
 

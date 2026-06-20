@@ -55,6 +55,13 @@ export const PALETTE_ACTIONS: ToolbarCommand[] = [
     description: "Divide o terminal ativo horizontalmente",
   },
   {
+    id: "close-pane",
+    label: "Fechar terminal",
+    command: "__close_pane__",
+    shortcut: "Ctrl+Shift+W",
+    description: "Fecha o terminal ativo (requer mais de um terminal na sessão)",
+  },
+  {
     id: "export-diagnostic",
     label: "Exportar diagnóstico de inicialização",
     command: "__export_diagnostic__",

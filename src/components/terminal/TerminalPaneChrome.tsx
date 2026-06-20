@@ -2,6 +2,7 @@ import { ACTIVITY_LABEL, type PaneActivity } from "../../types/activity";
 import { formatBranchLabel } from "../../core/git-context-utils";
 import { useSessionStore } from "../../core/session-manager";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
+import { IconClose } from "../ui/Icons";
 
 interface TerminalPaneOverlayProps {
   paneId: string;
@@ -55,6 +56,7 @@ interface TerminalPaneHeaderProps {
   paneCount: number;
   isActive: boolean;
   onFocus: () => void;
+  onClose: () => void;
 }
 
 export function TerminalPaneHeader({
@@ -63,6 +65,7 @@ export function TerminalPaneHeader({
   paneCount,
   isActive,
   onFocus,
+  onClose,
 }: TerminalPaneHeaderProps) {
   const activity = useSessionStore(
     (state) => state.paneActivities[paneId] ?? "starting",
@@ -71,8 +74,7 @@ export function TerminalPaneHeader({
   const branchLabel = formatBranchLabel(gitContext);
 
   return (
-    <button
-      type="button"
+    <div
       className={
         isActive
           ? "terminal-pane-header terminal-pane-header--active"
@@ -97,10 +99,26 @@ export function TerminalPaneHeader({
           </>
         )}
       </span>
-      <span className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}>
-        {ACTIVITY_LABEL[activity]}
+      <span className="terminal-pane-header__right">
+        <span className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}>
+          {ACTIVITY_LABEL[activity]}
+        </span>
+        {paneCount > 1 && (
+          <button
+            type="button"
+            className="terminal-pane-header__close"
+            title="Fechar terminal"
+            aria-label={`Fechar terminal ${paneIndex + 1}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onClose();
+            }}
+          >
+            <IconClose />
+          </button>
+        )}
       </span>
-    </button>
+    </div>
   );
 }
 

@@ -20,6 +20,8 @@ export function CommandPalette({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const splitActivePane = useSessionStore((state) => state.splitActivePane);
+  const activePaneId = useSessionStore((state) => state.activePaneId);
+  const closePane = useSessionStore((state) => state.closePane);
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -53,6 +55,10 @@ export function CommandPalette({
         splitActivePane("vertical");
       } else if (command === "__split_horizontal__") {
         splitActivePane("horizontal");
+      } else if (command === "__close_pane__") {
+        if (activePaneId) {
+          closePane(activePaneId);
+        }
       } else if (command === "__rename_session__") {
         onRenameRequest();
       } else if (command === "__export_diagnostic__") {
@@ -63,7 +69,7 @@ export function CommandPalette({
 
       onClose();
     },
-    [onClose, onRenameRequest, splitActivePane],
+    [activePaneId, closePane, onClose, onRenameRequest, splitActivePane],
   );
 
   useEffect(() => {

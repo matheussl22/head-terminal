@@ -29,6 +29,8 @@ export function useKeyboardShortcuts(options: {
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setActiveSessionId = useSessionStore((state) => state.setActiveSessionId);
   const splitActivePane = useSessionStore((state) => state.splitActivePane);
+  const activePaneId = useSessionStore((state) => state.activePaneId);
+  const closePane = useSessionStore((state) => state.closePane);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -55,6 +57,19 @@ export function useKeyboardShortcuts(options: {
           splitActivePane("horizontal");
         } else {
           splitActivePane("vertical");
+        }
+        return;
+      }
+
+      if (
+        !isInput &&
+        event.ctrlKey &&
+        event.shiftKey &&
+        event.key.toLowerCase() === "w"
+      ) {
+        event.preventDefault();
+        if (activePaneId) {
+          closePane(activePaneId);
         }
         return;
       }
@@ -89,7 +104,9 @@ export function useKeyboardShortcuts(options: {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    activePaneId,
     activeSessionId,
+    closePane,
     options,
     sessions,
     setActiveSessionId,

@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import type { PaneActivity } from "../types/activity";
 import {
+  closePaneInLayout,
   collectPaneIds,
   createInitialLayout,
   createPaneId,
@@ -49,6 +50,7 @@ interface SessionStore {
   reorderSessions: (fromIndex: number, toIndex: number) => void;
   togglePinSession: (sessionId: string) => void;
   splitActivePane: (direction: SplitDirection) => void;
+  closePane: (paneId: string) => void;
   updateSplitRatio: (
     sessionId: string,
     path: number[],
@@ -531,6 +533,43 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         [newPaneId]: "starting" as SessionStatus,
       };
       const next = { sessions: nextSessions, paneActivities, paneStatusIndex };
+      persistWorkspaceState({ ...state, ...next }, { immediate: true });
+      return next;
+    }),
+
+  closePane: (paneId) =>
+    set((state) => {
+      const session = state.sessions.find((item) =>
+        collectPaneIds(item.layout).includes(paneId),
+      );
+      if (!session) {
+        return state;
+      }
+
+      const paneIds = collectPaneIds(session.layout);
+      if (paneIds.length <= 1) {
+        return state;
+      }
+
+      const layout = closePaneInLayout(session.layout, paneId);
+      const cleanup = cleanupPaneState(state, [paneId]);
+
+      const nextSessions = state.sessions.map((item) => {
+        if (item.id !== session.id) {
+          return item;
+        }
+
+        const paneStatuses = { ...item.paneStatuses };
+        delete paneStatuses[paneId];
+        return { ...item, layout, paneStatuses };
+      });
+
+      const activePaneId =
+        state.activePaneId === paneId
+          ? collectPaneIds(layout)[0] ?? null
+          : state.activePaneId;
+
+      const next = { sessions: nextSessions, activePaneId, ...cleanup };
       persistWorkspaceState({ ...state, ...next }, { immediate: true });
       return next;
     }),
