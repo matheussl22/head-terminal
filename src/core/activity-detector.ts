@@ -9,6 +9,9 @@ const WORKING_PATTERNS = [
   /\bCompiling\b/i,
   /\bInstalling\b/i,
   /\bWaiting for approval\b/i,
+  /\bThinking\b/i,
+  /\bPlanning\b/i,
+  /\bSearching\b/i,
 ];
 
 const ERROR_PATTERNS = [
