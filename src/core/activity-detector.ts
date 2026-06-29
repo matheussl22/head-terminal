@@ -9,6 +9,9 @@ const WORKING_PATTERNS = [
   /\bCompiling\b/i,
   /\bInstalling\b/i,
   /\bWaiting for approval\b/i,
+  /\bThinking\b/i,
+  /\bPlanning\b/i,
+  /\bSearching\b/i,
 ];
 
 const ERROR_PATTERNS = [
@@ -17,9 +20,6 @@ const ERROR_PATTERNS = [
   /\bENOENT\b/,
   /\bEPERM\b/,
   /Processo encerrado com código [1-9]/,
-  /\bThinking\b/i,
-  /\bPlanning\b/i,
-  /\bSearching\b/i,
 ];
 
 const WAITING_PATTERNS = [
