@@ -19,10 +19,20 @@ function codexWithFallbackArgs(): string[] {
   return ["-l", "-c", "codex; exec zsh -l"];
 }
 
+function antigravityWithFallbackArgs(): string[] {
+  return ["-l", "-c", "agy; exec zsh -l"];
+}
+
 export function buildAgentProfiles(): Record<string, AgentProfile> {
   const shell = getShellPath();
 
   return {
+    antigravity: {
+      id: "antigravity",
+      label: "Antigravity",
+      command: shell,
+      args: antigravityWithFallbackArgs(),
+    },
     cursor: {
       id: "cursor",
       label: "Cursor Agent",
