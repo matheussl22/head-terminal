@@ -11,6 +11,10 @@ import {
   createConfiguredTerminal,
   fitTerminal,
 } from "../core/terminal-factory";
+import {
+  registerTerminal,
+  unregisterTerminal,
+} from "../core/terminal-registry";
 import { attachOrphanCompositionEndGuard } from "../core/terminal-composition-guard";
 
 /**
@@ -44,8 +48,9 @@ export function useTerminalInstance(
       return;
     }
 
-    const { terminal, fitAddon } = createConfiguredTerminal();
+    const { terminal, fitAddon, searchAddon } = createConfiguredTerminal();
     terminal.open(container);
+    registerTerminal(paneId, { terminal, searchAddon });
     checkpoint("js.terminal.dom_opened", { paneId });
 
     const created: TerminalInstance = {
@@ -110,6 +115,7 @@ export function useTerminalInstance(
       dataListener.dispose();
       resizeListener.dispose();
       unregisterPaneFitter(paneId);
+      unregisterTerminal(paneId);
       terminal.dispose();
     };
   }, [active, containerRef, paneId]);

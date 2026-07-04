@@ -1,24 +1,40 @@
 :root {
-  /* Surfaces */
+  /* Layered surfaces (depth) — terminal itself stays pure black */
+  --bg-0: #050507;
+  --bg-1: #0a0a10;
+  --bg-2: #10101a;
+  --bg-3: #171724;
+
+  /* Surfaces (legacy aliases now mapped onto the layers) */
   --surface-terminal: #000000;
-  --surface-sidebar: #050505;
-  --surface-toolbar: #0a0a0a;
-  --surface-overlay: rgba(0, 0, 0, 0.72);
+  --surface-window: var(--bg-0);
+  --surface-sidebar: var(--bg-1);
+  --surface-toolbar: var(--bg-2);
+  --surface-elevated: var(--bg-3);
+  --surface-overlay: rgba(5, 5, 7, 0.78);
 
   /* Borders */
-  --border-subtle: #1a1a1a;
-  --border-default: #333333;
+  --border-subtle: #1a1a24;
+  --border-default: #2c2c3a;
   --border-active: rgba(248, 28, 229, 0.45);
 
   /* Text */
   --text-primary: #ffffff;
   --text-secondary: rgba(255, 255, 255, 0.72);
-  --text-muted: rgba(255, 255, 255, 0.62);
+  --text-muted: rgba(255, 255, 255, 0.55);
 
-  /* Accent (Hyper magenta) */
+  /* Identity: Hyper magenta + electric cyan */
   --accent: #f81ce5;
   --accent-muted: rgba(248, 28, 229, 0.35);
   --accent-subtle: rgba(248, 28, 229, 0.12);
+  --accent-2: #22d3ee;
+  --accent-2-muted: rgba(34, 211, 238, 0.35);
+  --accent-2-subtle: rgba(34, 211, 238, 0.12);
+  --gradient-brand: linear-gradient(135deg, var(--accent), var(--accent-2));
+
+  /* Glow — use sparingly on active elements */
+  --glow-accent: 0 0 12px rgba(248, 28, 229, 0.35);
+  --glow-working: 0 0 8px rgba(103, 248, 111, 0.4);
 
   /* Activity states */
   --status-idle: #686868;
@@ -32,16 +48,34 @@
   /* Buttons */
   --button-bg: rgba(255, 255, 255, 0.06);
   --button-border: rgba(255, 255, 255, 0.15);
-  --button-hover: rgba(255, 255, 255, 0.14);
+  --button-hover: var(--bg-3);
+
+  /* Scales */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --font-xs: 11px;
+  --font-sm: 12px;
+  --font-md: 13px;
+  --font-lg: 15px;
+  --z-divider: 2;
+  --z-overlay: 3;
+  --z-tooltip: 20;
+  --z-menu: 50;
+  --z-modal: 100;
+
+  /* Focus ring (cyan for interactives) */
+  --focus-ring: 0 0 0 2px rgba(34, 211, 238, 0.4);
 
   /* Layout */
-  --sidebar-width: 220px;
+  --sidebar-width: 236px;
   --sidebar-collapsed-width: 52px;
-  --toolbar-height: 40px;
+  --toolbar-height: 44px;
   --pane-header-height: 24px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
 
   /* Motion */
   --transition-fast: 120ms ease;

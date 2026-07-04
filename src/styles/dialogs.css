@@ -1,0 +1,210 @@
+/* Dialogs: command palette, create session, settings */
+
+.create-session-backdrop,
+.command-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 80px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.create-session-dialog,
+.command-palette {
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-toolbar);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.create-session-dialog {
+  padding: var(--space-4);
+}
+
+.create-session-dialog__title {
+  margin: 0 0 var(--space-4);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.create-session-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.create-session-dialog__field input,
+.create-session-dialog__field select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+}
+
+.create-session-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: var(--space-4);
+}
+
+.create-session-dialog__cwd-row {
+  display: flex;
+  gap: 8px;
+}
+
+.create-session-dialog__cwd-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.create-session-dialog__error {
+  color: var(--status-error);
+  font-size: var(--font-xs);
+}
+
+.create-session-dialog__recent {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+}
+
+.create-session-dialog__chip {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+
+.create-session-dialog__chip:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.create-session-dialog__field--inline {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* Command palette */
+
+.command-palette {
+  overflow: hidden;
+}
+
+.command-palette__input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.command-palette__list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.command-palette__item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.command-palette__item:hover,
+.command-palette__item--selected {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.command-palette__label {
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+
+.command-palette__shortcut {
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.command-palette__description {
+  grid-column: 1 / -1;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+/* Settings — MCP status list */
+
+.settings-mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-mcp-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--font-sm);
+}
+
+.settings-mcp-item__name {
+  font-weight: 600;
+  min-width: 90px;
+}
+
+.settings-mcp-item__detail {
+  flex: 1;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.5);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-mcp-status--ok {
+  color: var(--status-working);
+}
+
+.settings-mcp-status--error {
+  color: var(--status-error);
+}
+
+.settings-mcp-status--pending {
+  color: var(--text-muted);
+}
+
+.settings-mcp-status--unsupported {
+  color: var(--text-muted);
+  font-style: italic;
+}

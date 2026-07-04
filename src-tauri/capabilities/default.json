@@ -5,7 +5,9 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
+    "core:window:allow-set-title",
     "pty:default",
-    "os:default"
+    "os:default",
+    "dialog:default"
   ]
 }

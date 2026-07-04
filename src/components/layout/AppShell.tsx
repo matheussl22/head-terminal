@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { clearAgentSession } from "../../actions/clearAgentSession";
 import {
   CLEAR_SHORTCUT,
   HARD_CLEAR_SHORTCUT,
 } from "../../config/toolbar";
+import { countWorkingSessions } from "../../core/activity-utils";
 import type { AgentSession } from "../../types/session";
 import { checkpoint } from "../../core/logger";
+import {
+  flushPersistedWorkspace,
+  workspaceFromStore,
+} from "../../core/session-persistence";
 import { useSessionStore } from "../../core/session-manager";
 import {
   useActivityNotifications,
@@ -50,8 +56,12 @@ export function AppShell({
   onCreateSession,
 }: AppShellProps) {
   const spawnedSessionIds = useSessionStore((state) => state.spawnedSessionIds);
+  const workingCount = useSessionStore((state) =>
+    countWorkingSessions(state.sessions, state.paneRuntime),
+  );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchPaneId, setSearchPaneId] = useState<string | null>(null);
   const { renameSessionId, requestRename, clearRenameRequest } =
     useRenameRequest();
 
@@ -72,7 +82,46 @@ export function AppShell({
         requestRename(activeSessionId);
       }
     },
+    onSearch: () => {
+      const paneId = useSessionStore.getState().activePaneId;
+      if (paneId) {
+        setSearchPaneId(paneId);
+      }
+    },
+    onCloseSearch: () => setSearchPaneId(null),
   });
+
+  useEffect(() => {
+    const base = import.meta.env.DEV ? "Head Terminal (Dev)" : "Head Terminal";
+    const title =
+      workingCount > 0 ? `● ${workingCount} executando — ${base}` : base;
+    void getCurrentWindow().setTitle(title);
+  }, [workingCount]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void getCurrentWindow()
+      .onCloseRequested((event) => {
+        const state = useSessionStore.getState();
+        const working = countWorkingSessions(state.sessions, state.paneRuntime);
+        if (working > 0) {
+          const ok = window.confirm(
+            `${working} agent(s) ainda executando. Fechar mesmo assim?`,
+          );
+          if (!ok) {
+            event.preventDefault();
+            return;
+          }
+        }
+        flushPersistedWorkspace(workspaceFromStore(state));
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -101,7 +150,10 @@ export function AppShell({
 
   return (
     <div className="app-shell">
-      <AgentToolbar onOpenCommandPalette={() => setPaletteOpen(true)} />
+      <AgentToolbar
+        onOpenCommandPalette={() => setPaletteOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
       <DevMetricsOverlay />
       <div className="app-shell__body">
         <SessionSidebar
@@ -109,6 +161,7 @@ export function AppShell({
           onCreateSession={onCreateSession}
           renameSessionId={renameSessionId}
           onRenameComplete={clearRenameRequest}
+          onRenameRequest={requestRename}
         />
         <main className="app-shell__main">
           {sessions.map((session) => (
@@ -117,6 +170,8 @@ export function AppShell({
               session={session}
               isVisible={session.id === activeSessionId}
               shouldSpawn={Boolean(spawnedSessionIds[session.id])}
+              searchPaneId={searchPaneId}
+              onCloseSearch={() => setSearchPaneId(null)}
             />
           ))}
         </main>

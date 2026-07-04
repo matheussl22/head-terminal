@@ -1,0 +1,407 @@
+/* Sidebar — execution information center */
+
+.session-sidebar {
+  width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
+  border-right: 1px solid var(--border-subtle);
+  background: var(--surface-sidebar);
+  display: flex;
+  flex-direction: column;
+  transition:
+    width var(--transition-normal),
+    flex-basis var(--transition-normal);
+}
+
+.session-sidebar--collapsed {
+  width: var(--sidebar-collapsed-width);
+  flex-basis: var(--sidebar-collapsed-width);
+}
+
+.session-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 10px var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+}
+
+.session-sidebar__header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-sidebar__working-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(103, 248, 111, 0.2);
+  color: var(--status-working);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.session-sidebar--collapsed .session-sidebar__header {
+  justify-content: center;
+  padding: 10px var(--space-2);
+}
+
+.session-sidebar__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-sidebar--collapsed .session-sidebar__header-actions {
+  width: 100%;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.session-sidebar__toggle,
+.session-sidebar__new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.session-sidebar__toggle {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+}
+
+.session-sidebar__toggle:hover,
+.session-sidebar__new:hover {
+  background: var(--button-hover);
+}
+
+.session-sidebar__new {
+  padding: 4px 8px;
+  font-size: var(--font-sm);
+}
+
+.session-sidebar__list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.session-sidebar--collapsed .session-sidebar__list {
+  padding: 8px 6px;
+  align-items: center;
+}
+
+.session-sidebar__footer {
+  padding: 8px 6px 10px;
+  display: flex;
+  justify-content: center;
+}
+
+/* Collapsed rail: initial chip with activity status ring */
+
+.session-sidebar__compact-new,
+.session-sidebar__compact-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.88);
+  font-size: var(--font-md);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.session-sidebar__compact-item--active {
+  background: var(--accent-subtle);
+}
+
+.session-sidebar__compact-item--ring-working {
+  border-color: var(--status-working);
+  animation: status-pulse 1.5s ease-in-out infinite;
+}
+
+.session-sidebar__compact-item--ring-waiting_input {
+  border-color: var(--status-waiting);
+}
+
+.session-sidebar__compact-item--ring-error {
+  border-color: var(--status-error);
+}
+
+.session-sidebar__compact-item--ring-agent_fallback {
+  border-color: var(--status-fallback);
+}
+
+.session-sidebar__compact-new:hover,
+.session-sidebar__compact-item:hover {
+  background: var(--button-hover);
+}
+
+/* Session card */
+
+.session-sidebar__item {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.03);
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.session-sidebar__item--active {
+  border-color: rgba(255, 255, 255, 0.12);
+  border-left-color: var(--accent);
+  background: var(--surface-elevated);
+}
+
+.session-sidebar__title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.session-sidebar__pin {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.session-sidebar__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-md);
+  font-weight: 600;
+}
+
+.session-sidebar__agent-chip {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 16px;
+}
+
+.session-sidebar__select {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 52px 8px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-sidebar__actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.session-sidebar__item:hover .session-sidebar__actions,
+.session-sidebar__item--active .session-sidebar__actions {
+  opacity: 1;
+}
+
+.session-sidebar__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+}
+
+.session-sidebar__action:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.session-sidebar__action--remove:hover {
+  color: var(--status-error);
+  background: rgba(253, 111, 107, 0.15);
+}
+
+.session-sidebar__rename-input {
+  width: 100%;
+  padding: 2px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+  font-weight: 600;
+}
+
+.session-sidebar__meta {
+  font-family: Menlo, "DejaVu Sans Mono", Consolas, monospace;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-sidebar__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.session-sidebar__pane-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.session-sidebar__pane-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.session-sidebar__pane-dot--starting,
+.session-sidebar__pane-dot--idle {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.session-sidebar__pane-dot--working {
+  background: var(--status-working);
+  animation: status-pulse 1.5s ease-in-out infinite;
+}
+
+.session-sidebar__pane-dot--waiting_input {
+  background: var(--status-waiting);
+}
+
+.session-sidebar__pane-dot--error {
+  background: var(--status-error);
+}
+
+.session-sidebar__pane-dot--agent_fallback {
+  background: var(--status-fallback);
+}
+
+.session-sidebar__pane-dot--exited {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.session-sidebar__git-badge {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--font-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-sidebar__settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px 8px;
+}
+
+.session-sidebar__select-input,
+.session-sidebar__cwd-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--font-sm);
+}
+
+/* Context menu (right-click on a session) */
+
+.session-context-menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.session-context-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-context-menu button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.session-context-menu__danger {
+  color: var(--status-error) !important;
+}

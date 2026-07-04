@@ -15,6 +15,7 @@ import {
   workspaceFromStore,
 } from "./session-persistence";
 import { logEvent } from "./logger";
+import { gitContextsEqual } from "./git-context-utils";
 import {
   loadRunEverything,
   saveRunEverything,
@@ -668,6 +669,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         source: partial.source,
       };
 
+      if (current && gitContextsEqual(current, nextContext)) {
+        return state;
+      }
+
       return {
         sessionGitContext: {
           ...state.sessionGitContext,
@@ -699,6 +704,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           partial.lastTouchedAt ?? current?.lastTouchedAt ?? null,
         source: partial.source,
       };
+
+      if (current && gitContextsEqual(current, nextContext)) {
+        return state;
+      }
 
       return {
         paneGitContext: {

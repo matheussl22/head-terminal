@@ -1,0 +1,138 @@
+/* Toolbar — three zones: brand+global status | agent commands | layout/settings */
+
+.agent-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: var(--toolbar-height);
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  background: linear-gradient(180deg, var(--surface-toolbar), var(--surface-sidebar));
+}
+
+.agent-toolbar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.agent-toolbar__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--gradient-brand);
+  box-shadow: var(--glow-accent);
+}
+
+.agent-toolbar__title {
+  font-size: var(--font-md);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.agent-toolbar__git-badge {
+  margin-left: 4px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-toolbar__session-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: var(--space-2);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+.agent-toolbar__global-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: var(--space-2);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(103, 248, 111, 0.25);
+  background: rgba(103, 248, 111, 0.08);
+  font-size: var(--font-xs);
+  color: var(--status-working);
+  white-space: nowrap;
+}
+
+.agent-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.agent-toolbar__divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-default);
+  margin: 0 2px;
+}
+
+.agent-toolbar__button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-sm);
+  background: var(--button-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.agent-toolbar__button:hover:not(:disabled) {
+  background: var(--button-hover);
+}
+
+.agent-toolbar__button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.agent-toolbar__button--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+
+.agent-toolbar__button--ghost:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.agent-toolbar__button--primary {
+  border-color: var(--accent-muted);
+}
+
+.agent-toolbar__button--icon {
+  padding: 5px 7px;
+}
+
+.agent-toolbar__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: var(--font-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.agent-toolbar__toggle input {
+  accent-color: var(--accent);
+}

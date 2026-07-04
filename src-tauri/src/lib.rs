@@ -3,10 +3,11 @@
 mod git;
 mod mcp;
 mod startup;
+mod system;
 mod voice;
 
 use startup::{
-    acquire_instance_lock, append_checkpoint_cmd, append_log, export_diagnostic_bundle,
+    append_checkpoint_cmd, append_log, export_diagnostic_bundle,
     frontend_log, get_startup_context, install_panic_hook, log_graphics_env, startup_log,
 };
 use tauri::{Manager, WindowEvent};
@@ -31,18 +32,6 @@ pub fn run() {
 
     log_graphics_env();
 
-    let _instance_lock = match acquire_instance_lock() {
-        Ok(lock) => Some(lock),
-        Err(code) if code == "already_running" => {
-            eprintln!("Head Terminal já está em execução.");
-            std::process::exit(0);
-        }
-        Err(error) => {
-            startup_log(&format!("app.instance_lock.warn {error}"));
-            None
-        }
-    };
-
     run_tauri();
 }
 
@@ -50,6 +39,15 @@ fn run_tauri() {
     startup_log("app.tauri.setup_begin");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+            startup_log("app.second_instance_focused");
+        }))
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_pty::init())
         .plugin(tauri_plugin_os::init())
         .manage(Mutex::new(GitWatcherState::new()))
@@ -67,6 +65,11 @@ fn run_tauri() {
             mcp::get_mcp_servers,
             voice::start_voice_recording,
             voice::stop_and_transcribe_voice,
+            system::path_exists,
+            system::check_agent_clis,
+            system::secret_get,
+            system::secret_set,
+            system::secret_delete,
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {

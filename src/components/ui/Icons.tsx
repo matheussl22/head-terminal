@@ -1,66 +1,68 @@
+// Barrel over lucide-react so swapping the icon set later touches one file.
+import {
+  Activity,
+  Command,
+  GitBranch,
+  Mic,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Pencil,
+  Plus,
+  Settings2,
+  SquareSplitHorizontal,
+  SquareSplitVertical,
+  X,
+} from "lucide-react";
+
 interface IconProps {
   className?: string;
   size?: number;
 }
 
 export function IconPencil({ className, size = 14 }: IconProps) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d="M11.5 2.5a1.414 1.414 0 0 1 2 2L5.5 12.5 2.5 13.5l1-3L11.5 2.5z" />
-    </svg>
-  );
+  return <Pencil className={className} size={size} aria-hidden />;
 }
 
 export function IconClose({ className, size = 14 }: IconProps) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d="M4 4l8 8M12 4l-8 8" />
-    </svg>
-  );
+  return <X className={className} size={size} aria-hidden />;
 }
 
 export function IconMic({ className, size = 14 }: IconProps) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <rect x="5.5" y="1.5" width="5" height="8" rx="2.5" />
-      <path d="M3 7.5a5 5 0 0 0 10 0" />
-      <path d="M8 12.5v2M5.5 14.5h5" />
-    </svg>
-  );
+  return <Mic className={className} size={size} aria-hidden />;
+}
+
+export function IconCommand({ className, size = 14 }: IconProps) {
+  return <Command className={className} size={size} aria-hidden />;
+}
+
+export function IconPlus({ className, size = 14 }: IconProps) {
+  return <Plus className={className} size={size} aria-hidden />;
+}
+
+export function IconGitBranch({ className, size = 12 }: IconProps) {
+  return <GitBranch className={className} size={size} aria-hidden />;
+}
+
+export function IconSettings({ className, size = 14 }: IconProps) {
+  return <Settings2 className={className} size={size} aria-hidden />;
+}
+
+export function IconActivity({ className, size = 14 }: IconProps) {
+  return <Activity className={className} size={size} aria-hidden />;
+}
+
+export function IconSplitVertical({ className, size = 14 }: IconProps) {
+  return <SquareSplitVertical className={className} size={size} aria-hidden />;
+}
+
+export function IconSplitHorizontal({ className, size = 14 }: IconProps) {
+  return <SquareSplitHorizontal className={className} size={size} aria-hidden />;
+}
+
+export function IconSidebarCollapse({ className, size = 14 }: IconProps) {
+  return <PanelLeftClose className={className} size={size} aria-hidden />;
+}
+
+export function IconSidebarExpand({ className, size = 14 }: IconProps) {
+  return <PanelLeftOpen className={className} size={size} aria-hidden />;
 }

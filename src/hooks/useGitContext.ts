@@ -5,12 +5,6 @@ import { useSessionStore } from "../core/session-manager";
 import type { AgentSession } from "../types/session";
 
 export function useGitContextWatchers(sessions: AgentSession[]): void {
-  const mergeSessionGitContext = useSessionStore(
-    (state) => state.mergeSessionGitContext,
-  );
-
-  // Stable projection: unrelated session changes (title, layout) recreate the
-  // array, but watchers only care about which (id, cwd) pairs exist.
   const sessionsKey = JSON.stringify(
     sessions.map((session) => [session.id, session.cwd]),
   );
@@ -23,7 +17,7 @@ export function useGitContextWatchers(sessions: AgentSession[]): void {
   useEffect(() => {
     const releases = pairs.map(([id, cwd]) =>
       acquireGitContext(cwd, (context) => {
-        mergeSessionGitContext(id, context);
+        useSessionStore.getState().mergeSessionGitContext(id, context);
       }),
     );
 
@@ -32,5 +26,5 @@ export function useGitContextWatchers(sessions: AgentSession[]): void {
         release();
       }
     };
-  }, [pairs, mergeSessionGitContext]);
+  }, [pairs]);
 }

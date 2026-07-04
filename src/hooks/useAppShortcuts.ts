@@ -1,8 +1,14 @@
 import { useEffect, useState } from "react";
 
 import { getSessionActivity } from "../core/activity-utils";
+import { fitPanes } from "../core/pane-fit-registry";
 import { useSessionStore } from "../core/session-manager";
 import { notifySessionAttention } from "../core/notifications";
+import { forEachTerminal } from "../core/terminal-registry";
+import {
+  loadFontSize,
+  saveFontSize,
+} from "../core/ui-preferences";
 import { toggleVoiceInput } from "../core/voice-input";
 
 const NOTIFY_DEBOUNCE_MS = 300;
@@ -49,6 +55,8 @@ export function useActivityNotifications(): void {
 export function useKeyboardShortcuts(options: {
   onCommandPalette: () => void;
   onRenameSession: () => void;
+  onSearch: () => void;
+  onCloseSearch: () => void;
 }): void {
   const sessions = useSessionStore((state) => state.sessions);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
@@ -83,6 +91,51 @@ export function useKeyboardShortcuts(options: {
           void toggleVoiceInput(paneId);
         }
         return;
+      }
+
+      if (!isInput && event.ctrlKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        options.onSearch();
+        return;
+      }
+
+      if (!isInput && event.ctrlKey && (event.key === "=" || event.key === "+")) {
+        event.preventDefault();
+        const next = loadFontSize() + 1;
+        saveFontSize(next);
+        forEachTerminal((_paneId, handle) => {
+          handle.terminal.options.fontSize = next;
+        });
+        const paneIds = useSessionStore
+          .getState()
+          .getTargetPaneIds();
+        fitPanes(paneIds);
+        return;
+      }
+
+      if (!isInput && event.ctrlKey && event.key === "-") {
+        event.preventDefault();
+        const next = loadFontSize() - 1;
+        saveFontSize(next);
+        forEachTerminal((_paneId, handle) => {
+          handle.terminal.options.fontSize = next;
+        });
+        fitPanes(useSessionStore.getState().getTargetPaneIds());
+        return;
+      }
+
+      if (!isInput && event.ctrlKey && event.key === "0") {
+        event.preventDefault();
+        saveFontSize(12);
+        forEachTerminal((_paneId, handle) => {
+          handle.terminal.options.fontSize = 12;
+        });
+        fitPanes(useSessionStore.getState().getTargetPaneIds());
+        return;
+      }
+
+      if (event.key === "Escape") {
+        options.onCloseSearch();
       }
 
       if (!isInput && event.ctrlKey && event.key === "\\") {

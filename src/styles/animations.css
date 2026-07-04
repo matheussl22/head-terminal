@@ -13,11 +13,11 @@
 
 @keyframes boot-progress {
   0% {
-    transform: translateX(-100%);
+    transform: translateX(-120%);
   }
 
   100% {
-    transform: translateX(250%);
+    transform: translateX(320%);
   }
 }
 
@@ -31,14 +31,37 @@
   }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mic-pulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+
 .status-dot--pulse {
   animation: status-pulse 1.5s ease-in-out infinite;
 }
 
 .boot-screen__progress-bar {
-  animation: boot-progress 1.2s ease-in-out infinite;
+  animation: boot-progress 1.4s ease-in-out infinite;
 }
 
 .fade-in {
   animation: fade-in var(--transition-normal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--pulse,
+  .session-sidebar__compact-item--ring-working {
+    animation: none;
+  }
+
+  * {
+    transition-duration: 0.01ms !important;
+  }
 }

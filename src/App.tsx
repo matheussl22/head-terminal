@@ -106,15 +106,9 @@ function App() {
 
   const handleCreateConfirm = useCallback(
     (cwd: string, agentProfileId: string) => {
-      addSession(
-        createInitialSession(
-          cwd,
-          `Sessão ${sessions.length + 1}`,
-          agentProfileId,
-        ),
-      );
+      addSession(createInitialSession(cwd, undefined, agentProfileId));
     },
-    [addSession, sessions.length],
+    [addSession],
   );
 
   if (!bootstrapped) {

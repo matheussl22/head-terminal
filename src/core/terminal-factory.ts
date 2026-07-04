@@ -1,3 +1,4 @@
+import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -5,58 +6,124 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { createTerminalOptions } from "../config/theme";
 import { logEvent } from "./logger";
 import { recordPtyReadBatch } from "./dev-metrics";
+import {
+  loadCopyOnSelect,
+  loadRendererPreference,
+  type TerminalRenderer,
+} from "./ui-preferences";
 
 const SCROLLBACK = 5000;
 const MIN_COLS = 80;
 const MIN_ROWS = 24;
+const WEBGL_FAILED_KEY = "head-terminal.webgl-failed";
 
-export function createConfiguredTerminal(): {
+export interface ConfiguredTerminal {
   terminal: Terminal;
   fitAddon: FitAddon;
-} {
+  searchAddon: SearchAddon;
+}
+
+export function createConfiguredTerminal(): ConfiguredTerminal {
   const terminal = new Terminal({
     ...createTerminalOptions(),
     scrollback: SCROLLBACK,
   });
   const fitAddon = new FitAddon();
   const webLinksAddon = new WebLinksAddon();
+  const searchAddon = new SearchAddon();
 
   terminal.loadAddon(fitAddon);
   terminal.loadAddon(webLinksAddon);
+  terminal.loadAddon(searchAddon);
 
-  // xterm sends F9 to the shell as a VT escape sequence and stops the
-  // keydown from bubbling, so the global F9 voice shortcut never fires
-  // while a terminal pane is focused. Tell xterm to ignore it.
-  terminal.attachCustomKeyEventHandler((event) => event.key !== "F9");
+  terminal.attachCustomKeyEventHandler((event) => {
+    // xterm sends F9 to the shell as a VT escape sequence and stops the
+    // keydown from bubbling, so the global F9 voice shortcut never fires
+    // while a terminal pane is focused.
+    if (event.key === "F9") {
+      return false;
+    }
 
-  const webglEnabled = shouldEnableWebglRenderer();
+    if (event.type !== "keydown") {
+      return true;
+    }
+
+    const mod = event.ctrlKey || event.metaKey;
+    if (mod && event.shiftKey && event.key.toLowerCase() === "c") {
+      const selection = terminal.getSelection();
+      if (selection) {
+        event.preventDefault();
+        void navigator.clipboard.writeText(selection);
+      }
+      return false;
+    }
+
+    if (mod && event.shiftKey && event.key.toLowerCase() === "v") {
+      event.preventDefault();
+      void navigator.clipboard.readText().then((text) => {
+        if (text) {
+          terminal.paste(text);
+        }
+      });
+      return false;
+    }
+
+    return true;
+  });
+
+  if (loadCopyOnSelect()) {
+    terminal.onSelectionChange(() => {
+      const selection = terminal.getSelection();
+      if (selection) {
+        void navigator.clipboard.writeText(selection);
+      }
+    });
+  }
+
+  const renderer = loadRendererPreference();
+  const webglEnabled = shouldEnableWebglRenderer(renderer);
   logEvent("info", "terminal.renderer", {
     webgl: webglEnabled,
-    reason: webglEnabled ? "enabled" : "linux_disabled",
+    preference: renderer,
+    reason: webglEnabled ? "enabled" : "dom",
   });
 
   if (webglEnabled) {
-    // Dynamically imported so the ~300KB addon is never fetched/parsed on
-    // Linux, where it's disabled anyway (see shouldEnableWebglRenderer).
     void import("@xterm/addon-webgl").then(({ WebglAddon }) => {
       try {
         const webglAddon = new WebglAddon();
         terminal.loadAddon(webglAddon);
         webglAddon.onContextLoss(() => {
+          markWebglFailed();
           webglAddon.dispose();
         });
       } catch {
-        // WebGL unavailable — DOM renderer is the fallback.
+        markWebglFailed();
       }
     });
   }
 
-  return { terminal, fitAddon };
+  return { terminal, fitAddon, searchAddon };
 }
 
-function shouldEnableWebglRenderer(): boolean {
-  // WebGL can crash WebKitGTK on Linux and leave a blank window.
-  return !/Linux/i.test(navigator.userAgent);
+function markWebglFailed(): void {
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(WEBGL_FAILED_KEY, "1");
+  }
+}
+
+function shouldEnableWebglRenderer(preference: TerminalRenderer): boolean {
+  if (preference === "dom") {
+    return false;
+  }
+  if (preference === "webgl") {
+    return true;
+  }
+  if (typeof localStorage !== "undefined" && localStorage.getItem(WEBGL_FAILED_KEY)) {
+    return false;
+  }
+  // ponytail: auto tries WebGL on Linux now that DMABUF is disabled in Rust.
+  return true;
 }
 
 export function fitTerminal(fitAddon: FitAddon, terminal: Terminal): void {
@@ -92,8 +159,6 @@ export function createRafPtyWriter(
 
     recordPtyReadBatch(bytes);
 
-    // Decode the whole frame once so downstream detectors run a single
-    // regex pass per frame instead of one per PTY chunk.
     if (onFrameText) {
       const merged = new Uint8Array(bytes);
       let offset = 0;

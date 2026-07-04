@@ -1,9 +1,22 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 import { resolveDefaultCwd } from "../../core/agent-launcher";
 import { fetchMcpServers, type McpServerStatus } from "../../core/mcp-bridge";
-import { loadOpenAiApiKey, saveOpenAiApiKey } from "../../core/ui-preferences";
+import {
+  loadCopyOnSelect,
+  loadFontSize,
+  loadOpenAiApiKey,
+  loadRendererPreference,
+  saveCopyOnSelect,
+  saveFontSize,
+  saveOpenAiApiKey,
+  saveRendererPreference,
+  type TerminalRenderer,
+} from "../../core/ui-preferences";
 import { buildAgentProfiles } from "../../config/agents";
+
+const OPENAI_SECRET_KEY = "openai-api-key";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -22,19 +35,38 @@ function statusClass(status: string): string {
   return "settings-mcp-status--pending";
 }
 
-// Claude Code (`claude mcp list`) e Cursor (`cursor-agent mcp list`) têm
-// comandos de MCP verificados. Codex CLI não está instalada e não tem
-// equivalente confirmado — revisar quando expuser algo parecido.
 const AGENTS_WITH_MCP_SUPPORT = new Set(["claude", "cursor"]);
 
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [apiKey, setApiKey] = useState("");
+  const [fontSize, setFontSize] = useState(12);
+  const [renderer, setRenderer] = useState<TerminalRenderer>("auto");
+  const [copyOnSelect, setCopyOnSelect] = useState(false);
   const [mcpByAgent, setMcpByAgent] = useState<Record<string, McpAgentState>>({});
 
   useEffect(() => {
-    if (open) {
-      setApiKey(loadOpenAiApiKey());
+    if (!open) {
+      return;
     }
+
+    setFontSize(loadFontSize());
+    setRenderer(loadRendererPreference());
+    setCopyOnSelect(loadCopyOnSelect());
+
+    const legacy = loadOpenAiApiKey();
+    void invoke<string | null>("secret_get", { key: OPENAI_SECRET_KEY })
+      .then((stored) => {
+        if (stored) {
+          setApiKey(stored);
+          return;
+        }
+        if (legacy) {
+          setApiKey(legacy);
+          void invoke("secret_set", { key: OPENAI_SECRET_KEY, value: legacy });
+          saveOpenAiApiKey("");
+        }
+      })
+      .catch(() => setApiKey(legacy));
   }, [open]);
 
   useEffect(() => {
@@ -110,6 +142,40 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           />
         </label>
 
+        <label className="create-session-dialog__field">
+          <span>Tamanho da fonte do terminal</span>
+          <input
+            type="number"
+            min={8}
+            max={24}
+            value={fontSize}
+            onChange={(event) => setFontSize(Number(event.target.value))}
+          />
+        </label>
+
+        <label className="create-session-dialog__field">
+          <span>Renderer do terminal</span>
+          <select
+            value={renderer}
+            onChange={(event) =>
+              setRenderer(event.target.value as TerminalRenderer)
+            }
+          >
+            <option value="auto">Automático (WebGL com fallback)</option>
+            <option value="webgl">WebGL</option>
+            <option value="dom">DOM (mais compatível)</option>
+          </select>
+        </label>
+
+        <label className="create-session-dialog__field create-session-dialog__field--inline">
+          <input
+            type="checkbox"
+            checked={copyOnSelect}
+            onChange={(event) => setCopyOnSelect(event.target.checked)}
+          />
+          <span>Copiar ao selecionar</span>
+        </label>
+
         <h3 className="create-session-dialog__title">MCP servers</h3>
         <ul className="settings-mcp-list">
           {Object.values(buildAgentProfiles())
@@ -158,7 +224,13 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             type="button"
             className="agent-toolbar__button"
             onClick={() => {
-              saveOpenAiApiKey(apiKey);
+              void invoke("secret_set", {
+                key: OPENAI_SECRET_KEY,
+                value: apiKey.trim(),
+              }).catch(() => saveOpenAiApiKey(apiKey));
+              saveFontSize(fontSize);
+              saveRendererPreference(renderer);
+              saveCopyOnSelect(copyOnSelect);
               onClose();
             }}
           >
