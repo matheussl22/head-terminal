@@ -3,11 +3,13 @@ export type PaneActivity =
   | "idle"
   | "working"
   | "waiting_input"
+  | "agent_fallback"
   | "error"
   | "exited";
 
 export const ACTIVITY_PRIORITY: Record<PaneActivity, number> = {
-  error: 6,
+  error: 7,
+  agent_fallback: 6,
   working: 5,
   waiting_input: 4,
   starting: 3,
@@ -20,6 +22,7 @@ export const ACTIVITY_LABEL: Record<PaneActivity, string> = {
   idle: "Ativo",
   working: "Executando",
   waiting_input: "Aguardando",
+  agent_fallback: "Agent caiu — shell ativo",
   error: "Erro",
   exited: "Encerrado",
 };

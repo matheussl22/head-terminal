@@ -36,6 +36,7 @@ export class ActivityDetector {
   private idleTimer: ReturnType<typeof setTimeout> | null = null;
   private currentActivity: PaneActivity = "starting";
   private recentText = "";
+  private agentFallback = false;
 
   constructor(private readonly onActivityChange: (activity: PaneActivity) => void) {}
 
@@ -45,9 +46,22 @@ export class ActivityDetector {
     this.lastOutputAt = Date.now();
     this.recentText = (this.recentText + text).slice(-RECENT_TEXT_LIMIT);
 
+    // Once the agent died and the fallback shell took over, the state stays
+    // "agent_fallback" (regex heuristics would just flip it to waiting/idle)
+    // until the pane is restarted (new detector instance).
+    if (this.agentFallback) {
+      return;
+    }
+
     const detected = this.detectFromRecentText();
     this.setActivity(detected ?? "working");
     this.scheduleIdleCheck();
+  }
+
+  onAgentFallback(): void {
+    this.agentFallback = true;
+    this.clearIdleTimer();
+    this.setActivity("agent_fallback");
   }
 
   onStarting(): void {

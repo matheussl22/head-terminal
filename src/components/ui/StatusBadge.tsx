@@ -10,6 +10,7 @@ const BADGE_CLASS: Record<PaneActivity, string> = {
   idle: "status-badge--idle",
   working: "status-badge--working",
   waiting_input: "status-badge--waiting",
+  agent_fallback: "status-badge--fallback",
   error: "status-badge--error",
   exited: "status-badge--exited",
 };

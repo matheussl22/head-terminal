@@ -7,20 +7,33 @@ export interface AgentProfile {
   args: string[];
 }
 
+// Private OSC emitted between the agent dying and the shell fallback taking
+// over, so the UI can tell "agent crashed, shell active" apart from normal
+// output. Payload: "agent-exited:<exit code>".
+export const AGENT_FALLBACK_OSC = 7770;
+
+function withShellFallback(agentCmd: string): string[] {
+  return [
+    "-l",
+    "-c",
+    `${agentCmd}; printf "\\033]${AGENT_FALLBACK_OSC};agent-exited:%s\\007" $?; exec zsh -l`,
+  ];
+}
+
 function cursorWithFallbackArgs(continueConversation: boolean): string[] {
-  const cmd = continueConversation ? "cursor agent --continue" : "cursor agent";
-  return ["-l", "-c", `${cmd}; exec zsh -l`];
+  return withShellFallback(
+    continueConversation ? "cursor agent --continue" : "cursor agent",
+  );
 }
 
 function claudeWithFallbackArgs(continueConversation: boolean): string[] {
-  const cmd = continueConversation ? "claude --continue" : "claude";
-  return ["-l", "-c", `${cmd}; exec zsh -l`];
+  return withShellFallback(continueConversation ? "claude --continue" : "claude");
 }
 
 function codexWithFallbackArgs(): string[] {
   // ponytail: codex CLI not installed locally, no confirmed --continue
   // equivalent — always spawns fresh until that's verified.
-  return ["-l", "-c", "codex; exec zsh -l"];
+  return withShellFallback("codex");
 }
 
 export interface AgentProfileOptions {

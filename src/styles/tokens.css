@@ -25,6 +25,7 @@
   --status-working: #67f86f;
   --status-waiting: #fffa72;
   --status-error: #fd6f6b;
+  --status-fallback: #ffa94d;
   --status-starting: #6a76fb;
   --status-exited: #686868;
 

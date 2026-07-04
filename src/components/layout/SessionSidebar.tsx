@@ -125,7 +125,16 @@ const SessionListItem = memo(function SessionListItem({
   const commitCwd = () => {
     const nextCwd = draftCwd.trim();
     if (nextCwd && nextCwd !== session.cwd) {
-      onCwdChange(nextCwd);
+      // Changing cwd kills and respawns every pane in the session (§2.4).
+      if (
+        window.confirm(
+          "Alterar a pasta reinicia os terminais da sessão. Continuar?",
+        )
+      ) {
+        onCwdChange(nextCwd);
+      } else {
+        setDraftCwd(session.cwd);
+      }
     } else {
       setDraftCwd(session.cwd);
     }
@@ -218,7 +227,17 @@ const SessionListItem = memo(function SessionListItem({
             <select
               className="session-sidebar__select-input"
               value={session.agentProfileId}
-              onChange={(event) => onAgentChange(event.target.value)}
+              onChange={(event) => {
+                if (
+                  window.confirm(
+                    "Trocar o agent reinicia os terminais da sessão. Continuar?",
+                  )
+                ) {
+                  onAgentChange(event.target.value);
+                } else {
+                  event.target.value = session.agentProfileId;
+                }
+              }}
               onClick={(event) => event.stopPropagation()}
             >
               {profiles.map((profile) => (

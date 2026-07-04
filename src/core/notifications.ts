@@ -6,12 +6,18 @@ function notificationKey(sessionId: string, activity: PaneActivity): string {
   return `${sessionId}:${activity}`;
 }
 
+const ATTENTION_ACTIVITIES: ReadonlySet<PaneActivity> = new Set([
+  "waiting_input",
+  "error",
+  "agent_fallback",
+]);
+
 export async function notifySessionAttention(
   sessionTitle: string,
   activity: PaneActivity,
   sessionId: string,
 ): Promise<void> {
-  if (activity !== "waiting_input" && activity !== "error") {
+  if (!ATTENTION_ACTIVITIES.has(activity)) {
     return;
   }
 
@@ -29,7 +35,9 @@ export async function notifySessionAttention(
   const body =
     activity === "error"
       ? `${sessionTitle} encontrou um erro`
-      : `${sessionTitle} precisa de atenção`;
+      : activity === "agent_fallback"
+        ? `${sessionTitle}: o agent caiu — shell ativo`
+        : `${sessionTitle} precisa de atenção`;
 
   if (!("Notification" in window)) {
     return;
