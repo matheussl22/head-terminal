@@ -19,6 +19,7 @@ import { AgentToolbar } from "./AgentToolbar";
 import { CommandPalette } from "./CommandPalette";
 import { SessionSidebar } from "./SessionSidebar";
 import { SessionWorkspace } from "./SessionWorkspace";
+import { SettingsDialog } from "./SettingsDialog";
 
 interface AppShellProps {
   sessions: AgentSession[];
@@ -50,6 +51,7 @@ export function AppShell({
 }: AppShellProps) {
   const spawnedSessionIds = useSessionStore((state) => state.spawnedSessionIds);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { renameSessionId, requestRename, clearRenameRequest } =
     useRenameRequest();
 
@@ -124,7 +126,13 @@ export function AppShell({
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
         onRenameRequest={handleRenameRequest}
+        onSettingsRequest={() => {
+          setPaletteOpen(false);
+          setSettingsOpen(true);
+        }}
       />
+
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

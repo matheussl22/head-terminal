@@ -1,6 +1,7 @@
 import { sendTextToPane } from "../actions/sendAgentCommand";
 import { logEvent } from "./logger";
 import { useSessionStore } from "./session-manager";
+import { loadOpenAiApiKey } from "./ui-preferences";
 import { startVoiceRecording, stopAndTranscribeVoice } from "./voice-bridge";
 
 let audioCtx: AudioContext | null = null;
@@ -75,7 +76,7 @@ export async function toggleVoiceInput(
   setVoiceTranscribingPaneId(paneId);
   beep(440);
   try {
-    const text = await stopAndTranscribeVoice();
+    const text = await stopAndTranscribeVoice(loadOpenAiApiKey());
     if (text) {
       sendTextToPane(paneId, text);
     }

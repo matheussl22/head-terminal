@@ -34,6 +34,7 @@ interface SessionStore {
   voiceTranscribingPaneId: string | null;
   runEverything: boolean;
   spawnedSessionIds: Record<string, boolean>;
+  restoredPaneIds: Record<string, boolean>;
   sessionGitContext: Record<string, GitContext>;
   paneGitContext: Record<string, GitContext>;
   addSession: (session: AgentSession) => void;
@@ -195,6 +196,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   voiceTranscribingPaneId: null,
   runEverything: loadRunEverything(),
   spawnedSessionIds: {},
+  restoredPaneIds: {},
   sessionGitContext: {},
   paneGitContext: {},
 
@@ -225,9 +227,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   hydrateWorkspace: (sessions, activeSessionId, activePaneId) => {
     const paneActivities: Record<string, PaneActivity> = {};
+    const restoredPaneIds: Record<string, boolean> = {};
     for (const session of sessions) {
       for (const paneId of collectPaneIds(session.layout)) {
         paneActivities[paneId] = "starting";
+        restoredPaneIds[paneId] = true;
       }
     }
 
@@ -246,6 +250,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       paneStatusIndex: flattenPaneStatuses(sortedSessions),
       ptyWriters: {},
       spawnedSessionIds,
+      restoredPaneIds,
     });
     logSpawnState(
       "session.spawn_state",

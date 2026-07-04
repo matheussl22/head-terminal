@@ -76,6 +76,12 @@ export const PALETTE_ACTIONS: ToolbarCommand[] = [
     description: "Renomeia a sessão ativa",
   },
   {
+    id: "settings",
+    label: "Configurações",
+    command: "__settings__",
+    description: "Configura a chave da API OpenAI para transcrição de voz",
+  },
+  {
     id: "voice-input",
     label: "Gravar prompt por voz",
     command: "__voice_input__",

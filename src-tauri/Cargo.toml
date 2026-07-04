@@ -19,6 +19,7 @@ tauri-plugin-os = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 notify = "8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
 
 # TEMP TEST: local fork of tauri-plugin-pty that offloads the blocking
 # pty read/write/wait calls to spawn_blocking, instead of running them

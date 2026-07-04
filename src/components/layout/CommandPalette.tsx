@@ -10,12 +10,14 @@ interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
   onRenameRequest: () => void;
+  onSettingsRequest: () => void;
 }
 
 export function CommandPalette({
   open,
   onClose,
   onRenameRequest,
+  onSettingsRequest,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -62,6 +64,8 @@ export function CommandPalette({
         }
       } else if (command === "__rename_session__") {
         onRenameRequest();
+      } else if (command === "__settings__") {
+        onSettingsRequest();
       } else if (command === "__voice_input__") {
         if (activePaneId) {
           void toggleVoiceInput(activePaneId);
@@ -74,7 +78,7 @@ export function CommandPalette({
 
       onClose();
     },
-    [activePaneId, closePane, onClose, onRenameRequest, splitActivePane],
+    [activePaneId, closePane, onClose, onRenameRequest, onSettingsRequest, splitActivePane],
   );
 
   useEffect(() => {

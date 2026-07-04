@@ -7,33 +7,44 @@ export interface AgentProfile {
   args: string[];
 }
 
-function cursorWithFallbackArgs(): string[] {
-  return ["-l", "-c", "cursor agent; exec zsh -l"];
+function cursorWithFallbackArgs(continueConversation: boolean): string[] {
+  const cmd = continueConversation ? "cursor agent --continue" : "cursor agent";
+  return ["-l", "-c", `${cmd}; exec zsh -l`];
 }
 
-function claudeWithFallbackArgs(): string[] {
-  return ["-l", "-c", "claude; exec zsh -l"];
+function claudeWithFallbackArgs(continueConversation: boolean): string[] {
+  const cmd = continueConversation ? "claude --continue" : "claude";
+  return ["-l", "-c", `${cmd}; exec zsh -l`];
 }
 
 function codexWithFallbackArgs(): string[] {
+  // ponytail: codex CLI not installed locally, no confirmed --continue
+  // equivalent — always spawns fresh until that's verified.
   return ["-l", "-c", "codex; exec zsh -l"];
 }
 
-export function buildAgentProfiles(): Record<string, AgentProfile> {
+export interface AgentProfileOptions {
+  continueConversation?: boolean;
+}
+
+export function buildAgentProfiles(
+  options: AgentProfileOptions = {},
+): Record<string, AgentProfile> {
   const shell = getShellPath();
+  const continueConversation = options.continueConversation ?? false;
 
   return {
     cursor: {
       id: "cursor",
       label: "Cursor Agent",
       command: shell,
-      args: cursorWithFallbackArgs(),
+      args: cursorWithFallbackArgs(continueConversation),
     },
     claude: {
       id: "claude",
       label: "Claude Code",
       command: shell,
-      args: claudeWithFallbackArgs(),
+      args: claudeWithFallbackArgs(continueConversation),
     },
     codex: {
       id: "codex",
@@ -52,7 +63,10 @@ export function buildAgentProfiles(): Record<string, AgentProfile> {
 
 export const DEFAULT_AGENT_PROFILE_ID = "cursor";
 
-export function getAgentProfile(profileId: string): AgentProfile {
-  const profiles = buildAgentProfiles();
+export function getAgentProfile(
+  profileId: string,
+  options?: AgentProfileOptions,
+): AgentProfile {
+  const profiles = buildAgentProfiles(options);
   return profiles[profileId] ?? profiles[DEFAULT_AGENT_PROFILE_ID];
 }

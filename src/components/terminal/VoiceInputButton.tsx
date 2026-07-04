@@ -35,7 +35,9 @@ export function VoiceInputButton({ paneId }: VoiceInputButtonProps) {
       }
       if (useSessionStore.getState().voiceRecordingPaneId === paneId) {
         setVoiceRecordingPaneId(null);
-        void stopAndTranscribeVoice().catch(() => undefined);
+        // Result discarded on unmount — pass "" so the backend skips the
+        // OpenAI call and just stops/cleans up the recording.
+        void stopAndTranscribeVoice("").catch(() => undefined);
       }
     };
   }, [paneId, setVoiceRecordingPaneId]);

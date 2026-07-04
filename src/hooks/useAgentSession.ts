@@ -64,6 +64,9 @@ export function useAgentSession({
   const restartKey = useSessionStore(
     (state) => state.paneRestartKeys[paneId] ?? 0,
   );
+  const continueConversation = useSessionStore((state) =>
+    Boolean(state.restoredPaneIds[paneId]),
+  );
 
   const paneIdRef = useRef(paneId);
   paneIdRef.current = paneId;
@@ -191,10 +194,17 @@ export function useAgentSession({
       }
 
       fitPane();
-      checkpoint("js.pty.spawn_begin", { paneId, sessionId, cwd });
+      checkpoint("js.pty.spawn_begin", {
+        paneId,
+        sessionId,
+        cwd,
+        continueConversation,
+      });
 
       try {
-        const profile = getAgentProfile(agentProfileId);
+        const profile = getAgentProfile(agentProfileId, {
+          continueConversation,
+        });
         bridge = createPtyBridge({
           profile,
           cwd,
@@ -302,6 +312,7 @@ export function useAgentSession({
   }, [
     agentProfileId,
     containerRef,
+    continueConversation,
     cwd,
     paneId,
     registerPtyWriter,
