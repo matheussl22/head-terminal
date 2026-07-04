@@ -26,6 +26,17 @@ function sessionInitial(title: string): string {
   return trimmed ? trimmed[0]?.toUpperCase() ?? "?" : "?";
 }
 
+// Profiles are static per run; hoisting avoids rebuilding them on every
+// list-item render. Lazy so module import stays safe outside Tauri.
+let cachedProfiles: Array<{ id: string; label: string }> | null = null;
+function agentProfileOptions(): Array<{ id: string; label: string }> {
+  cachedProfiles ??= Object.values(buildAgentProfiles()).map((profile) => ({
+    id: profile.id,
+    label: profile.label,
+  }));
+  return cachedProfiles;
+}
+
 interface SessionListItemProps {
   session: AgentSession;
   isActive: boolean;
@@ -55,25 +66,27 @@ const SessionListItem = memo(function SessionListItem({
   const [draftTitle, setDraftTitle] = useState(session.title);
   const [draftCwd, setDraftCwd] = useState(session.cwd);
   const inputRef = useRef<HTMLInputElement>(null);
-  const paneActivities = useSessionStore((state) => state.paneActivities);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const activePaneId = useSessionStore((state) => state.activePaneId);
-  const paneGitContext = useSessionStore((state) => state.paneGitContext);
-  const sessionGitContext = useSessionStore((state) => state.sessionGitContext);
-  const paneCount = collectPaneIds(session.layout).length;
   const paneIds = collectPaneIds(session.layout);
-  const gitContext = pickGitContextForSession(
-    session.id,
-    paneIds,
-    paneGitContext,
-    sessionGitContext,
-    {
-      activePaneId,
-      isActiveSession: session.id === activeSessionId,
-    },
+  const paneCount = paneIds.length;
+  // Narrow selectors: activity is a primitive and gitContext returns an
+  // existing store object by reference, so ticks in other sessions don't
+  // re-render this item.
+  const activity = useSessionStore((state) =>
+    getSessionActivity(session, state.paneRuntime),
   );
-  const activity = getSessionActivity(session, paneActivities);
-  const profiles = Object.values(buildAgentProfiles());
+  const gitContext = useSessionStore((state) =>
+    pickGitContextForSession(
+      session.id,
+      paneIds,
+      state.paneGitContext,
+      state.sessionGitContext,
+      {
+        activePaneId: state.activePaneId,
+        isActiveSession: session.id === state.activeSessionId,
+      },
+    ),
+  );
+  const profiles = agentProfileOptions();
 
   useEffect(() => {
     if (forceRename) {

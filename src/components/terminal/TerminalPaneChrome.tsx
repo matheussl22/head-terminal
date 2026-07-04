@@ -1,4 +1,4 @@
-import { ACTIVITY_LABEL, type PaneActivity } from "../../types/activity";
+import { ACTIVITY_LABEL } from "../../types/activity";
 import { formatBranchLabel } from "../../core/git-context-utils";
 import { useSessionStore } from "../../core/session-manager";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
@@ -13,10 +13,10 @@ interface TerminalPaneOverlayProps {
 
 export function TerminalPaneOverlay({ paneId }: TerminalPaneOverlayProps) {
   const activity = useSessionStore(
-    (state) => state.paneActivities[paneId] ?? "starting",
+    (state) => state.paneRuntime[paneId]?.activity ?? "starting",
   );
   const status = useSessionStore(
-    (state) => state.paneStatusIndex[paneId] ?? "starting",
+    (state) => state.paneRuntime[paneId]?.status ?? "starting",
   );
   const restartPane = useSessionStore((state) => state.restartPane);
 
@@ -69,7 +69,7 @@ export function TerminalPaneHeader({
   onClose,
 }: TerminalPaneHeaderProps) {
   const activity = useSessionStore(
-    (state) => state.paneActivities[paneId] ?? "starting",
+    (state) => state.paneRuntime[paneId]?.activity ?? "starting",
   );
   const gitContext = useSessionStore((state) => state.paneGitContext[paneId]);
   const branchLabel = formatBranchLabel(gitContext);
@@ -122,11 +122,4 @@ export function TerminalPaneHeader({
       </span>
     </div>
   );
-}
-
-export function getPaneActivity(
-  paneId: string,
-  paneActivities: Record<string, PaneActivity>,
-): PaneActivity {
-  return paneActivities[paneId] ?? "starting";
 }

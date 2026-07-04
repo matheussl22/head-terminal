@@ -5,21 +5,45 @@ import { useSessionStore } from "../core/session-manager";
 import { notifySessionAttention } from "../core/notifications";
 import { toggleVoiceInput } from "../core/voice-input";
 
+const NOTIFY_DEBOUNCE_MS = 300;
+
 export function useActivityNotifications(): void {
-  const sessions = useSessionStore((state) => state.sessions);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const paneActivities = useSessionStore((state) => state.paneActivities);
-
   useEffect(() => {
-    for (const session of sessions) {
-      if (session.id === activeSessionId && document.hasFocus()) {
-        continue;
-      }
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-      const activity = getSessionActivity(session, paneActivities);
-      void notifySessionAttention(session.title, activity, session.id);
-    }
-  }, [activeSessionId, paneActivities, sessions]);
+    const check = () => {
+      timer = null;
+      const { sessions, activeSessionId, paneRuntime } =
+        useSessionStore.getState();
+      for (const session of sessions) {
+        if (session.id === activeSessionId && document.hasFocus()) {
+          continue;
+        }
+
+        const activity = getSessionActivity(session, paneRuntime);
+        void notifySessionAttention(session.title, activity, session.id);
+      }
+    };
+
+    // Store subscription instead of a React render dependency: activity
+    // ticks are frequent and shouldn't re-render the shell tree.
+    const unsubscribe = useSessionStore.subscribe((state, previous) => {
+      if (state.paneRuntime === previous.paneRuntime) {
+        return;
+      }
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(check, NOTIFY_DEBOUNCE_MS);
+    });
+
+    return () => {
+      unsubscribe();
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
 }
 
 export function useKeyboardShortcuts(options: {

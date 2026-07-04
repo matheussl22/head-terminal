@@ -22,19 +22,20 @@ export function AgentToolbar({ onOpenCommandPalette }: AgentToolbarProps) {
   const splitActivePane = useSessionStore((state) => state.splitActivePane);
   const runEverything = useSessionStore((state) => state.runEverything);
   const setRunEverything = useSessionStore((state) => state.setRunEverything);
-  const activeSession = useSessionStore(
-    (state) =>
-      state.sessions.find((session) => session.id === state.activeSessionId) ??
-      null,
-  );
-  const paneActivities = useSessionStore((state) => state.paneActivities);
-
-  const activity = activeSession
-    ? getSessionActivity(activeSession, paneActivities)
-    : "idle";
-  const activityLabel = activeSession
-    ? getSessionActivityLabel(activeSession, paneActivities)
-    : null;
+  // Narrow selectors: both return primitives, so activity ticks elsewhere
+  // in the store don't re-render the toolbar.
+  const activity = useSessionStore((state) => {
+    const session =
+      state.sessions.find((item) => item.id === state.activeSessionId) ?? null;
+    return session ? getSessionActivity(session, state.paneRuntime) : "idle";
+  });
+  const activityLabel = useSessionStore((state) => {
+    const session =
+      state.sessions.find((item) => item.id === state.activeSessionId) ?? null;
+    return session
+      ? getSessionActivityLabel(session, state.paneRuntime)
+      : null;
+  });
   const isWorking = activity === "working";
 
   return (

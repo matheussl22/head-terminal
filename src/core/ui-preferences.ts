@@ -11,11 +11,16 @@ export function saveSidebarCollapsed(collapsed: boolean): void {
   localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
 }
 
+// Cached: read on every TerminalPane render otherwise.
+let paneHeadersCache: boolean | null = null;
+
 export function loadPaneHeadersEnabled(): boolean {
-  return localStorage.getItem(PANE_HEADERS_KEY) !== "0";
+  paneHeadersCache ??= localStorage.getItem(PANE_HEADERS_KEY) !== "0";
+  return paneHeadersCache;
 }
 
 export function savePaneHeadersEnabled(enabled: boolean): void {
+  paneHeadersCache = enabled;
   localStorage.setItem(PANE_HEADERS_KEY, enabled ? "1" : "0");
 }
 

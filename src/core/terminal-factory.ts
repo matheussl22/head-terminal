@@ -67,10 +67,13 @@ export function fitTerminal(fitAddon: FitAddon, terminal: Terminal): void {
   }
 }
 
+const frameTextDecoder = new TextDecoder();
+
 export function createRafPtyWriter(
   terminal: Terminal,
   isSuspended: () => boolean,
   bufferOutput: (data: Uint8Array) => void,
+  onFrameText?: (text: string) => void,
 ): (data: Uint8Array) => void {
   let pending: Uint8Array[] = [];
   let rafId: number | null = null;
@@ -88,6 +91,18 @@ export function createRafPtyWriter(
     pendingBytes = 0;
 
     recordPtyReadBatch(bytes);
+
+    // Decode the whole frame once so downstream detectors run a single
+    // regex pass per frame instead of one per PTY chunk.
+    if (onFrameText) {
+      const merged = new Uint8Array(bytes);
+      let offset = 0;
+      for (const chunk of batch) {
+        merged.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      onFrameText(frameTextDecoder.decode(merged));
+    }
 
     if (isSuspended()) {
       for (const chunk of batch) {

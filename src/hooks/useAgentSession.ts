@@ -6,12 +6,8 @@ import { ActivityDetector } from "../core/activity-detector";
 import { checkpoint, logError, logEvent } from "../core/logger";
 import { notifyUiReady } from "../core/startup-watchdog";
 import { dirname } from "../core/git-context-utils";
-import {
-  fetchGitContext,
-  fetchGitContextForPath,
-  startGitWatch,
-  stopGitWatch,
-} from "../core/git-watch-bridge";
+import { acquireGitContext } from "../core/git-context-registry";
+import { fetchGitContextForPath } from "../core/git-watch-bridge";
 import {
   fitPanes,
   registerPaneFitter,
@@ -57,10 +53,10 @@ export function useAgentSession({
   );
   const updatePaneStatus = useSessionStore((state) => state.updatePaneStatus);
   const updatePaneActivity = useSessionStore((state) => state.updatePaneActivity);
+  const notePaneOutput = useSessionStore((state) => state.notePaneOutput);
   const mergePaneGitContext = useSessionStore(
     (state) => state.mergePaneGitContext,
   );
-  const setPaneGitContext = useSessionStore((state) => state.setPaneGitContext);
   const restartKey = useSessionStore(
     (state) => state.paneRestartKeys[paneId] ?? 0,
   );
@@ -78,6 +74,7 @@ export function useAgentSession({
   const flushBufferedRef = useRef<(() => void) | null>(null);
     const pathDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const watchedRepoRef = useRef<string | null>(null);
+    const releaseGitWatchRef = useRef<(() => void) | null>(null);
 
     const syncPaneGitWatch = (watchCwd: string) => {
       const normalized = watchCwd.trim();
@@ -86,7 +83,16 @@ export function useAgentSession({
       }
 
       watchedRepoRef.current = normalized;
-      void startGitWatch(paneId, normalized).catch(() => undefined);
+      releaseGitWatchRef.current?.();
+      releaseGitWatchRef.current = acquireGitContext(normalized, (context) => {
+        mergePaneGitContext(paneId, context);
+
+        // Re-anchor at the repo root so panes in the same repo share one
+        // watcher regardless of which subdirectory they started in.
+        if (context.repoRoot && context.repoRoot !== normalized) {
+          syncPaneGitWatch(context.repoRoot);
+        }
+      });
     };
 
     const refreshPaneGitContext = (lookupPath: string, touchedPath?: string) => {
@@ -143,14 +149,7 @@ export function useAgentSession({
     activityDetector.onStarting();
     updatePaneActivity(paneId, "starting");
 
-    void fetchGitContext(cwd).then((context) => {
-      if (disposed) {
-        return;
-      }
-
-      setPaneGitContext(paneId, context);
-      syncPaneGitWatch(context.repoRoot ?? cwd);
-    });
+    syncPaneGitWatch(cwd);
 
     const flushBufferedOutput = () => {
       for (const chunk of outputBufferRef.current.drain()) {
@@ -224,6 +223,11 @@ export function useAgentSession({
           terminal,
           () => !isVisibleRef.current,
           (data) => outputBufferRef.current.push(data),
+          (frameText) => {
+            activityDetector.onData(frameText);
+            workspaceDetector.onData(frameText);
+            notePaneOutput(paneId);
+          },
         );
 
         listeners.push(
@@ -237,8 +241,6 @@ export function useAgentSession({
               notifyUiReady();
             }
             writePtyData(data);
-            activityDetector.onData(data);
-            workspaceDetector.onData(data);
           }),
           attachPtyExitListener(bridge.pty, (exitCode) => {
             if (paneIdRef.current === paneId) {
@@ -297,7 +299,8 @@ export function useAgentSession({
         pathDebounceRef.current = null;
       }
       watchedRepoRef.current = null;
-      void stopGitWatch(paneId).catch(() => undefined);
+      releaseGitWatchRef.current?.();
+      releaseGitWatchRef.current = null;
       flushBufferedRef.current = null;
       container.removeEventListener("mousedown", focusTerminal);
       compositionGuardCleanup?.();
@@ -321,7 +324,7 @@ export function useAgentSession({
     shouldSpawn,
     unregisterPtyWriter,
     mergePaneGitContext,
-    setPaneGitContext,
+    notePaneOutput,
     updatePaneActivity,
     updatePaneStatus,
   ]);
