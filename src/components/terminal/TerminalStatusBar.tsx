@@ -1,5 +1,7 @@
 import { pickGitContextForSession } from "../../core/git-context-utils";
 import { collectPaneIds } from "../../core/session-layout";
+import { useAgentInstructionFile } from "../../hooks/useAgentInstructionFile";
+import { AgentInstructionsBadge } from "../ui/AgentInstructionsBadge";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import { useSessionStore } from "../../core/session-manager";
 
@@ -29,6 +31,7 @@ export function TerminalStatusBar({ sessionId }: TerminalStatusBarProps) {
         },
       )
     : undefined;
+  const instructionFile = useAgentInstructionFile(context?.repoRoot);
 
   if (!context?.repoRoot) {
     return null;
@@ -37,6 +40,12 @@ export function TerminalStatusBar({ sessionId }: TerminalStatusBarProps) {
   return (
     <footer className="terminal-status-bar" aria-label="Contexto git da sessão">
       <GitBranchBadge context={context} showPath />
+      {instructionFile && (
+        <AgentInstructionsBadge
+          filename={instructionFile}
+          repoRoot={context.repoRoot}
+        />
+      )}
     </footer>
   );
 }

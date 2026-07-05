@@ -266,6 +266,32 @@
   box-shadow: inset 0 -1px 0 var(--accent-muted);
 }
 
+.agent-instructions-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: rgba(106, 118, 251, 0.08);
+  color: var(--status-starting);
+  font-size: var(--font-xs);
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.agent-instructions-badge:hover {
+  background: rgba(106, 118, 251, 0.16);
+  border-color: var(--status-starting);
+}
+
+.agent-instructions-badge__icon {
+  font-size: 10px;
+  opacity: 0.85;
+}
+
 /* Overlays */
 
 .terminal-overlay {

@@ -66,6 +66,7 @@ fn run_tauri() {
             voice::start_voice_recording,
             voice::stop_and_transcribe_voice,
             system::path_exists,
+            system::find_agent_instruction,
             system::check_agent_clis,
             system::secret_get,
             system::secret_set,
