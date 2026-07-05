@@ -129,6 +129,24 @@ function shouldEnableWebglRenderer(preference: TerminalRenderer): boolean {
 export function fitTerminal(fitAddon: FitAddon, terminal: Terminal): void {
   fitAddon.fit();
 
+  const proposed = fitAddon.proposeDimensions();
+  if (proposed && proposed.cols >= 2 && proposed.rows >= 2) {
+  const viewport = terminal.element?.querySelector<HTMLElement>(".xterm-viewport");
+  if (viewport) {
+    const scrollbarWidth = viewport.offsetWidth - viewport.clientWidth;
+    if (scrollbarWidth > 0) {
+      const cellWidth = viewport.clientWidth / proposed.cols;
+      const cols = Math.max(
+        2,
+        proposed.cols - Math.ceil(scrollbarWidth / Math.max(cellWidth, 1)),
+      );
+      if (cols !== terminal.cols || proposed.rows !== terminal.rows) {
+        terminal.resize(cols, proposed.rows);
+      }
+    }
+  }
+  }
+
   if (terminal.cols < 2 || terminal.rows < 2) {
     terminal.resize(MIN_COLS, MIN_ROWS);
   }

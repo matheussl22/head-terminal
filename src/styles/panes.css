@@ -32,9 +32,13 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
 }
 
-.terminal-pane-shell--active .terminal-pane {
+.terminal-pane-shell--active {
   border-color: var(--accent-muted);
   box-shadow: inset 0 0 0 1px var(--accent-muted);
 }
@@ -43,6 +47,8 @@
   position: relative;
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Pane header */
@@ -53,18 +59,22 @@
   justify-content: space-between;
   height: var(--pane-header-height);
   padding: 0 10px;
-  border: 1px solid var(--border-subtle);
-  border-bottom: 0;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
   background: var(--surface-toolbar);
   color: var(--text-secondary);
   font-size: var(--font-xs);
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .terminal-pane-header--active {
-  border-color: var(--accent-muted);
   color: var(--text-primary);
+}
+
+.terminal-pane-shell--active .terminal-pane-header {
+  border-bottom-color: rgba(248, 28, 229, 0.22);
 }
 
 .terminal-pane-header__title {
@@ -204,27 +214,20 @@
 /* Terminal container */
 
 .terminal-pane {
+  flex: 1;
+  min-height: 0;
   width: 100%;
-  height: 100%;
   padding: var(--hyper-terminal-padding);
   outline: none;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border: none;
+  border-radius: 0;
   background: var(--surface-terminal);
-}
-
-.terminal-pane--positioned {
-  position: absolute;
   box-sizing: border-box;
 }
 
-.terminal-pane-shell--active .terminal-pane--positioned {
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-}
-
-.terminal-pane-shell:not(:has(.terminal-pane-header)) .terminal-pane--positioned,
-.terminal-pane-shell .terminal-pane-shell__body:only-child .terminal-pane {
-  border-radius: var(--radius-sm);
+.terminal-pane-shell.terminal-pane--positioned {
+  position: absolute;
+  box-sizing: border-box;
 }
 
 .terminal-pane:focus {
@@ -237,6 +240,9 @@
 
 .terminal-pane .xterm-viewport {
   overflow-y: auto;
+  /* Reserve gutter so agent footers (e.g. Claude "Run Everything") are not
+     drawn under the vertical scrollbar. */
+  scrollbar-gutter: stable;
 }
 
 /* Status bar */
@@ -244,6 +250,7 @@
 .terminal-status-bar {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   min-height: 22px;
   padding: 0 10px;
   border: 1px solid var(--border-subtle);
@@ -252,6 +259,11 @@
   background: var(--surface-toolbar);
   color: var(--text-secondary);
   font-size: var(--font-xs);
+}
+
+.session-workspace--visible:has(.terminal-pane-shell--active) .terminal-status-bar {
+  border-color: var(--accent-muted);
+  box-shadow: inset 0 -1px 0 var(--accent-muted);
 }
 
 /* Overlays */
