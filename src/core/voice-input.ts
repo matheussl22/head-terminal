@@ -1,13 +1,11 @@
 import { sendTextToPane } from "../actions/sendAgentCommand";
 import { logEvent } from "./logger";
 import { useSessionStore } from "./session-manager";
-import { loadOpenAiApiKey } from "./ui-preferences";
+import { resolveOpenAiApiKey } from "./openai-credentials";
 import { startVoiceRecording, stopAndTranscribeVoice } from "./voice-bridge";
 
 let audioCtx: AudioContext | null = null;
 
-// ponytail: Web Audio beep instead of shipping an audio file — two sine
-// blips (high = started, low = stopped), kept quiet with a fast envelope.
 function beep(freq: number): void {
   try {
     audioCtx ??= new AudioContext();
@@ -47,6 +45,7 @@ export async function toggleVoiceInput(
   options?: { onError?: () => void },
 ): Promise<void> {
   if (isVoiceInputBlocked(paneId)) {
+    logEvent("debug", "voice.toggle_blocked", { paneId });
     return;
   }
 
@@ -57,16 +56,16 @@ export async function toggleVoiceInput(
   } = useSessionStore.getState();
 
   if (voiceRecordingPaneId !== paneId) {
+    logEvent("info", "voice.recording_start", { paneId });
     try {
       setVoiceRecordingPaneId(paneId);
       await startVoiceRecording();
       beep(880);
+      logEvent("info", "voice.recording_started", { paneId });
     } catch (error) {
       setVoiceRecordingPaneId(null);
-      logEvent("error", "voice.start_failed", {
-        paneId,
-        message: error instanceof Error ? error.message : String(error),
-      });
+      const message = error instanceof Error ? error.message : String(error);
+      logEvent("error", "voice.start_failed", { paneId, message });
       options?.onError?.();
     }
     return;
@@ -75,10 +74,29 @@ export async function toggleVoiceInput(
   setVoiceRecordingPaneId(null);
   setVoiceTranscribingPaneId(paneId);
   beep(440);
+  logEvent("info", "voice.transcribe_begin", { paneId });
+
   try {
-    const text = await stopAndTranscribeVoice(loadOpenAiApiKey());
+    const apiKey = await resolveOpenAiApiKey();
+    if (!apiKey) {
+      logEvent("error", "voice.transcribe_failed", {
+        paneId,
+        message: "Configure sua chave da OpenAI nas Configurações.",
+      });
+      options?.onError?.();
+      return;
+    }
+
+    const text = await stopAndTranscribeVoice(apiKey);
     if (text) {
+      logEvent("info", "voice.transcribe_ok", {
+        paneId,
+        textLength: text.length,
+      });
       sendTextToPane(paneId, text);
+    } else {
+      logEvent("info", "voice.empty_transcript", { paneId });
+      options?.onError?.();
     }
   } catch (error) {
     logEvent("error", "voice.transcribe_failed", {
@@ -89,4 +107,9 @@ export async function toggleVoiceInput(
   } finally {
     setVoiceTranscribingPaneId(null);
   }
+}
+
+export async function prewarmOpenAiApiKey(): Promise<void> {
+  const key = await resolveOpenAiApiKey();
+  logEvent("info", "voice.api_key.prewarm", { found: Boolean(key) });
 }

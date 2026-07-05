@@ -41,6 +41,12 @@ pub fn start_voice_recording(
             "--file-format=wav",
             "--rate=16000",
             "--channels=1",
+            // Default PulseAudio buffering holds ~2s of audio before it's
+            // ever written to disk, so recordings shorter than that were
+            // saved as an empty (44-byte, header-only) WAV file and OpenAI
+            // rejected them as corrupted. A low requested latency forces
+            // frequent flushes so short recordings still capture audio.
+            "--latency-msec=20",
             path.to_str().ok_or("Caminho de áudio inválido")?,
         ])
         .stdin(Stdio::null())
@@ -106,6 +112,22 @@ pub async fn stop_and_transcribe_voice(
     if !wav_path.exists() {
         return Err("Arquivo de áudio não foi gerado.".to_string());
     }
+
+    let wav_size = std::fs::metadata(&wav_path)
+        .map(|meta| meta.len())
+        .unwrap_or(0);
+    // Header-only WAV is ~44 bytes — parecord hadn't flushed any samples yet.
+    if wav_size <= 44 {
+        let _ = std::fs::remove_file(&wav_path);
+        return Err(
+            "Gravação muito curta ou sem áudio. Segure F9 por pelo menos 1 segundo.".to_string(),
+        );
+    }
+
+    eprintln!(
+        "[voice] transcribe wav_size={wav_size} path={}",
+        wav_path.display()
+    );
 
     if api_key.trim().is_empty() {
         let _ = std::fs::remove_file(&wav_path);

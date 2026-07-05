@@ -1,22 +1,19 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 import { resolveDefaultCwd } from "../../core/agent-launcher";
+import { logEvent } from "../../core/logger";
 import { fetchMcpServers, type McpServerStatus } from "../../core/mcp-bridge";
+import { persistOpenAiApiKey, resolveOpenAiApiKey } from "../../core/openai-credentials";
 import {
   loadCopyOnSelect,
   loadFontSize,
-  loadOpenAiApiKey,
   loadRendererPreference,
   saveCopyOnSelect,
   saveFontSize,
-  saveOpenAiApiKey,
   saveRendererPreference,
   type TerminalRenderer,
 } from "../../core/ui-preferences";
 import { buildAgentProfiles } from "../../config/agents";
-
-const OPENAI_SECRET_KEY = "openai-api-key";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -39,6 +36,10 @@ const AGENTS_WITH_MCP_SUPPORT = new Set(["claude", "cursor"]);
 
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [apiKey, setApiKey] = useState("");
+  const [apiKeyEdited, setApiKeyEdited] = useState(false);
+  const [hasStoredKey, setHasStoredKey] = useState(false);
+  const [apiKeySaveError, setApiKeySaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [fontSize, setFontSize] = useState(12);
   const [renderer, setRenderer] = useState<TerminalRenderer>("auto");
   const [copyOnSelect, setCopyOnSelect] = useState(false);
@@ -52,21 +53,13 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setFontSize(loadFontSize());
     setRenderer(loadRendererPreference());
     setCopyOnSelect(loadCopyOnSelect());
+    setApiKeySaveError(null);
+    setApiKeyEdited(false);
+    setApiKey("");
 
-    const legacy = loadOpenAiApiKey();
-    void invoke<string | null>("secret_get", { key: OPENAI_SECRET_KEY })
-      .then((stored) => {
-        if (stored) {
-          setApiKey(stored);
-          return;
-        }
-        if (legacy) {
-          setApiKey(legacy);
-          void invoke("secret_set", { key: OPENAI_SECRET_KEY, value: legacy });
-          saveOpenAiApiKey("");
-        }
-      })
-      .catch(() => setApiKey(legacy));
+    void resolveOpenAiApiKey().then((stored) => {
+      setHasStoredKey(Boolean(stored));
+    });
   }, [open]);
 
   useEffect(() => {
@@ -136,10 +129,22 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           <input
             type="password"
             value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder="sk-..."
+            onChange={(event) => {
+              setApiKeyEdited(true);
+              setApiKey(event.target.value);
+            }}
+            placeholder={hasStoredKey ? "Chave configurada — digite para substituir" : "sk-..."}
             autoComplete="off"
           />
+          {hasStoredKey && !apiKeyEdited && (
+            <span className="settings-mcp-status--ok">Chave configurada</span>
+          )}
+          {apiKeySaveError && (
+            <span className="settings-mcp-status--error">
+              Não foi possível salvar no keyring do sistema ({apiKeySaveError}).
+              A chave foi mantida localmente e ainda funciona.
+            </span>
+          )}
         </label>
 
         <label className="create-session-dialog__field">
@@ -223,15 +228,35 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
           <button
             type="button"
             className="agent-toolbar__button"
+            disabled={saving}
             onClick={() => {
-              void invoke("secret_set", {
-                key: OPENAI_SECRET_KEY,
-                value: apiKey.trim(),
-              }).catch(() => saveOpenAiApiKey(apiKey));
-              saveFontSize(fontSize);
-              saveRendererPreference(renderer);
-              saveCopyOnSelect(copyOnSelect);
-              onClose();
+              void (async () => {
+                setSaving(true);
+                saveFontSize(fontSize);
+                saveRendererPreference(renderer);
+                saveCopyOnSelect(copyOnSelect);
+
+                try {
+                  if (apiKeyEdited) {
+                    await persistOpenAiApiKey(apiKey);
+                    setHasStoredKey(Boolean(apiKey.trim()));
+                  }
+                  setSaving(false);
+                  onClose();
+                } catch (error) {
+                  // persistOpenAiApiKey already mirrored to localStorage; surface
+                  // keyring errors so the user knows persistence may be partial.
+                  const message =
+                    error instanceof Error ? error.message : String(error);
+                  logEvent("error", "settings.api_key_save_failed", {
+                    message,
+                  });
+                  setApiKeySaveError(
+                    `Chave salva localmente, mas o cofre do sistema falhou: ${message}`,
+                  );
+                  setSaving(false);
+                }
+              })();
             }}
           >
             Salvar

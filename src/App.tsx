@@ -13,6 +13,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { CreateSessionDialog } from "./components/layout/CreateSessionDialog";
 import { BootScreen } from "./components/BootScreen";
 import { checkpoint, logError } from "./core/logger";
+import { prewarmOpenAiApiKey } from "./core/voice-input";
 
 import "./styles/global.css";
 
@@ -77,6 +78,7 @@ function App() {
         }
 
         checkpoint("js.bootstrap.complete");
+        void prewarmOpenAiApiKey();
         setBootstrapped(true);
       } catch (error) {
         if (cancelled) {

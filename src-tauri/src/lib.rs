@@ -70,6 +70,7 @@ fn run_tauri() {
             system::secret_get,
             system::secret_set,
             system::secret_delete,
+            system::legacy_openai_api_key,
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
