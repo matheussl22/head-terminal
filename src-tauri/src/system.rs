@@ -70,6 +70,32 @@ pub fn path_exists(path: String) -> bool {
     Path::new(&path).is_dir()
 }
 
+/// Filenames checked in priority order — mirrors `AGENT_INSTRUCTION_FILES` in the frontend.
+const AGENT_INSTRUCTION_FILES: &[&str] = &[
+    "AGENTS.md",
+    "AGENT.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    ".cursorrules",
+    "CURSOR.md",
+];
+
+#[tauri::command]
+pub fn find_agent_instruction(repo_root: String) -> Option<String> {
+    let root = Path::new(&repo_root);
+    if !root.is_dir() {
+        return None;
+    }
+
+    for name in AGENT_INSTRUCTION_FILES {
+        if root.join(name).is_file() {
+            return Some((*name).to_string());
+        }
+    }
+
+    None
+}
+
 #[derive(serde::Serialize)]
 pub struct AgentCliStatus {
     pub cursor: bool,
