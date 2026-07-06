@@ -158,6 +158,35 @@ pub fn get_git_context(cwd: String) -> GitContextPayload {
     resolve_git_context(&cwd)
 }
 
+/// Diff do trabalho do agent na sessão: mudanças vs HEAD + untracked.
+#[tauri::command]
+pub fn get_session_diff(cwd: String) -> Result<String, String> {
+    let repo_root = run_git(&["-C", &cwd, "rev-parse", "--show-toplevel"])
+        .ok_or_else(|| "O diretório não é um repositório git".to_string())?;
+
+    let diff = run_git(&["-C", &repo_root, "diff", "HEAD"]).unwrap_or_default();
+    let untracked = run_git(&[
+        "-C",
+        &repo_root,
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+    ])
+    .unwrap_or_default();
+
+    let mut result = diff;
+    if !untracked.is_empty() {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        for file in untracked.lines() {
+            result.push_str(&format!("?? novo arquivo (untracked): {file}\n"));
+        }
+    }
+
+    Ok(result)
+}
+
 /// Cria um git worktree irmão do repo (`<repo>-agent-N`, branch `agent-N`)
 /// para rodar agents em paralelo sem conflito de working tree.
 #[tauri::command]

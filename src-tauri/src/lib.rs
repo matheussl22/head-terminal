@@ -61,6 +61,7 @@ fn run_tauri() {
             git::get_default_cwd,
             git::get_git_context,
             git::create_session_worktree,
+            git::get_session_diff,
             git::start_git_watch,
             git::stop_git_watch,
             mcp::get_mcp_servers,

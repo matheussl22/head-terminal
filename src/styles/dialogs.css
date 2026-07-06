@@ -52,6 +52,61 @@
   font-size: var(--font-sm);
 }
 
+.session-diff {
+  width: min(720px, 90vw);
+}
+
+.session-diff__body {
+  max-height: 60vh;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.session-diff__body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.session-diff__line--add {
+  color: #4ade80;
+}
+
+.session-diff__line--del {
+  color: #f87171;
+}
+
+.session-diff__line--file {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.session-diff__line--meta {
+  color: #38bdf8;
+}
+
+.terminal-status-bar__diff {
+  margin-left: auto;
+  padding: 1px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.terminal-status-bar__diff:hover {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
 .create-session-dialog__worktree {
   flex-direction: row;
   align-items: center;
