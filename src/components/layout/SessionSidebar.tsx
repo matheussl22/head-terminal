@@ -3,7 +3,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -14,7 +13,6 @@ import { buildAgentProfiles } from "../../config/agents";
 import {
   countWorkingSessions,
   getSessionActivity,
-  sessionNeedsAttention,
 } from "../../core/activity-utils";
 import { flipAnimate } from "../../core/flip-animate";
 import { pickGitContextForSession } from "../../core/git-context-utils";
@@ -152,8 +150,7 @@ const SessionListItem = memo(function SessionListItem({
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(session.title);
   const [draftCwd, setDraftCwd] = useState(session.cwd);
-  // Fechar sessão exige dois cliques: a lista reordena sozinha e um clique
-  // perdido não pode matar uma sessão.
+  // Fechar sessão exige dois cliques: um clique perdido não pode matar uma sessão.
   const [confirmRemove, setConfirmRemove] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const paneIds = collectPaneIds(session.layout);
@@ -472,14 +469,8 @@ export function SessionSidebar({
   const workingCount = useSessionStore((state) =>
     countWorkingSessions(state.sessions, state.paneRuntime),
   );
-  // "1"/"0" por sessão: string estável evita rerender a cada tick do runtime.
-  const attentionKey = useSessionStore((state) =>
-    sessions
-      .map((session) =>
-        sessionNeedsAttention(session, state.paneRuntime) ? "1" : "0",
-      )
-      .join(""),
-  );
+  // A ordem é sempre a do store (pin + drag manual) — sem reordenação
+  // automática; quem precisa de atenção sinaliza por cor/glow, não por posição.
   const listRef = useRef<HTMLUListElement | null>(null);
   const listTops = useRef<Map<string, number>>(new Map());
   useLayoutEffect(() => {
@@ -488,15 +479,6 @@ export function SessionSidebar({
     }
   });
 
-  // Sessões que precisam do usuário sobem; índice original preservado para o
-  // drag-reorder continuar operando na ordem do store.
-  const orderedSessions = useMemo(() => {
-    const entries = sessions.map((session, index) => ({ session, index }));
-    return [
-      ...entries.filter(({ index }) => attentionKey[index] === "1"),
-      ...entries.filter(({ index }) => attentionKey[index] === "0"),
-    ];
-  }, [sessions, attentionKey]);
   const setActiveSessionId = useSessionStore((state) => state.setActiveSessionId);
   const setActivePaneId = useSessionStore((state) => state.setActivePaneId);
   const renameSession = useSessionStore((state) => state.renameSession);
@@ -591,7 +573,7 @@ export function SessionSidebar({
       </div>
 
       <ul className="session-sidebar__list" ref={listRef}>
-        {orderedSessions.map(({ session, index }) => (
+        {sessions.map((session, index) => (
           <SessionListItem
             key={session.id}
             session={session}

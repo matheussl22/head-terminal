@@ -127,12 +127,6 @@ function sessionHasPane(session: AgentSession, paneId: string): boolean {
   return collectPaneIds(session.layout).includes(paneId);
 }
 
-function sortSessions(sessions: AgentSession[]): AgentSession[] {
-  const pinned = sessions.filter((session) => session.pinned);
-  const unpinned = sessions.filter((session) => !session.pinned);
-  return [...pinned, ...unpinned];
-}
-
 function logSpawnState(
   event: string,
   sessionId: string | null,
@@ -232,9 +226,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         paneRuntime[paneId] = createPaneRuntime();
       }
 
-      const nextSessions = sortSessions([...state.sessions, session]);
       const next = {
-        sessions: nextSessions,
+        sessions: [...state.sessions, session],
         activeSessionId: session.id,
         activePaneId: paneIds[0] ?? null,
         paneRuntime,
@@ -263,9 +256,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       spawnedSessionIds[activeSessionId] = true;
     }
 
-    const sortedSessions = sortSessions(sessions);
     set({
-      sessions: sortedSessions,
+      sessions,
       activeSessionId,
       activePaneId,
       paneRestartKeys: {},
@@ -429,12 +421,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   togglePinSession: (sessionId) =>
     set((state) => {
-      const nextSessions = sortSessions(
-        state.sessions.map((session) =>
-          session.id === sessionId
-            ? { ...session, pinned: !session.pinned }
-            : session,
-        ),
+      const nextSessions = state.sessions.map((session) =>
+        session.id === sessionId
+          ? { ...session, pinned: !session.pinned }
+          : session,
       );
       const next = { sessions: nextSessions };
       persistWorkspaceState({ ...state, ...next });
