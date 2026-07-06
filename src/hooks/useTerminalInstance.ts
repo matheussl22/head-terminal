@@ -3,6 +3,7 @@ import type { Terminal } from "@xterm/xterm";
 import type { FitAddon } from "@xterm/addon-fit";
 
 import { checkpoint, logEvent } from "../core/logger";
+import { useSessionStore } from "../core/session-manager";
 import {
   registerPaneFitter,
   unregisterPaneFitter,
@@ -51,6 +52,12 @@ export function useTerminalInstance(
     const { terminal, fitAddon, searchAddon } = createConfiguredTerminal();
     terminal.open(container);
     registerTerminal(paneId, { terminal, searchAddon });
+
+    // Pane ativo que acabou de montar (spawn preguiçoso) recebe o foco:
+    // o effect do AppShell já disparou e não vai refazer.
+    if (useSessionStore.getState().activePaneId === paneId) {
+      terminal.focus();
+    }
     checkpoint("js.terminal.dom_opened", { paneId });
 
     const created: TerminalInstance = {

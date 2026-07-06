@@ -14,6 +14,7 @@ import {
   workspaceFromStore,
 } from "../../core/session-persistence";
 import { useSessionStore } from "../../core/session-manager";
+import { getTerminal } from "../../core/terminal-registry";
 import {
   useActivityNotifications,
   useKeyboardShortcuts,
@@ -67,6 +68,15 @@ export function AppShell({
 
   useActivityNotifications();
   useGitContextWatchers(sessions);
+
+  // Trocar de sessão/pane leva o foco do teclado direto ao terminal ativo —
+  // sem isso, digitar após selecionar na sidebar ia para o void.
+  const activePaneId = useSessionStore((state) => state.activePaneId);
+  useEffect(() => {
+    if (activePaneId) {
+      getTerminal(activePaneId)?.terminal.focus();
+    }
+  }, [activePaneId]);
 
   useEffect(() => {
     checkpoint("js.app_shell.visible", {

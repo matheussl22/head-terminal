@@ -37,6 +37,19 @@ export function CreateSessionDialog({
     if (!open) {
       return;
     }
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
     const target = cwd.trim() || defaultCwd;
     const timer = window.setTimeout(() => {
       void invoke<Pick<GitContext, "repoRoot">>("get_git_context", {

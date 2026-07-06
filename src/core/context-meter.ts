@@ -5,6 +5,8 @@ const RECENT_TEXT_LIMIT = 600;
 // Avisos de contexto restante impressos por agents (Claude Code e afins).
 // ponytail: casa texto plano; ANSI no meio das palavras quebra o match —
 // suficiente para os avisos reais, revisar se algum agent colorir palavra a palavra.
+// Falso positivo conhecido: ghost text do zsh-autosuggestions ecoando um comando
+// antigo que mencione "context ...%"; autocorrige na próxima leitura real.
 const CONTEXT_PATTERNS = [
   /context left until auto-compact:\s*(\d{1,3})\s*%/gi,
   /context low \((\d{1,3})\s*% remaining\)/gi,
