@@ -1,6 +1,7 @@
 import { useEffect, useReducer } from "react";
 
 import { ACTIVITY_LABEL } from "../../types/activity";
+import { contextColor } from "../../core/context-meter";
 import { formatBranchLabel } from "../../core/git-context-utils";
 import {
   paneSupervisor,
@@ -149,6 +150,9 @@ export function TerminalPaneHeader({
   );
   const restartPane = useSessionStore((state) => state.restartPane);
   const gitContext = useSessionStore((state) => state.paneGitContext[paneId]);
+  const contextPercent = useSessionStore(
+    (state) => state.paneRuntime[paneId]?.contextPercent,
+  );
   const branchLabel = formatBranchLabel(gitContext);
 
   return (
@@ -178,6 +182,15 @@ export function TerminalPaneHeader({
         )}
       </span>
       <span className="terminal-pane-header__right">
+        {contextPercent !== undefined && (
+          <span
+            className="terminal-pane-header__context"
+            style={{ color: contextColor(contextPercent) }}
+            title={`Contexto restante do agent: ${contextPercent}%`}
+          >
+            ctx {contextPercent}%
+          </span>
+        )}
         <span className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}>
           {ACTIVITY_LABEL[activity]}
         </span>

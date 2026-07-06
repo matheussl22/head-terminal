@@ -100,6 +100,12 @@
   font-weight: 600;
 }
 
+.terminal-pane-header__context {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .terminal-pane-header__status--working {
   color: var(--status-working);
 }

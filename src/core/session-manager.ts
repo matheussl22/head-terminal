@@ -29,6 +29,8 @@ export interface PaneRuntime {
   activitySince: number;
   lastOutputAt: number;
   restartAttempts: number;
+  /** % de contexto restante reportado pelo agent no output (0-100). */
+  contextPercent?: number;
 }
 
 const LAST_OUTPUT_THROTTLE_MS = 1000;
@@ -85,6 +87,7 @@ interface SessionStore {
   restartSessionPanes: (sessionId: string) => void;
   updatePaneStatus: (paneId: string, status: SessionStatus) => void;
   updatePaneActivity: (paneId: string, activity: PaneActivity) => void;
+  updatePaneContext: (paneId: string, contextPercent: number) => void;
   notePaneOutput: (paneId: string) => void;
   registerPtyWriter: (paneId: string, write: (data: string) => void) => void;
   unregisterPtyWriter: (paneId: string) => void;
@@ -605,6 +608,21 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         paneRuntime: {
           ...state.paneRuntime,
           [paneId]: { ...current, activity, activitySince: Date.now() },
+        },
+      };
+    }),
+
+  updatePaneContext: (paneId, contextPercent) =>
+    set((state) => {
+      const current = state.paneRuntime[paneId] ?? createPaneRuntime();
+      if (current.contextPercent === contextPercent) {
+        return state;
+      }
+
+      return {
+        paneRuntime: {
+          ...state.paneRuntime,
+          [paneId]: { ...current, contextPercent },
         },
       };
     }),

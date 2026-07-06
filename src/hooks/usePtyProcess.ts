@@ -3,6 +3,7 @@ import type { IDisposable } from "tauri-pty";
 
 import { AGENT_FALLBACK_OSC, getAgentProfile } from "../config/agents";
 import { ActivityDetector } from "../core/activity-detector";
+import { ContextMeter } from "../core/context-meter";
 import { checkpoint, logError, logEvent } from "../core/logger";
 import { notifyUiReady } from "../core/startup-watchdog";
 import { fitPanes } from "../core/pane-fit-registry";
@@ -57,6 +58,9 @@ export function usePtyProcess({
   const updatePaneActivity = useSessionStore(
     (state) => state.updatePaneActivity,
   );
+  const updatePaneContext = useSessionStore(
+    (state) => state.updatePaneContext,
+  );
   const notePaneOutput = useSessionStore((state) => state.notePaneOutput);
 
   useEffect(() => {
@@ -74,6 +78,9 @@ export function usePtyProcess({
       updatePaneActivity(paneId, activity);
     });
     const workspaceDetector = new WorkspaceDetector(onWorkspacePath);
+    const contextMeter = new ContextMeter((percent) => {
+      updatePaneContext(paneId, percent);
+    });
 
     activityDetector.onStarting();
     updatePaneActivity(paneId, "starting");
@@ -135,6 +142,7 @@ export function usePtyProcess({
           (frameText) => {
             activityDetector.onData(frameText);
             workspaceDetector.onData(frameText);
+            contextMeter.onData(frameText);
             notePaneOutput(paneId);
           },
         );
