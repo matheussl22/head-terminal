@@ -55,9 +55,44 @@
   animation: fade-in var(--transition-normal);
 }
 
+@keyframes attention-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: 0 0 10px 1px var(--glow-color, var(--status-waiting));
+  }
+}
+
+@keyframes dialog-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes status-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .status-dot--pulse,
-  .session-sidebar__compact-item--ring-working {
+  .session-sidebar__compact-item--ring-working,
+  .session-sidebar__item--glow-waiting_input,
+  .session-sidebar__item--glow-error,
+  .session-sidebar__item--glow-agent_fallback,
+  .terminal-pane-header__status--working,
+  .terminal-pane-header__context--critical {
     animation: none;
   }
 

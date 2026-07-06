@@ -24,7 +24,11 @@ import {
   loadSidebarCollapsed,
   saveSidebarCollapsed,
 } from "../../core/ui-preferences";
-import { ACTIVITY_LABEL, type PaneActivity } from "../../types/activity";
+import {
+  ACTIVITY_LABEL,
+  NEEDS_ATTENTION,
+  type PaneActivity,
+} from "../../types/activity";
 import type { AgentSession } from "../../types/session";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import {
@@ -274,9 +278,12 @@ const SessionListItem = memo(function SessionListItem({
     >
       <div
         className={
-          isActive
+          (isActive
             ? "session-sidebar__item session-sidebar__item--active"
-            : "session-sidebar__item"
+            : "session-sidebar__item") +
+          (NEEDS_ATTENTION.has(activity)
+            ? ` session-sidebar__item--glow-${activity}`
+            : "")
         }
         onContextMenu={(event) => onContextMenu(event, session)}
       >

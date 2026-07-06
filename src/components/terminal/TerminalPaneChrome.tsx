@@ -184,7 +184,11 @@ export function TerminalPaneHeader({
       <span className="terminal-pane-header__right">
         {contextPercent !== undefined && (
           <span
-            className="terminal-pane-header__context"
+            className={
+              contextPercent < 25
+                ? "terminal-pane-header__context terminal-pane-header__context--critical"
+                : "terminal-pane-header__context"
+            }
             style={{ color: contextColor(contextPercent) }}
             title={`Contexto restante do agent: ${contextPercent}%`}
           >

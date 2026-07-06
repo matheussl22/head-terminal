@@ -106,8 +106,24 @@
   font-weight: 600;
 }
 
+.terminal-pane-header__context--critical {
+  animation: status-pulse 1.2s ease-in-out infinite;
+}
+
 .terminal-pane-header__status--working {
   color: var(--status-working);
+  background: linear-gradient(
+      90deg,
+      var(--status-working) 42%,
+      #eaffea 50%,
+      var(--status-working) 58%
+    )
+    no-repeat;
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: status-shimmer 2.2s linear infinite;
 }
 
 .terminal-pane-header__status--waiting_input {

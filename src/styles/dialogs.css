@@ -52,6 +52,16 @@
   font-size: var(--font-sm);
 }
 
+.create-session-backdrop,
+.command-palette-backdrop {
+  animation: fade-in 0.15s ease-out both;
+}
+
+.create-session-dialog,
+.command-palette {
+  animation: dialog-pop 0.18s ease-out both;
+}
+
 .session-diff {
   width: min(720px, 90vw);
 }

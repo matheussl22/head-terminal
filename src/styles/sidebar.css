@@ -165,6 +165,17 @@
 
 /* Session card */
 
+.session-sidebar__item--glow-waiting_input {
+  --glow-color: var(--status-waiting);
+  animation: attention-glow 2s ease-in-out infinite;
+}
+
+.session-sidebar__item--glow-error,
+.session-sidebar__item--glow-agent_fallback {
+  --glow-color: var(--status-error);
+  animation: attention-glow 2s ease-in-out infinite;
+}
+
 .session-sidebar__item {
   position: relative;
   display: flex;
