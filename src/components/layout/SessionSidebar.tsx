@@ -1,4 +1,12 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { createInitialSession } from "../../core/agent-launcher";
 import { formatSessionStatusLine } from "../../core/activity-duration";
@@ -8,6 +16,7 @@ import {
   getSessionActivity,
   sessionNeedsAttention,
 } from "../../core/activity-utils";
+import { flipAnimate } from "../../core/flip-animate";
 import { pickGitContextForSession } from "../../core/git-context-utils";
 import { collectPaneIds } from "../../core/session-layout";
 import { useSessionStore } from "../../core/session-manager";
@@ -229,6 +238,7 @@ const SessionListItem = memo(function SessionListItem({
       : "";
     return (
       <li
+        data-session-id={session.id}
         draggable
         onDragStart={() => onDragStart(sessionIndex)}
         onDragOver={(event) => onDragOver(event, sessionIndex)}
@@ -255,6 +265,7 @@ const SessionListItem = memo(function SessionListItem({
 
   return (
     <li
+      data-session-id={session.id}
       draggable
       onDragStart={() => onDragStart(sessionIndex)}
       onDragOver={(event) => onDragOver(event, sessionIndex)}
@@ -447,6 +458,14 @@ export function SessionSidebar({
       )
       .join(""),
   );
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const listTops = useRef<Map<string, number>>(new Map());
+  useLayoutEffect(() => {
+    if (listRef.current) {
+      listTops.current = flipAnimate(listRef.current, listTops.current);
+    }
+  });
+
   // Sessões que precisam do usuário sobem; índice original preservado para o
   // drag-reorder continuar operando na ordem do store.
   const orderedSessions = useMemo(() => {
@@ -549,7 +568,7 @@ export function SessionSidebar({
         </div>
       </div>
 
-      <ul className="session-sidebar__list">
+      <ul className="session-sidebar__list" ref={listRef}>
         {orderedSessions.map(({ session, index }) => (
           <SessionListItem
             key={session.id}
