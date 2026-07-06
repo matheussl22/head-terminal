@@ -1,6 +1,7 @@
 import {
   ACTIVITY_LABEL,
   ACTIVITY_PRIORITY,
+  NEEDS_ATTENTION,
   type PaneActivity,
 } from "../types/activity";
 import { collectPaneIds } from "./session-layout";
@@ -51,6 +52,15 @@ export function getSessionActivityLabel(
   }
 
   return label;
+}
+
+// ponytail: prompt de shell (❯ no fim) gera waiting_input por ~1.5s até decair
+// para idle — flap breve na ordenação; expor approvalPending do detector se incomodar.
+export function sessionNeedsAttention(
+  session: AgentSession,
+  paneRuntime: Record<string, PaneRuntime>,
+): boolean {
+  return NEEDS_ATTENTION.has(getSessionActivity(session, paneRuntime));
 }
 
 export function countWorkingSessions(

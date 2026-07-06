@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createInitialSession } from "../../core/agent-launcher";
 import { formatSessionStatusLine } from "../../core/activity-duration";
@@ -6,6 +6,7 @@ import { buildAgentProfiles } from "../../config/agents";
 import {
   countWorkingSessions,
   getSessionActivity,
+  sessionNeedsAttention,
 } from "../../core/activity-utils";
 import { pickGitContextForSession } from "../../core/git-context-utils";
 import { collectPaneIds } from "../../core/session-layout";
@@ -438,6 +439,23 @@ export function SessionSidebar({
   const workingCount = useSessionStore((state) =>
     countWorkingSessions(state.sessions, state.paneRuntime),
   );
+  // "1"/"0" por sessão: string estável evita rerender a cada tick do runtime.
+  const attentionKey = useSessionStore((state) =>
+    sessions
+      .map((session) =>
+        sessionNeedsAttention(session, state.paneRuntime) ? "1" : "0",
+      )
+      .join(""),
+  );
+  // Sessões que precisam do usuário sobem; índice original preservado para o
+  // drag-reorder continuar operando na ordem do store.
+  const orderedSessions = useMemo(() => {
+    const entries = sessions.map((session, index) => ({ session, index }));
+    return [
+      ...entries.filter(({ index }) => attentionKey[index] === "1"),
+      ...entries.filter(({ index }) => attentionKey[index] === "0"),
+    ];
+  }, [sessions, attentionKey]);
   const setActiveSessionId = useSessionStore((state) => state.setActiveSessionId);
   const setActivePaneId = useSessionStore((state) => state.setActivePaneId);
   const renameSession = useSessionStore((state) => state.renameSession);
@@ -532,7 +550,7 @@ export function SessionSidebar({
       </div>
 
       <ul className="session-sidebar__list">
-        {sessions.map((session, index) => (
+        {orderedSessions.map(({ session, index }) => (
           <SessionListItem
             key={session.id}
             session={session}

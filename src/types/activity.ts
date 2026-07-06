@@ -17,6 +17,13 @@ export const ACTIVITY_PRIORITY: Record<PaneActivity, number> = {
   exited: 1,
 };
 
+// Estados em que a sessão está bloqueada esperando o usuário.
+export const NEEDS_ATTENTION: ReadonlySet<PaneActivity> = new Set([
+  "waiting_input",
+  "error",
+  "agent_fallback",
+]);
+
 export const ACTIVITY_LABEL: Record<PaneActivity, string> = {
   starting: "Iniciando",
   idle: "Ativo",

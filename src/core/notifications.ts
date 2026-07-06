@@ -1,4 +1,4 @@
-import type { PaneActivity } from "../types/activity";
+import { NEEDS_ATTENTION, type PaneActivity } from "../types/activity";
 
 const notifiedKeys = new Set<string>();
 
@@ -6,18 +6,12 @@ function notificationKey(sessionId: string, activity: PaneActivity): string {
   return `${sessionId}:${activity}`;
 }
 
-const ATTENTION_ACTIVITIES: ReadonlySet<PaneActivity> = new Set([
-  "waiting_input",
-  "error",
-  "agent_fallback",
-]);
-
 export async function notifySessionAttention(
   sessionTitle: string,
   activity: PaneActivity,
   sessionId: string,
 ): Promise<void> {
-  if (!ATTENTION_ACTIVITIES.has(activity)) {
+  if (!NEEDS_ATTENTION.has(activity)) {
     return;
   }
 

@@ -8,8 +8,17 @@ const WORKING_PATTERNS = [
   /\bBuilding\b/i,
   /\bCompiling\b/i,
   /\bInstalling\b/i,
-  /\bWaiting for approval\b/i,
 ];
+
+// Prompts de aprovação de agents (Claude Code, Codex): testados só no fim do
+// buffer para que output novo os "expire" naturalmente.
+const APPROVAL_PATTERNS = [
+  /\bDo you want\b/i,
+  /\bWaiting for approval\b/i,
+  /❯\s*1\./,
+  /\(y\/n\)/i,
+];
+const APPROVAL_TAIL_CHARS = 400;
 
 const ERROR_PATTERNS = [
   /\[Erro\]/i,
@@ -24,7 +33,6 @@ const WAITING_PATTERNS = [
   /\?\s*$/,
   />\s*$/,
   /\$\s*$/,
-  /\(y\/n\)/i,
 ];
 
 const IDLE_AFTER_MS = 1500;
@@ -37,6 +45,7 @@ export class ActivityDetector {
   private currentActivity: PaneActivity = "starting";
   private recentText = "";
   private agentFallback = false;
+  private approvalPending = false;
 
   constructor(private readonly onActivityChange: (activity: PaneActivity) => void) {}
 
@@ -92,6 +101,14 @@ export class ActivityDetector {
     // this.recentText already ends with the latest chunk (see onData), so
     // testing it alone covers matches that would otherwise require testing
     // the chunk separately.
+    const tail = this.recentText.slice(-APPROVAL_TAIL_CHARS);
+    this.approvalPending = APPROVAL_PATTERNS.some((pattern) =>
+      pattern.test(tail),
+    );
+    if (this.approvalPending) {
+      return "waiting_input";
+    }
+
     if (ERROR_PATTERNS.some((pattern) => pattern.test(this.recentText))) {
       return "error";
     }
@@ -133,6 +150,11 @@ export class ActivityDetector {
         }
 
         this.setActivity("waiting_input");
+        return;
+      }
+
+      // Aprovação pendente bloqueia o agent: não decai para "idle" no silêncio.
+      if (this.currentActivity === "waiting_input" && this.approvalPending) {
         return;
       }
 

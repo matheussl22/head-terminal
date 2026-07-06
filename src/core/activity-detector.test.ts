@@ -34,6 +34,31 @@ describe("ActivityDetector", () => {
     expect(changes).toContain("waiting_input");
   });
 
+  it("detecta prompt de aprovação e não decai para idle no silêncio", () => {
+    const changes: string[] = [];
+    const detector = new ActivityDetector((activity) => changes.push(activity));
+
+    detector.onRunning();
+    detector.onData("⠋ Editing file...\n");
+    detector.onData("Do you want to make this edit?\n❯ 1. Yes\n  2. No\n");
+    expect(changes[changes.length - 1]).toBe("waiting_input");
+
+    vi.advanceTimersByTime(10_000);
+    expect(changes[changes.length - 1]).toBe("waiting_input");
+  });
+
+  it("volta a working quando o prompt de aprovação sai do fim do buffer", () => {
+    const changes: string[] = [];
+    const detector = new ActivityDetector((activity) => changes.push(activity));
+
+    detector.onRunning();
+    detector.onData("Do you want to proceed?\n❯ 1. Yes\n");
+    expect(changes[changes.length - 1]).toBe("waiting_input");
+
+    detector.onData(`⠙ Running command...\n${"x".repeat(500)}`);
+    expect(changes[changes.length - 1]).toBe("working");
+  });
+
   it("marks error on non-zero exit", () => {
     const changes: string[] = [];
     const detector = new ActivityDetector((activity) => changes.push(activity));
