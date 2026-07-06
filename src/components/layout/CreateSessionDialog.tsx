@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import { buildAgentProfiles } from "../../config/agents";
 import { loadRecentCwds, noteRecentCwd } from "../../core/ui-preferences";
+import type { GitContext } from "../../types/git-context";
 
 interface CreateSessionDialogProps {
   open: boolean;
@@ -29,11 +30,29 @@ export function CreateSessionDialog({
   const [cwdError, setCwdError] = useState<string | null>(null);
   const [recentCwds, setRecentCwds] = useState<string[]>([]);
   const [cliStatus, setCliStatus] = useState<AgentCliStatus | null>(null);
+  const [isGitRepo, setIsGitRepo] = useState(false);
+  const [useWorktree, setUseWorktree] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    const target = cwd.trim() || defaultCwd;
+    const timer = window.setTimeout(() => {
+      void invoke<Pick<GitContext, "repoRoot">>("get_git_context", {
+        cwd: target,
+      })
+        .then((context) => setIsGitRepo(Boolean(context.repoRoot)))
+        .catch(() => setIsGitRepo(false));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [cwd, defaultCwd, open]);
 
   useEffect(() => {
     if (open) {
       setCwd(defaultCwd);
       setCwdError(null);
+      setUseWorktree(false);
       setRecentCwds(loadRecentCwds());
       void invoke<AgentCliStatus>("check_agent_clis")
         .then(setCliStatus)
@@ -63,8 +82,21 @@ export function CreateSessionDialog({
       setCwdError("Diretório não encontrado");
       return;
     }
+
+    let sessionCwd = nextCwd;
+    if (isGitRepo && useWorktree) {
+      try {
+        sessionCwd = await invoke<string>("create_session_worktree", {
+          cwd: nextCwd,
+        });
+      } catch (error) {
+        setCwdError(`Falha ao criar worktree: ${String(error)}`);
+        return;
+      }
+    }
+
     noteRecentCwd(nextCwd);
-    onCreate(nextCwd, agentProfileId);
+    onCreate(sessionCwd, agentProfileId);
     onClose();
   };
 
@@ -131,6 +163,20 @@ export function CreateSessionDialog({
               </button>
             ))}
           </div>
+        )}
+
+        {isGitRepo && (
+          <label className="create-session-dialog__field create-session-dialog__worktree">
+            <input
+              type="checkbox"
+              checked={useWorktree}
+              onChange={(event) => setUseWorktree(event.target.checked)}
+            />
+            <span>
+              Worktree isolado — cria branch <code>agent-N</code> em pasta
+              irmã para agents em paralelo
+            </span>
+          </label>
         )}
 
         <label className="create-session-dialog__field">
