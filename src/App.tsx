@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   createInitialSession,
+  nextAgentSessionTitle,
   resolveDefaultCwd,
 } from "./core/agent-launcher";
 import {
@@ -108,9 +109,10 @@ function App() {
 
   const handleCreateConfirm = useCallback(
     (cwd: string, agentProfileId: string) => {
-      addSession(createInitialSession(cwd, undefined, agentProfileId));
+      const title = nextAgentSessionTitle(agentProfileId, sessions);
+      addSession(createInitialSession(cwd, title, agentProfileId));
     },
-    [addSession],
+    [addSession, sessions],
   );
 
   if (!bootstrapped) {

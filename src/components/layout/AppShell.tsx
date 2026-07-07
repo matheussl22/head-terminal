@@ -21,7 +21,6 @@ import {
   useRenameRequest,
 } from "../../hooks/useAppShortcuts";
 import { useGitContextWatchers } from "../../hooks/useGitContext";
-import { DevMetricsOverlay } from "../dev/DevMetricsOverlay";
 import { AgentToolbar } from "./AgentToolbar";
 import { CommandPalette } from "./CommandPalette";
 import { SessionSidebar } from "./SessionSidebar";
@@ -164,7 +163,6 @@ export function AppShell({
         onOpenCommandPalette={() => setPaletteOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
-      <DevMetricsOverlay />
       <div className="app-shell__body">
         <SessionSidebar
           sessions={sessions}

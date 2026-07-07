@@ -5,11 +5,11 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ComponentType,
 } from "react";
 
 import { createInitialSession } from "../../core/agent-launcher";
 import { formatSessionStatusLine } from "../../core/activity-duration";
-import { buildAgentProfiles } from "../../config/agents";
 import {
   countWorkingSessions,
   getSessionActivity,
@@ -30,6 +30,10 @@ import {
 import type { AgentSession } from "../../types/session";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import {
+  IconAgentClaude,
+  IconAgentCodex,
+  IconAgentCursor,
+  IconAgentShell,
   IconClose,
   IconPencil,
   IconPlus,
@@ -47,29 +51,22 @@ interface SessionSidebarProps {
   onRenameRequest: (sessionId: string) => void;
 }
 
-function sessionInitial(title: string): string {
-  const trimmed = title.trim();
-  return trimmed ? trimmed[0]?.toUpperCase() ?? "?" : "?";
-}
-
-let cachedProfiles: Array<{ id: string; label: string }> | null = null;
-function agentProfileOptions(): Array<{ id: string; label: string }> {
-  cachedProfiles ??= Object.values(buildAgentProfiles()).map((profile) => ({
-    id: profile.id,
-    label: profile.label,
-  }));
-  return cachedProfiles;
-}
-
-const AGENT_CHIP: Record<string, string> = {
-  cursor: "CU",
-  claude: "CL",
-  codex: "CX",
-  shell: "SH",
+const AGENT_ICON: Record<string, ComponentType<{ size?: number }>> = {
+  cursor: IconAgentCursor,
+  claude: IconAgentClaude,
+  codex: IconAgentCodex,
+  shell: IconAgentShell,
 };
 
-function agentChip(agentProfileId: string): string {
-  return AGENT_CHIP[agentProfileId] ?? agentProfileId.slice(0, 2).toUpperCase();
+function AgentIcon({
+  agentProfileId,
+  size,
+}: {
+  agentProfileId: string;
+  size?: number;
+}) {
+  const Icon = AGENT_ICON[agentProfileId] ?? IconAgentShell;
+  return <Icon size={size} />;
 }
 
 const ATTENTION_ACTIVITIES: ReadonlySet<PaneActivity> = new Set([
@@ -118,7 +115,6 @@ interface SessionListItemProps {
   onSelectPane: (paneId: string) => void;
   onRename: (title: string) => void;
   onRemove: () => void;
-  onAgentChange: (agentProfileId: string) => void;
   onCwdChange: (cwd: string) => void;
   onRenameComplete: () => void;
   onContextMenu: (event: React.MouseEvent, session: AgentSession) => void;
@@ -138,7 +134,6 @@ const SessionListItem = memo(function SessionListItem({
   onSelectPane,
   onRename,
   onRemove,
-  onAgentChange,
   onCwdChange,
   onRenameComplete,
   onContextMenu,
@@ -183,7 +178,6 @@ const SessionListItem = memo(function SessionListItem({
       },
     ),
   );
-  const profiles = agentProfileOptions();
 
   useEffect(() => {
     if (forceRename) {
@@ -261,7 +255,7 @@ const SessionListItem = memo(function SessionListItem({
           onClick={onSelect}
           onContextMenu={(event) => onContextMenu(event, session)}
         >
-          {sessionInitial(session.title)}
+          <AgentIcon agentProfileId={session.agentProfileId} size={16} />
         </button>
       </li>
     );
@@ -337,7 +331,7 @@ const SessionListItem = memo(function SessionListItem({
               className="session-sidebar__agent-chip"
               title={session.agentProfileId}
             >
-              {agentChip(session.agentProfileId)}
+              <AgentIcon agentProfileId={session.agentProfileId} size={12} />
             </span>
           </div>
 
@@ -367,29 +361,6 @@ const SessionListItem = memo(function SessionListItem({
 
         {isActive && (
           <div className="session-sidebar__settings">
-            <select
-              className="session-sidebar__select-input"
-              value={session.agentProfileId}
-              onChange={(event) => {
-                if (
-                  window.confirm(
-                    "Trocar o agent reinicia os terminais da sessão. Continuar?",
-                  )
-                ) {
-                  onAgentChange(event.target.value);
-                } else {
-                  event.target.value = session.agentProfileId;
-                }
-              }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              {profiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>
-                  {profile.label}
-                </option>
-              ))}
-            </select>
-
             <input
               className="session-sidebar__cwd-input"
               value={draftCwd}
@@ -484,7 +455,6 @@ export function SessionSidebar({
   const renameSession = useSessionStore((state) => state.renameSession);
   const removeSession = useSessionStore((state) => state.removeSession);
   const addSession = useSessionStore((state) => state.addSession);
-  const updateSessionAgent = useSessionStore((state) => state.updateSessionAgent);
   const updateSessionCwd = useSessionStore((state) => state.updateSessionCwd);
   const reorderSessions = useSessionStore((state) => state.reorderSessions);
   const togglePinSession = useSessionStore((state) => state.togglePinSession);
@@ -585,9 +555,6 @@ export function SessionSidebar({
             onSelectPane={(paneId) => focusSessionPane(session.id, paneId)}
             onRename={(title) => renameSession(session.id, title)}
             onRemove={() => removeSession(session.id)}
-            onAgentChange={(agentProfileId) =>
-              updateSessionAgent(session.id, agentProfileId)
-            }
             onCwdChange={(cwd) => updateSessionCwd(session.id, cwd)}
             onRenameComplete={onRenameComplete}
             onContextMenu={handleContextMenu}

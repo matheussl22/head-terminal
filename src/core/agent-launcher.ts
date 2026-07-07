@@ -49,11 +49,24 @@ export function createInitialSession(
   });
 }
 
-export function createNamedSession(
-  cwd: string,
-  index: number,
-): AgentSession {
-  return createInitialSession(cwd, `Sessão ${index}`);
+const AGENT_SHORT_NAME: Record<string, string> = {
+  cursor: "Cursor",
+  claude: "Claude",
+  codex: "OpenAI",
+  shell: "Shell",
+};
+
+// "Claude 1", "Claude 2", "OpenAI 1"... — conta só sessões do mesmo agent
+// pra não pular número quando há sessões de outros agents já criadas.
+export function nextAgentSessionTitle(
+  agentProfileId: string,
+  existingSessions: AgentSession[],
+): string {
+  const name = AGENT_SHORT_NAME[agentProfileId] ?? agentProfileId;
+  const count = existingSessions.filter(
+    (session) => session.agentProfileId === agentProfileId,
+  ).length;
+  return `${name} ${count + 1}`;
 }
 
 export function getShellPath(): string {

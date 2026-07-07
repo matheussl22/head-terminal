@@ -1,11 +1,4 @@
-import { clearAgentSession } from "../../actions/clearAgentSession";
-import { sendAgentCommand } from "../../actions/sendAgentCommand";
-import {
-  AGENT_COMMANDS,
-  CLEAR_SHORTCUT,
-  COMMAND_PALETTE_SHORTCUT,
-  HARD_CLEAR_SHORTCUT,
-} from "../../config/toolbar";
+import { COMMAND_PALETTE_SHORTCUT } from "../../config/toolbar";
 import {
   countWorkingSessions,
   getSessionActivity,
@@ -31,8 +24,6 @@ export function AgentToolbar({
   onOpenSettings,
 }: AgentToolbarProps) {
   const splitActivePane = useSessionStore((state) => state.splitActivePane);
-  const runEverything = useSessionStore((state) => state.runEverything);
-  const setRunEverything = useSessionStore((state) => state.setRunEverything);
   // Narrow selectors: all primitives, so activity ticks elsewhere in the
   // store don't re-render the toolbar.
   const activity = useSessionStore((state) => {
@@ -51,6 +42,9 @@ export function AgentToolbar({
     countWorkingSessions(state.sessions, state.paneRuntime),
   );
   const isWorking = activity === "working";
+  // Some conta a sessão ativa: se ela já mostra "Executando" abaixo, o
+  // contador global só soma informação quando há MAIS sessões trabalhando.
+  const showGlobalWorking = workingCount > (isWorking ? 1 : 0);
 
   return (
     <header className="agent-toolbar">
@@ -59,7 +53,7 @@ export function AgentToolbar({
         <span className="agent-toolbar__title">
           Head Terminal{import.meta.env.DEV ? " (Dev)" : ""}
         </span>
-        {workingCount > 0 && (
+        {showGlobalWorking && (
           <span className="agent-toolbar__global-status">
             <StatusDot activity="working" />
             <span>
@@ -76,53 +70,6 @@ export function AgentToolbar({
       </div>
 
       <div className="agent-toolbar__actions">
-        {AGENT_COMMANDS.map((action) => (
-          <Tooltip
-            key={action.id}
-            content={
-              action.id === "clear"
-                ? `${action.description} (${CLEAR_SHORTCUT}). ${HARD_CLEAR_SHORTCUT} ou Shift+clique reinicia o PTY.`
-                : (action.description ?? action.label)
-            }
-          >
-            <button
-              type="button"
-              className={
-                action.id === "clear"
-                  ? "agent-toolbar__button agent-toolbar__button--primary"
-                  : "agent-toolbar__button agent-toolbar__button--ghost"
-              }
-              disabled={action.id === "compact" && isWorking}
-              onClick={(event) => {
-                if (action.id === "clear" && event.shiftKey) {
-                  clearAgentSession("hard");
-                  return;
-                }
-
-                if (action.command.startsWith("/")) {
-                  sendAgentCommand(action.command);
-                }
-              }}
-            >
-              {action.label}
-            </button>
-          </Tooltip>
-        ))}
-
-        <label
-          className="agent-toolbar__toggle"
-          title="Enviar comandos da toolbar para todos os terminais da sessão"
-        >
-          <input
-            type="checkbox"
-            checked={runEverything}
-            onChange={(event) => setRunEverything(event.target.checked)}
-          />
-          <span>Run all</span>
-        </label>
-
-        <span className="agent-toolbar__divider" aria-hidden />
-
         <Tooltip content="Dividir verticalmente (Ctrl+\\)">
           <button
             type="button"

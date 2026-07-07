@@ -172,19 +172,18 @@
 }
 
 .session-sidebar__item--glow-waiting_input {
-  --glow-color: var(--status-waiting);
-  animation: attention-glow 2s ease-in-out infinite;
+  box-shadow: 0 0 10px 1px var(--status-waiting);
 }
 
 .session-sidebar__item--glow-error,
 .session-sidebar__item--glow-agent_fallback {
-  --glow-color: var(--status-error);
-  animation: attention-glow 2s ease-in-out infinite;
+  box-shadow: 0 0 10px 1px var(--status-error);
 }
 
 .session-sidebar__item {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   border: 1px solid transparent;
   border-left: 2px solid transparent;
@@ -222,16 +221,16 @@
 }
 
 .session-sidebar__agent-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  padding: 0 5px;
+  width: 20px;
+  height: 20px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 16px;
 }
 
 .session-sidebar__select {
@@ -378,7 +377,6 @@
   padding: 0 10px 8px;
 }
 
-.session-sidebar__select-input,
 .session-sidebar__cwd-input {
   width: 100%;
   padding: 6px 8px;

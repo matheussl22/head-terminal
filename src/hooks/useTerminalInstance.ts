@@ -17,6 +17,7 @@ import {
   unregisterTerminal,
 } from "../core/terminal-registry";
 import { attachOrphanCompositionEndGuard } from "../core/terminal-composition-guard";
+import { isBareMouseHoverReport } from "../core/pty-text";
 
 /**
  * One xterm instance per pane. It outlives the PTY: process restarts swap the
@@ -95,6 +96,9 @@ export function useTerminalInstance(
     registerPaneFitter(paneId, fitPane);
 
     const dataListener = terminal.onData((data) => {
+      if (isBareMouseHoverReport(data)) {
+        return;
+      }
       created.writeToPty.current?.(data);
     });
     const resizeListener = terminal.onResize(({ cols, rows }) => {
