@@ -68,4 +68,16 @@ describe("ActivityDetector", () => {
 
     expect(changes).toContain("error");
   });
+
+  it("não marca error num 'API Error' recuperável do agent (processo segue vivo)", () => {
+    const changes: string[] = [];
+    const detector = new ActivityDetector((activity) => changes.push(activity));
+
+    detector.onRunning();
+    detector.onData(
+      "API Error: Server error mid-response. The response above may be incomplete.\n",
+    );
+
+    expect(changes).not.toContain("error");
+  });
 });

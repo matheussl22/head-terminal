@@ -20,9 +20,11 @@ const APPROVAL_PATTERNS = [
 ];
 const APPROVAL_TAIL_CHARS = 400;
 
+// Só padrões que indicam morte do processo. "error:" solto demais: a própria
+// CLI do agent (ex.: Claude Code) imprime "API Error: ..." em falhas de rede
+// recuperáveis, com o processo seguindo vivo — não deve derrubar a pane.
 const ERROR_PATTERNS = [
   /\[Erro\]/i,
-  /\berror:\s/i,
   /\bENOENT\b/,
   /\bEPERM\b/,
   /Processo encerrado com código [1-9]/,
