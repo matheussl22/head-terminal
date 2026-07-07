@@ -50,6 +50,7 @@ fn run_tauri() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_pty::init())
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Mutex::new(GitWatcherState::new()))
         .manage(Mutex::new(VoiceRecordingState::new()))
         .invoke_handler(tauri::generate_handler![

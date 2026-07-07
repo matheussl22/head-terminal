@@ -2,9 +2,13 @@ import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import {
+  readText as readClipboardText,
+  writeText as writeClipboardText,
+} from "@tauri-apps/plugin-clipboard-manager";
 
 import { createTerminalOptions } from "../config/theme";
-import { logEvent } from "./logger";
+import { logError, logEvent } from "./logger";
 import { recordPtyReadBatch } from "./dev-metrics";
 import {
   loadCopyOnSelect,
@@ -53,18 +57,24 @@ export function createConfiguredTerminal(): ConfiguredTerminal {
       const selection = terminal.getSelection();
       if (selection) {
         event.preventDefault();
-        void navigator.clipboard.writeText(selection);
+        void writeClipboardText(selection).catch((error) => {
+          logError("terminal.clipboard_write_failed", error);
+        });
       }
       return false;
     }
 
     if (mod && event.shiftKey && event.key.toLowerCase() === "v") {
       event.preventDefault();
-      void navigator.clipboard.readText().then((text) => {
-        if (text) {
-          terminal.paste(text);
-        }
-      });
+      void readClipboardText()
+        .then((text) => {
+          if (text) {
+            terminal.paste(text);
+          }
+        })
+        .catch((error) => {
+          logError("terminal.clipboard_read_failed", error);
+        });
       return false;
     }
 
@@ -75,7 +85,9 @@ export function createConfiguredTerminal(): ConfiguredTerminal {
     terminal.onSelectionChange(() => {
       const selection = terminal.getSelection();
       if (selection) {
-        void navigator.clipboard.writeText(selection);
+        void writeClipboardText(selection).catch((error) => {
+          logError("terminal.clipboard_write_failed", error);
+        });
       }
     });
   }

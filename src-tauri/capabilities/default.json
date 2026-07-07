@@ -10,6 +10,8 @@
     "core:window:allow-destroy",
     "pty:default",
     "os:default",
-    "dialog:default"
+    "dialog:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text"
   ]
 }
