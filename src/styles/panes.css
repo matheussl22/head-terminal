@@ -239,7 +239,6 @@
   flex: 1;
   min-height: 0;
   width: 100%;
-  padding: var(--hyper-terminal-padding);
   outline: none;
   border: none;
   border-radius: 0;
@@ -257,7 +256,14 @@
 }
 
 .terminal-pane .xterm {
+  /* Padding lives here (not on .terminal-pane) because @xterm/addon-fit's
+     proposeDimensions() measures terminal.element.parentElement's height and
+     only subtracts *this* element's own padding — padding on the parent is
+     invisible to it. Padding on the parent caused FitAddon to compute one row
+     too many, pushing the last row (often the agent's status/footer line)
+     past the pane's overflow:hidden boundary and clipping it. */
   height: 100%;
+  padding: var(--hyper-terminal-padding);
 }
 
 .terminal-pane .xterm-viewport {
