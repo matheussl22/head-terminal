@@ -189,6 +189,16 @@ export function createRafPtyWriter(
 
     recordPtyReadBatch(bytes);
 
+    if (isSuspended()) {
+      for (const chunk of batch) {
+        bufferOutput(chunk);
+      }
+    } else {
+      for (const chunk of batch) {
+        terminal.write(chunk);
+      }
+    }
+
     if (onFrameText) {
       const merged = new Uint8Array(bytes);
       let offset = 0;
@@ -196,18 +206,11 @@ export function createRafPtyWriter(
         merged.set(chunk, offset);
         offset += chunk.byteLength;
       }
-      onFrameText(frameTextDecoder.decode(merged));
-    }
-
-    if (isSuspended()) {
-      for (const chunk of batch) {
-        bufferOutput(chunk);
-      }
-      return;
-    }
-
-    for (const chunk of batch) {
-      terminal.write(chunk);
+      const text = frameTextDecoder.decode(merged);
+      // Detectores (activity/workspace/context) rodam regex sobre o frame —
+      // adiados para depois do write/paint deste frame, senão travam a
+      // digitação e a pintura do próprio output que estão analisando.
+      setTimeout(() => onFrameText(text), 0);
     }
   };
 

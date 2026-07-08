@@ -444,11 +444,15 @@ export function SessionSidebar({
   // automática; quem precisa de atenção sinaliza por cor/glow, não por posição.
   const listRef = useRef<HTMLUListElement | null>(null);
   const listTops = useRef<Map<string, number>>(new Map());
+  // Sem deps, isso rodava (getBoundingClientRect em cada sessão = reflow
+  // síncrono) em TODO re-render do sidebar, inclusive os disparados por
+  // activity/context ping — não só quando a ordem muda de fato.
+  const sessionOrderKey = sessions.map((session) => session.id).join(",");
   useLayoutEffect(() => {
     if (listRef.current) {
       listTops.current = flipAnimate(listRef.current, listTops.current);
     }
-  });
+  }, [sessionOrderKey]);
 
   const setActiveSessionId = useSessionStore((state) => state.setActiveSessionId);
   const setActivePaneId = useSessionStore((state) => state.setActivePaneId);
