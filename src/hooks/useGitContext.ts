@@ -1,107 +1,30 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
-import { collectPaneIds } from "../core/session-layout";
-import {
-  fetchGitContext,
-  startGitWatch,
-  stopGitWatch,
-  subscribeGitContextChanges,
-} from "../core/git-watch-bridge";
+import { acquireGitContext } from "../core/git-context-registry";
 import { useSessionStore } from "../core/session-manager";
 import type { AgentSession } from "../types/session";
 
-// The fs watcher (start_git_watch) only observes .git/HEAD and .git/index,
-// so it catches commits/checkouts but not arbitrary working-tree edits that
-// flip the "dirty" flag. This poll is the fallback that catches those —
-// kept slow since each tick costs a few `git` subprocess invocations.
-const POLL_INTERVAL_MS = 8000;
-
-function sessionPaneIds(sessions: AgentSession[]): Set<string> {
-  const paneIds = new Set<string>();
-  for (const session of sessions) {
-    for (const paneId of collectPaneIds(session.layout)) {
-      paneIds.add(paneId);
-    }
-  }
-  return paneIds;
-}
-
 export function useGitContextWatchers(sessions: AgentSession[]): void {
-  const setSessionGitContext = useSessionStore(
-    (state) => state.setSessionGitContext,
+  const sessionsKey = JSON.stringify(
+    sessions.map((session) => [session.id, session.cwd]),
   );
-  const mergeSessionGitContext = useSessionStore(
-    (state) => state.mergeSessionGitContext,
-  );
-  const mergePaneGitContext = useSessionStore(
-    (state) => state.mergePaneGitContext,
+
+  const pairs = useMemo(
+    () => JSON.parse(sessionsKey) as Array<[string, string]>,
+    [sessionsKey],
   );
 
   useEffect(() => {
-    let cancelled = false;
-    const pollTimers = new Map<string, ReturnType<typeof setInterval>>();
-    let unlisten: (() => void) | null = null;
-
-    const bootstrap = async () => {
-      const unsubscribe = await subscribeGitContextChanges((watchId, context) => {
-        const session = sessions.find((item) => item.id === watchId);
-        if (session) {
-          mergeSessionGitContext(watchId, context);
-          return;
-        }
-
-        if (sessionPaneIds(sessions).has(watchId)) {
-          mergePaneGitContext(watchId, {
-            ...context,
-            source: "watcher",
-          });
-        }
-      });
-      unlisten = unsubscribe;
-
-      for (const session of sessions) {
-        if (cancelled) {
-          return;
-        }
-
-        try {
-          const context = await fetchGitContext(session.cwd);
-          if (!cancelled) {
-            setSessionGitContext(session.id, context);
-          }
-
-          await startGitWatch(session.id, session.cwd);
-
-          const timer = setInterval(() => {
-            void fetchGitContext(session.cwd).then((polled) => {
-              mergeSessionGitContext(session.id, {
-                ...polled,
-                source: "poll",
-              });
-            });
-          }, POLL_INTERVAL_MS);
-
-          pollTimers.set(session.id, timer);
-        } catch {
-          // Fora do Tauri (ex.: testes) — ignora watcher.
-        }
-      }
-    };
-
-    void bootstrap();
+    const releases = pairs.map(([id, cwd]) =>
+      acquireGitContext(cwd, (context) => {
+        useSessionStore.getState().mergeSessionGitContext(id, context);
+      }),
+    );
 
     return () => {
-      cancelled = true;
-      unlisten?.();
-
-      for (const timer of pollTimers.values()) {
-        clearInterval(timer);
-      }
-      pollTimers.clear();
-
-      for (const session of sessions) {
-        void stopGitWatch(session.id).catch(() => undefined);
+      for (const release of releases) {
+        release();
       }
     };
-  }, [mergePaneGitContext, mergeSessionGitContext, sessions, setSessionGitContext]);
+  }, [pairs]);
 }

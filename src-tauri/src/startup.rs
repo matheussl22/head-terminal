@@ -1,18 +1,8 @@
 use std::fs::{self, OpenOptions};
-use std::io::{ErrorKind, Write};
-use std::path::{Path, PathBuf};
+use std::io::Write;
+use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
-
-pub struct InstanceLock {
-    path: PathBuf,
-}
-
-impl Drop for InstanceLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
 
 pub fn log_dir() -> PathBuf {
     let home = std::env::var_os("HOME").map(PathBuf::from);
@@ -101,61 +91,6 @@ pub fn append_checkpoint(stage: &str, elapsed_ms: u64, meta: Option<serde_json::
     if let Ok(line) = serde_json::to_string(&payload) {
         append_jsonl("checkpoints.jsonl", &line);
     }
-}
-
-fn instance_lock_path() -> PathBuf {
-    let mut path = log_dir();
-    path.pop();
-    path.push("instance.lock");
-    path
-}
-
-#[cfg(target_os = "linux")]
-fn process_exists(pid: u32) -> bool {
-    Path::new(&format!("/proc/{pid}")).exists()
-}
-
-#[cfg(not(target_os = "linux"))]
-fn process_exists(pid: u32) -> bool {
-    let _ = pid;
-    true
-}
-
-pub fn acquire_instance_lock() -> Result<InstanceLock, String> {
-    let path = instance_lock_path();
-    if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-
-    for _ in 0..2 {
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(mut file) => {
-                let _ = writeln!(file, "{}", std::process::id());
-                startup_log("app.instance_lock.acquired");
-                return Ok(InstanceLock { path });
-            }
-            Err(error) if error.kind() == ErrorKind::AlreadyExists => {
-                if let Ok(contents) = fs::read_to_string(&path) {
-                    if let Ok(pid) = contents.trim().parse::<u32>() {
-                        if process_exists(pid) {
-                            startup_log("app.second_instance_blocked");
-                            return Err("already_running".into());
-                        }
-                    }
-                }
-                let _ = fs::remove_file(&path);
-            }
-            Err(error) => {
-                return Err(error.to_string());
-            }
-        }
-    }
-
-    Err("instance_lock_failed".into())
 }
 
 pub fn install_panic_hook() {

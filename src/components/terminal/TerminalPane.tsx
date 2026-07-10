@@ -1,7 +1,9 @@
-import { useRef, type CSSProperties } from "react";
+import { useRef, useState, type CSSProperties } from "react";
 
 import { loadPaneHeadersEnabled } from "../../core/ui-preferences";
+import { getTerminal } from "../../core/terminal-registry";
 import { useAgentSession } from "../../hooks/useAgentSession";
+import { SearchBar } from "./SearchBar";
 import {
   TerminalPaneHeader,
   TerminalPaneOverlay,
@@ -12,12 +14,15 @@ interface TerminalPaneProps {
   sessionId: string;
   cwd: string;
   agentProfileId: string;
+  claudeAccountId?: string;
   isVisible: boolean;
   shouldSpawn: boolean;
   isActive: boolean;
   paneIndex: number;
   paneCount: number;
   layoutStyle?: CSSProperties;
+  searchOpen: boolean;
+  onCloseSearch: () => void;
   onFocus: () => void;
   onClose: () => void;
 }
@@ -27,23 +32,28 @@ export function TerminalPane({
   sessionId,
   cwd,
   agentProfileId,
+  claudeAccountId,
   isVisible,
   shouldSpawn,
   isActive,
   paneIndex,
   paneCount,
   layoutStyle,
+  searchOpen,
+  onCloseSearch,
   onFocus,
   onClose,
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const showHeader = loadPaneHeadersEnabled();
+  const [searchQuery, setSearchQuery] = useState("");
 
   useAgentSession({
     paneId,
     sessionId,
     cwd,
     agentProfileId,
+    claudeAccountId,
     isVisible,
     shouldSpawn,
     containerRef,
@@ -70,6 +80,31 @@ export function TerminalPane({
       )}
 
       <div className="terminal-pane-shell__body">
+        {searchOpen && (
+          <SearchBar
+            query={searchQuery}
+            onQueryChange={(query) => {
+              setSearchQuery(query);
+              getTerminal(paneId)?.searchAddon?.findNext(query, {
+                caseSensitive: false,
+              });
+            }}
+            onNext={() => {
+              getTerminal(paneId)?.searchAddon?.findNext(searchQuery, {
+                caseSensitive: false,
+              });
+            }}
+            onPrevious={() => {
+              getTerminal(paneId)?.searchAddon?.findPrevious(searchQuery, {
+                caseSensitive: false,
+              });
+            }}
+            onClose={() => {
+              setSearchQuery("");
+              onCloseSearch();
+            }}
+          />
+        )}
         <div
           ref={containerRef}
           className={

@@ -1,4 +1,4 @@
-import type { PaneActivity } from "../types/activity";
+import { NEEDS_ATTENTION, type PaneActivity } from "../types/activity";
 
 const notifiedKeys = new Set<string>();
 
@@ -11,7 +11,7 @@ export async function notifySessionAttention(
   activity: PaneActivity,
   sessionId: string,
 ): Promise<void> {
-  if (activity !== "waiting_input" && activity !== "error") {
+  if (!NEEDS_ATTENTION.has(activity)) {
     return;
   }
 
@@ -29,7 +29,9 @@ export async function notifySessionAttention(
   const body =
     activity === "error"
       ? `${sessionTitle} encontrou um erro`
-      : `${sessionTitle} precisa de atenção`;
+      : activity === "agent_fallback"
+        ? `${sessionTitle}: o agent caiu — shell ativo`
+        : `${sessionTitle} precisa de atenção`;
 
   if (!("Notification" in window)) {
     return;

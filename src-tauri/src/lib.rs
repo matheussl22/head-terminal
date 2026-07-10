@@ -3,10 +3,11 @@
 mod git;
 mod mcp;
 mod startup;
+mod system;
 mod voice;
 
 use startup::{
-    acquire_instance_lock, append_checkpoint_cmd, append_log, export_diagnostic_bundle,
+    append_checkpoint_cmd, append_log, export_diagnostic_bundle,
     frontend_log, get_startup_context, install_panic_hook, log_graphics_env, startup_log,
 };
 use tauri::{Manager, WindowEvent};
@@ -31,18 +32,6 @@ pub fn run() {
 
     log_graphics_env();
 
-    let _instance_lock = match acquire_instance_lock() {
-        Ok(lock) => Some(lock),
-        Err(code) if code == "already_running" => {
-            eprintln!("Head Terminal já está em execução.");
-            std::process::exit(0);
-        }
-        Err(error) => {
-            startup_log(&format!("app.instance_lock.warn {error}"));
-            None
-        }
-    };
-
     run_tauri();
 }
 
@@ -50,8 +39,18 @@ fn run_tauri() {
     startup_log("app.tauri.setup_begin");
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+            startup_log("app.second_instance_focused");
+        }))
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_pty::init())
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(Mutex::new(GitWatcherState::new()))
         .manage(Mutex::new(VoiceRecordingState::new()))
         .invoke_handler(tauri::generate_handler![
@@ -62,11 +61,20 @@ fn run_tauri() {
             export_diagnostic_bundle,
             git::get_default_cwd,
             git::get_git_context,
+            git::create_session_worktree,
+            git::get_session_diff,
             git::start_git_watch,
             git::stop_git_watch,
             mcp::get_mcp_servers,
             voice::start_voice_recording,
             voice::stop_and_transcribe_voice,
+            system::path_exists,
+            system::delete_claude_profile_dir,
+            system::check_agent_clis,
+            system::secret_get,
+            system::secret_set,
+            system::secret_delete,
+            system::legacy_openai_api_key,
         ])
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {

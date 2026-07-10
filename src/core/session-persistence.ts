@@ -1,5 +1,5 @@
 import { debounce } from "./debounce";
-import type { AgentSession, LayoutNode, SessionStatus } from "../types/session";
+import type { AgentSession, LayoutNode } from "../types/session";
 import { collectPaneIds } from "./session-layout";
 
 function resolveStorageKey(): string {
@@ -17,6 +17,7 @@ export interface PersistedSession {
   title: string;
   cwd: string;
   agentProfileId: string;
+  claudeAccountId?: string;
   layout: LayoutNode;
   pinned?: boolean;
 }
@@ -28,18 +29,13 @@ export interface PersistedWorkspace {
   sessions: PersistedSession[];
 }
 
-function createPaneStatuses(layout: LayoutNode): Record<string, SessionStatus> {
-  return Object.fromEntries(
-    collectPaneIds(layout).map((paneId) => [paneId, "starting"]),
-  );
-}
-
 function toPersistedSession(session: AgentSession): PersistedSession {
   return {
     id: session.id,
     title: session.title,
     cwd: session.cwd,
     agentProfileId: session.agentProfileId,
+    claudeAccountId: session.claudeAccountId,
     layout: session.layout,
     pinned: session.pinned,
   };
@@ -65,7 +61,6 @@ export function hydrateWorkspace(workspace: PersistedWorkspace): {
 } {
   const sessions: AgentSession[] = workspace.sessions.map((session) => ({
     ...session,
-    paneStatuses: createPaneStatuses(session.layout),
   }));
 
   const activeSessionId = sessions.some(

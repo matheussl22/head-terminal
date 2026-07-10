@@ -11,6 +11,7 @@ const ACTIVITY_COLOR: Record<PaneActivity, string> = {
   idle: "var(--status-idle)",
   working: "var(--status-working)",
   waiting_input: "var(--status-waiting)",
+  agent_fallback: "var(--status-fallback)",
   error: "var(--status-error)",
   exited: "var(--status-exited)",
 };

@@ -1,6 +1,7 @@
 import { decodePtyData } from "./pty-text";
 
 const ANSI_PATTERN = /\x1b\[[0-9;]*[A-Za-z]/g;
+const MAX_CHARS = 4000;
 
 const PATH_PATTERNS: RegExp[] = [
   /Switched to branch ['"]?([^'"\s]+)['"]?/,
@@ -20,9 +21,12 @@ export class WorkspaceDetector {
 
   onData(data: string | Uint8Array): void {
     const clean = stripAnsi(decodePtyData(data));
+    // Bursts grandes (npm install, cat de arquivo grande) não trazem cwd
+    // novo no meio — só a cauda importa, e mantém o custo da regex limitado.
+    const tail = clean.length > MAX_CHARS ? clean.slice(-MAX_CHARS) : clean;
 
     for (const pattern of PATH_PATTERNS) {
-      const match = clean.match(pattern);
+      const match = tail.match(pattern);
       const candidate = match?.[1]?.trim();
       if (!candidate || candidate.length < 2) {
         continue;

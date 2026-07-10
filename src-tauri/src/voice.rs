@@ -41,6 +41,12 @@ pub fn start_voice_recording(
             "--file-format=wav",
             "--rate=16000",
             "--channels=1",
+            // Default PulseAudio buffering holds ~2s of audio before it's
+            // ever written to disk, so recordings shorter than that were
+            // saved as an empty (44-byte, header-only) WAV file and OpenAI
+            // rejected them as corrupted. A low requested latency forces
+            // frequent flushes so short recordings still capture audio.
+            "--latency-msec=20",
             path.to_str().ok_or("Caminho de áudio inválido")?,
         ])
         .stdin(Stdio::null())
@@ -55,9 +61,28 @@ pub fn start_voice_recording(
     Ok(())
 }
 
+const OPENAI_TRANSCRIPTION_URL: &str = "https://api.openai.com/v1/audio/transcriptions";
+const OPENAI_TRANSCRIBE_TIMEOUT_SECS: u64 = 60;
+
+#[derive(serde::Deserialize)]
+struct OpenAiTranscriptionResponse {
+    text: String,
+}
+
+#[derive(serde::Deserialize)]
+struct OpenAiErrorBody {
+    error: OpenAiErrorDetail,
+}
+
+#[derive(serde::Deserialize)]
+struct OpenAiErrorDetail {
+    message: String,
+}
+
 #[tauri::command]
-pub fn stop_and_transcribe_voice(
+pub async fn stop_and_transcribe_voice(
     state: tauri::State<'_, Mutex<VoiceRecordingState>>,
+    api_key: String,
 ) -> Result<String, String> {
     let wav_path = {
         let mut guard = state
@@ -81,48 +106,92 @@ pub fn stop_and_transcribe_voice(
         let _ = child.wait();
 
         wav_path
+        // guard (and child) drop here, before any .await below.
     };
 
     if !wav_path.exists() {
         return Err("Arquivo de áudio não foi gerado.".to_string());
     }
 
-    let out_dir = std::env::temp_dir();
-    let transcribe_result = Command::new("whisper")
-        .args([
-            wav_path.to_str().ok_or("Caminho de áudio inválido")?,
-            "--model",
-            "base",
-            "--language",
-            "pt",
-            "--output_format",
-            "txt",
-            "--output_dir",
-            out_dir.to_str().ok_or("Diretório de saída inválido")?,
-            "--fp16",
-            "False",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-
-    let _ = std::fs::remove_file(&wav_path);
-
-    let status = transcribe_result.map_err(|error| {
-        format!("Não foi possível executar o whisper: {error}")
-    })?;
-
-    if !status.success() {
-        return Err("Falha na transcrição.".to_string());
+    let wav_size = std::fs::metadata(&wav_path)
+        .map(|meta| meta.len())
+        .unwrap_or(0);
+    // Header-only WAV is ~44 bytes — parecord hadn't flushed any samples yet.
+    if wav_size <= 44 {
+        let _ = std::fs::remove_file(&wav_path);
+        return Err(
+            "Gravação muito curta ou sem áudio. Segure F9 por pelo menos 1 segundo.".to_string(),
+        );
     }
 
-    let txt_path = out_dir
-        .join(wav_path.file_stem().ok_or("Nome de arquivo inválido")?)
-        .with_extension("txt");
+    eprintln!(
+        "[voice] transcribe wav_size={wav_size} path={}",
+        wav_path.display()
+    );
 
-    let text = std::fs::read_to_string(&txt_path)
-        .map_err(|_| "Não foi possível ler a transcrição.".to_string())?;
-    let _ = std::fs::remove_file(&txt_path);
+    if api_key.trim().is_empty() {
+        let _ = std::fs::remove_file(&wav_path);
+        return Err("Configure sua chave da OpenAI nas Configurações.".to_string());
+    }
 
-    Ok(text.trim().to_string())
+    let result = transcribe_with_openai(&wav_path, &api_key).await;
+    let _ = std::fs::remove_file(&wav_path);
+
+    result
+}
+
+async fn transcribe_with_openai(
+    wav_path: &std::path::Path,
+    api_key: &str,
+) -> Result<String, String> {
+    let bytes =
+        std::fs::read(wav_path).map_err(|_| "Não foi possível ler o arquivo de áudio.".to_string())?;
+
+    let part = reqwest::multipart::Part::bytes(bytes)
+        .file_name("audio.wav")
+        .mime_str("audio/wav")
+        .map_err(|_| "Falha ao preparar o áudio para envio.".to_string())?;
+
+    let form = reqwest::multipart::Form::new()
+        .part("file", part)
+        .text("model", "gpt-4o-transcribe")
+        .text("language", "pt");
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(OPENAI_TRANSCRIBE_TIMEOUT_SECS))
+        .build()
+        .map_err(|_| "Falha ao inicializar o cliente HTTP.".to_string())?;
+
+    let response = client
+        .post(OPENAI_TRANSCRIPTION_URL)
+        .bearer_auth(api_key)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(|error| {
+            if error.is_timeout() {
+                "A transcrição demorou demais e foi cancelada.".to_string()
+            } else if error.is_connect() {
+                "Não foi possível conectar à OpenAI. Verifique sua conexão.".to_string()
+            } else {
+                "Falha de rede ao contatar a OpenAI.".to_string()
+            }
+        })?;
+
+    let status = response.status();
+
+    if !status.is_success() {
+        let body_text = response.text().await.unwrap_or_default();
+        let detail = serde_json::from_str::<OpenAiErrorBody>(&body_text)
+            .map(|parsed| parsed.error.message)
+            .unwrap_or_else(|_| format!("Erro HTTP {status}"));
+        return Err(format!("Falha na transcrição: {detail}"));
+    }
+
+    let parsed = response
+        .json::<OpenAiTranscriptionResponse>()
+        .await
+        .map_err(|_| "Não foi possível interpretar a resposta da OpenAI.".to_string())?;
+
+    Ok(parsed.text.trim().to_string())
 }

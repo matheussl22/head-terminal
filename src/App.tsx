@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   createInitialSession,
+  nextAgentSessionTitle,
   resolveDefaultCwd,
 } from "./core/agent-launcher";
 import {
@@ -13,6 +14,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { CreateSessionDialog } from "./components/layout/CreateSessionDialog";
 import { BootScreen } from "./components/BootScreen";
 import { checkpoint, logError } from "./core/logger";
+import { prewarmOpenAiApiKey } from "./core/voice-input";
 
 import "./styles/global.css";
 
@@ -77,6 +79,7 @@ function App() {
         }
 
         checkpoint("js.bootstrap.complete");
+        void prewarmOpenAiApiKey();
         setBootstrapped(true);
       } catch (error) {
         if (cancelled) {
@@ -105,16 +108,13 @@ function App() {
   }, []);
 
   const handleCreateConfirm = useCallback(
-    (cwd: string, agentProfileId: string) => {
+    (cwd: string, agentProfileId: string, claudeAccountId?: string) => {
+      const title = nextAgentSessionTitle(agentProfileId, sessions);
       addSession(
-        createInitialSession(
-          cwd,
-          `Sessão ${sessions.length + 1}`,
-          agentProfileId,
-        ),
+        createInitialSession(cwd, title, agentProfileId, claudeAccountId),
       );
     },
-    [addSession, sessions.length],
+    [addSession, sessions],
   );
 
   if (!bootstrapped) {

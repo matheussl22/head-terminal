@@ -7,24 +7,48 @@ export interface AgentProfile {
   args: string[];
 }
 
-function cursorWithFallbackArgs(): string[] {
-  return ["-l", "-c", "cursor agent; exec zsh -l"];
+// Private OSC emitted between the agent dying and the shell fallback taking
+// over, so the UI can tell "agent crashed, shell active" apart from normal
+// output. Payload: "agent-exited:<exit code>".
+export const AGENT_FALLBACK_OSC = 7770;
+
+function withShellFallback(agentCmd: string): string[] {
+  return [
+    "-l",
+    "-c",
+    `${agentCmd}; printf "\\033]${AGENT_FALLBACK_OSC};agent-exited:%s\\007" $?; exec zsh -l`,
+  ];
 }
 
-function claudeWithFallbackArgs(): string[] {
-  return ["-l", "-c", "claude; exec zsh -l"];
+function cursorWithFallbackArgs(continueConversation: boolean): string[] {
+  return withShellFallback(
+    continueConversation ? "cursor agent --continue" : "cursor agent",
+  );
+}
+
+function claudeWithFallbackArgs(continueConversation: boolean): string[] {
+  return withShellFallback(continueConversation ? "claude --continue" : "claude");
 }
 
 function codexWithFallbackArgs(): string[] {
-  return ["-l", "-c", "codex; exec zsh -l"];
+  // ponytail: codex CLI not installed locally, no confirmed --continue
+  // equivalent — always spawns fresh until that's verified.
+  return withShellFallback("codex");
 }
 
 function antigravityWithFallbackArgs(): string[] {
-  return ["-l", "-c", "agy; exec zsh -l"];
+  return withShellFallback("agy");
 }
 
-export function buildAgentProfiles(): Record<string, AgentProfile> {
+export interface AgentProfileOptions {
+  continueConversation?: boolean;
+}
+
+export function buildAgentProfiles(
+  options: AgentProfileOptions = {},
+): Record<string, AgentProfile> {
   const shell = getShellPath();
+  const continueConversation = options.continueConversation ?? false;
 
   return {
     antigravity: {
@@ -37,13 +61,13 @@ export function buildAgentProfiles(): Record<string, AgentProfile> {
       id: "cursor",
       label: "Cursor Agent",
       command: shell,
-      args: cursorWithFallbackArgs(),
+      args: cursorWithFallbackArgs(continueConversation),
     },
     claude: {
       id: "claude",
       label: "Claude Code",
       command: shell,
-      args: claudeWithFallbackArgs(),
+      args: claudeWithFallbackArgs(continueConversation),
     },
     codex: {
       id: "codex",
@@ -62,7 +86,10 @@ export function buildAgentProfiles(): Record<string, AgentProfile> {
 
 export const DEFAULT_AGENT_PROFILE_ID = "cursor";
 
-export function getAgentProfile(profileId: string): AgentProfile {
-  const profiles = buildAgentProfiles();
+export function getAgentProfile(
+  profileId: string,
+  options?: AgentProfileOptions,
+): AgentProfile {
+  const profiles = buildAgentProfiles(options);
   return profiles[profileId] ?? profiles[DEFAULT_AGENT_PROFILE_ID];
 }

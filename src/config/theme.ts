@@ -1,5 +1,7 @@
 import type { ITerminalOptions, ITheme } from "@xterm/xterm";
 
+import { loadFontSize } from "../core/ui-preferences";
+
 // Mirrors ~/.hyper.js — font, palette and accent colors.
 export const HYPER_THEME = {
   fontFamily:
@@ -85,7 +87,7 @@ export function createTerminalOptions(): ITerminalOptions {
     convertEol: true,
     cursorBlink: false,
     cursorStyle: "block",
-    fontSize: HYPER_THEME.fontSize,
+    fontSize: loadFontSize(),
     fontFamily: HYPER_THEME.fontFamily,
     lineHeight: HYPER_THEME.lineHeight,
     letterSpacing: HYPER_THEME.letterSpacing,

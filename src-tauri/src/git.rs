@@ -158,6 +158,99 @@ pub fn get_git_context(cwd: String) -> GitContextPayload {
     resolve_git_context(&cwd)
 }
 
+/// Diff do trabalho do agent na sessão: mudanças vs HEAD + untracked.
+#[tauri::command]
+pub fn get_session_diff(cwd: String) -> Result<String, String> {
+    let repo_root = run_git(&["-C", &cwd, "rev-parse", "--show-toplevel"])
+        .ok_or_else(|| "O diretório não é um repositório git".to_string())?;
+
+    let diff = run_git(&["-C", &repo_root, "diff", "HEAD"]).unwrap_or_default();
+    let untracked = run_git(&[
+        "-C",
+        &repo_root,
+        "ls-files",
+        "--others",
+        "--exclude-standard",
+    ])
+    .unwrap_or_default();
+
+    let mut result = diff;
+    if !untracked.is_empty() {
+        if !result.is_empty() {
+            result.push('\n');
+        }
+        for file in untracked.lines() {
+            result.push_str(&format!("?? novo arquivo (untracked): {file}\n"));
+        }
+    }
+
+    Ok(result)
+}
+
+/// Cria um git worktree irmão do repo (`<repo>-agent-N`, branch `agent-N`)
+/// para rodar agents em paralelo sem conflito de working tree.
+#[tauri::command]
+pub fn create_session_worktree(cwd: String) -> Result<String, String> {
+    let repo_root = run_git(&["-C", &cwd, "rev-parse", "--show-toplevel"])
+        .ok_or_else(|| "O diretório não é um repositório git".to_string())?;
+
+    for n in 1..100 {
+        let branch = format!("agent-{n}");
+        let path = format!("{repo_root}-{branch}");
+
+        if Path::new(&path).exists()
+            || run_git(&["-C", &repo_root, "rev-parse", "--verify", &branch]).is_some()
+        {
+            continue;
+        }
+
+        let output = Command::new("git")
+            .args(["-C", &repo_root, "worktree", "add", &path, "-b", &branch])
+            .output()
+            .map_err(|error| error.to_string())?;
+
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        }
+
+        return Ok(path);
+    }
+
+    Err("Limite de worktrees atingido".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cria_worktree_isolado_com_branch_numerada() {
+        let base = std::env::temp_dir().join(format!("ht-wt-test-{}", std::process::id()));
+        let repo = base.join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        let repo_s = repo.to_str().unwrap();
+
+        let git = |args: &[&str]| {
+            assert!(Command::new("git").args(args).status().unwrap().success());
+        };
+        git(&["-C", repo_s, "init", "-q"]);
+        git(&[
+            "-C", repo_s, "-c", "user.email=t@t", "-c", "user.name=t",
+            "commit", "--allow-empty", "-q", "-m", "init",
+        ]);
+
+        let path = create_session_worktree(repo_s.to_string()).unwrap();
+        assert!(path.ends_with("-agent-1"));
+        assert!(Path::new(&path).join(".git").exists());
+
+        // Segunda chamada não colide: numera agent-2.
+        let path2 = create_session_worktree(repo_s.to_string()).unwrap();
+        assert!(path2.ends_with("-agent-2"));
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+}
+
 #[tauri::command]
 pub fn start_git_watch(
     app: AppHandle,

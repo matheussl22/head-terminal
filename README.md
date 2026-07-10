@@ -113,7 +113,7 @@ Depois remova o favorito antigo do dock e adicione de novo **Head Terminal** (se
 Perfis em `src/config/agents.ts`. O padrão spawna:
 
 | Agent | Comando |
-|-------|----------|
+|-------|---------|
 | Antigravity | `agy` |
 | Cursor Agent | `cursor agent` |
 | Claude Code | `claude` |

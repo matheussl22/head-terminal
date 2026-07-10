@@ -17,12 +17,16 @@ interface SessionWorkspaceProps {
   session: AgentSession;
   isVisible: boolean;
   shouldSpawn: boolean;
+  searchPaneId: string | null;
+  onCloseSearch: () => void;
 }
 
 export const SessionWorkspace = memo(function SessionWorkspace({
   session,
   isVisible,
   shouldSpawn,
+  searchPaneId,
+  onCloseSearch,
 }: SessionWorkspaceProps) {
   const activePaneId = useSessionStore((state) => state.activePaneId);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
@@ -98,6 +102,7 @@ export const SessionWorkspace = memo(function SessionWorkspace({
               sessionId={session.id}
               cwd={session.cwd}
               agentProfileId={session.agentProfileId}
+              claudeAccountId={session.claudeAccountId}
               isVisible={isVisible}
               shouldSpawn={shouldSpawn}
               isActive={isActive}
@@ -115,6 +120,8 @@ export const SessionWorkspace = memo(function SessionWorkspace({
               }
               onFocus={() => focusPane(paneId)}
               onClose={() => closePane(paneId)}
+              searchOpen={searchPaneId === paneId}
+              onCloseSearch={onCloseSearch}
             />
           );
         })}

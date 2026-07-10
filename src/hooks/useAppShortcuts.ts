@@ -1,30 +1,63 @@
 import { useEffect, useState } from "react";
 
 import { getSessionActivity } from "../core/activity-utils";
+import { fitPanes } from "../core/pane-fit-registry";
 import { useSessionStore } from "../core/session-manager";
 import { notifySessionAttention } from "../core/notifications";
+import { forEachTerminal } from "../core/terminal-registry";
+import {
+  loadFontSize,
+  saveFontSize,
+} from "../core/ui-preferences";
 import { toggleVoiceInput } from "../core/voice-input";
 
+const NOTIFY_DEBOUNCE_MS = 300;
+
 export function useActivityNotifications(): void {
-  const sessions = useSessionStore((state) => state.sessions);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const paneActivities = useSessionStore((state) => state.paneActivities);
-
   useEffect(() => {
-    for (const session of sessions) {
-      if (session.id === activeSessionId && document.hasFocus()) {
-        continue;
-      }
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
-      const activity = getSessionActivity(session, paneActivities);
-      void notifySessionAttention(session.title, activity, session.id);
-    }
-  }, [activeSessionId, paneActivities, sessions]);
+    const check = () => {
+      timer = null;
+      const { sessions, activeSessionId, paneRuntime } =
+        useSessionStore.getState();
+      for (const session of sessions) {
+        if (session.id === activeSessionId && document.hasFocus()) {
+          continue;
+        }
+
+        const activity = getSessionActivity(session, paneRuntime);
+        void notifySessionAttention(session.title, activity, session.id);
+      }
+    };
+
+    // Store subscription instead of a React render dependency: activity
+    // ticks are frequent and shouldn't re-render the shell tree.
+    const unsubscribe = useSessionStore.subscribe((state, previous) => {
+      if (state.paneRuntime === previous.paneRuntime) {
+        return;
+      }
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+      timer = setTimeout(check, NOTIFY_DEBOUNCE_MS);
+    });
+
+    return () => {
+      unsubscribe();
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
+    };
+  }, []);
 }
 
 export function useKeyboardShortcuts(options: {
+  onCreateSession: () => void;
   onCommandPalette: () => void;
   onRenameSession: () => void;
+  onSearch: () => void;
+  onCloseSearch: () => void;
 }): void {
   const sessions = useSessionStore((state) => state.sessions);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
@@ -46,6 +79,12 @@ export function useKeyboardShortcuts(options: {
         return;
       }
 
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        options.onCreateSession();
+        return;
+      }
+
       if (!isInput && event.key === "F2") {
         event.preventDefault();
         options.onRenameSession();
@@ -59,6 +98,51 @@ export function useKeyboardShortcuts(options: {
           void toggleVoiceInput(paneId);
         }
         return;
+      }
+
+      if (!isInput && event.ctrlKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        options.onSearch();
+        return;
+      }
+
+      if (!isInput && event.ctrlKey && (event.key === "=" || event.key === "+")) {
+        event.preventDefault();
+        const next = loadFontSize() + 1;
+        saveFontSize(next);
+        forEachTerminal((_paneId, handle) => {
+          handle.terminal.options.fontSize = next;
+        });
+        const paneIds = useSessionStore
+          .getState()
+          .getTargetPaneIds();
+        fitPanes(paneIds);
+        return;
+      }
+
+      if (!isInput && event.ctrlKey && event.key === "-") {
+        event.preventDefault();
+        const next = loadFontSize() - 1;
+        saveFontSize(next);
+        forEachTerminal((_paneId, handle) => {
+          handle.terminal.options.fontSize = next;
+        });
+        fitPanes(useSessionStore.getState().getTargetPaneIds());
+        return;
+      }
+
+      if (!isInput && event.ctrlKey && event.key === "0") {
+        event.preventDefault();
+        saveFontSize(12);
+        forEachTerminal((_paneId, handle) => {
+          handle.terminal.options.fontSize = 12;
+        });
+        fitPanes(useSessionStore.getState().getTargetPaneIds());
+        return;
+      }
+
+      if (event.key === "Escape") {
+        options.onCloseSearch();
       }
 
       if (!isInput && event.ctrlKey && event.key === "\\") {

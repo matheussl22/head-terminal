@@ -69,6 +69,11 @@ async fn spawn<R: Runtime>(
 
     let mut cmd = CommandBuilder::new(file);
     cmd.args(args);
+    // GUI launchers may inherit these from a parent automation process. A real
+    // PTY is color-capable, so do not let the parent's output preference leak
+    // into Codex/Claude/Cursor sessions.
+    cmd.env_remove("NO_COLOR");
+    cmd.env_remove("NODE_DISABLE_COLORS");
     if let Some(cwd) = cwd {
         cmd.cwd(OsString::from(cwd));
     }

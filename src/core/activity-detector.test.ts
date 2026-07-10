@@ -34,6 +34,31 @@ describe("ActivityDetector", () => {
     expect(changes).toContain("waiting_input");
   });
 
+  it("detecta prompt de aprovação e não decai para idle no silêncio", () => {
+    const changes: string[] = [];
+    const detector = new ActivityDetector((activity) => changes.push(activity));
+
+    detector.onRunning();
+    detector.onData("⠋ Editing file...\n");
+    detector.onData("Do you want to make this edit?\n❯ 1. Yes\n  2. No\n");
+    expect(changes[changes.length - 1]).toBe("waiting_input");
+
+    vi.advanceTimersByTime(10_000);
+    expect(changes[changes.length - 1]).toBe("waiting_input");
+  });
+
+  it("volta a working quando o prompt de aprovação sai do fim do buffer", () => {
+    const changes: string[] = [];
+    const detector = new ActivityDetector((activity) => changes.push(activity));
+
+    detector.onRunning();
+    detector.onData("Do you want to proceed?\n❯ 1. Yes\n");
+    expect(changes[changes.length - 1]).toBe("waiting_input");
+
+    detector.onData(`⠙ Running command...\n${"x".repeat(500)}`);
+    expect(changes[changes.length - 1]).toBe("working");
+  });
+
   it("marks error on non-zero exit", () => {
     const changes: string[] = [];
     const detector = new ActivityDetector((activity) => changes.push(activity));
@@ -42,5 +67,30 @@ describe("ActivityDetector", () => {
     detector.onExit(1);
 
     expect(changes).toContain("error");
+  });
+
+  it("não marca error num 'API Error' recuperável do agent (processo segue vivo)", () => {
+    const changes: string[] = [];
+    const detector = new ActivityDetector((activity) => changes.push(activity));
+
+    detector.onRunning();
+    detector.onData(
+      "API Error: Server error mid-response. The response above may be incomplete.\n",
+    );
+
+    expect(changes).not.toContain("error");
+  });
+
+  it("não marca error em [ERRO] de apps (Playwright etc.) com PTY vivo", () => {
+    const changes: string[] = [];
+    const detector = new ActivityDetector((activity) => changes.push(activity));
+
+    detector.onRunning();
+    detector.onData(
+      '[ERRO] em gerarComprovantePixTransferenciaMiniApp: Locator.scroll_into_view_if_needed: Error: strict mode violation\n',
+    );
+
+    expect(changes).not.toContain("error");
+    expect(changes).toContain("working");
   });
 });

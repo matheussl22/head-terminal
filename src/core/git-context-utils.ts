@@ -74,3 +74,23 @@ export function dirname(path: string): string {
 
   return normalized.slice(0, index);
 }
+
+export function gitContextsEqual(
+  a: GitContext | undefined,
+  b: GitContext,
+): boolean {
+  if (!a) {
+    return false;
+  }
+
+  return (
+    a.repoRoot === b.repoRoot &&
+    a.branch === b.branch &&
+    a.headShort === b.headShort &&
+    a.headRef === b.headRef &&
+    a.isDirty === b.isDirty &&
+    a.lastTouchedPath === b.lastTouchedPath &&
+    a.lastTouchedAt === b.lastTouchedAt &&
+    a.source === b.source
+  );
+}
