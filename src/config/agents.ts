@@ -36,6 +36,10 @@ function codexWithFallbackArgs(): string[] {
   return withShellFallback("codex");
 }
 
+function antigravityWithFallbackArgs(): string[] {
+  return withShellFallback("agy");
+}
+
 export interface AgentProfileOptions {
   continueConversation?: boolean;
 }
@@ -47,6 +51,12 @@ export function buildAgentProfiles(
   const continueConversation = options.continueConversation ?? false;
 
   return {
+    antigravity: {
+      id: "antigravity",
+      label: "Antigravity",
+      command: shell,
+      args: antigravityWithFallbackArgs(),
+    },
     cursor: {
       id: "cursor",
       label: "Cursor Agent",

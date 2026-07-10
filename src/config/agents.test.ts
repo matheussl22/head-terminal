@@ -4,7 +4,11 @@ vi.mock("../core/agent-launcher", () => ({
   getShellPath: () => "/usr/bin/zsh",
 }));
 
-import { buildAgentProfiles, getAgentProfile } from "./agents";
+import {
+  AGENT_FALLBACK_OSC,
+  buildAgentProfiles,
+  getAgentProfile,
+} from "./agents";
 
 describe("agent profiles continue flag", () => {
   it("spawns fresh by default", () => {
@@ -21,8 +25,13 @@ describe("agent profiles continue flag", () => {
     );
   });
 
-  it("leaves codex and shell profiles untouched when restoring", () => {
+  it("leaves antigravity, codex and shell profiles untouched when restoring", () => {
     const profiles = buildAgentProfiles({ continueConversation: true });
+    expect(profiles.antigravity.args.join(" ")).toContain("agy");
+    expect(profiles.antigravity.args.join(" ")).toContain(
+      String(AGENT_FALLBACK_OSC),
+    );
+    expect(profiles.antigravity.args.join(" ")).not.toContain("--continue");
     expect(profiles.codex.args.join(" ")).not.toContain("--continue");
     expect(profiles.shell.args.join(" ")).not.toContain("--continue");
   });

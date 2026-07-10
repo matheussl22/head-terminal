@@ -127,6 +127,7 @@ mod claude_profile_tests {
 
 #[derive(serde::Serialize)]
 pub struct AgentCliStatus {
+    pub antigravity: bool,
     pub cursor: bool,
     pub claude: bool,
     pub codex: bool,
@@ -137,7 +138,7 @@ pub fn check_agent_clis() -> AgentCliStatus {
     let output = Command::new("zsh")
         .args([
             "-lc",
-            "command -v cursor >/dev/null && echo cursor; command -v claude >/dev/null && echo claude; command -v codex >/dev/null && echo codex",
+            "command -v agy >/dev/null && echo antigravity; command -v cursor >/dev/null && echo cursor; command -v claude >/dev/null && echo claude; command -v codex >/dev/null && echo codex",
         ])
         .output();
 
@@ -151,6 +152,7 @@ pub fn check_agent_clis() -> AgentCliStatus {
     }
 
     AgentCliStatus {
+        antigravity: found.contains("antigravity"),
         cursor: found.contains("cursor"),
         claude: found.contains("claude"),
         codex: found.contains("codex"),

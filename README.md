@@ -1,6 +1,6 @@
 # Head Terminal
 
-Terminal desktop focado em **AI coding agents** (Claude Code, Codex, etc.).
+Terminal desktop focado em **AI coding agents** (Antigravity, Claude Code, Codex, etc.).
 
 - Tema preto/branco fixo
 - Toolbar com `/clear`, `/compact`, `/context`, `/help`
@@ -112,9 +112,13 @@ Depois remova o favorito antigo do dock e adicione de novo **Head Terminal** (se
 
 Perfis em `src/config/agents.ts`. O padrão spawna:
 
-```bash
-zsh -l -c 'cursor agent; exec zsh -l'
-```
+| Agent | Comando |
+|-------|---------|
+| Antigravity | `agy` |
+| Cursor Agent | `cursor agent` |
+| Claude Code | `claude` |
+| Codex CLI | `codex` |
+| Shell | `zsh -l` |
 
 Agent primeiro (Cursor Agent), shell normal ao sair.
 

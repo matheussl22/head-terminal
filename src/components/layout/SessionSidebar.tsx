@@ -31,6 +31,7 @@ import {
 import type { AgentSession } from "../../types/session";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import {
+  IconActivity,
   IconAgentClaude,
   IconAgentCodex,
   IconAgentCursor,
@@ -53,6 +54,7 @@ interface SessionSidebarProps {
 }
 
 const AGENT_ICON: Record<string, ComponentType<{ size?: number }>> = {
+  antigravity: IconActivity,
   cursor: IconAgentCursor,
   claude: IconAgentClaude,
   codex: IconAgentCodex,

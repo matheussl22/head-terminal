@@ -52,6 +52,7 @@ export function createInitialSession(
 }
 
 const AGENT_SHORT_NAME: Record<string, string> = {
+  antigravity: "Antigravity",
   cursor: "Cursor",
   claude: "Claude",
   codex: "OpenAI",

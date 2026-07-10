@@ -18,6 +18,7 @@ import {
 } from "../../core/ui-preferences";
 import type { GitContext } from "../../types/git-context";
 import {
+  IconActivity,
   IconAgentClaude,
   IconAgentCodex,
   IconAgentCursor,
@@ -38,6 +39,7 @@ interface CreateSessionDialogProps {
 }
 
 interface AgentCliStatus {
+  antigravity: boolean;
   cursor: boolean;
   claude: boolean;
   codex: boolean;
@@ -46,6 +48,7 @@ interface AgentCliStatus {
 let cliStatusCache: AgentCliStatus | null = null;
 
 function AgentIcon({ id }: { id: string }) {
+  if (id === "antigravity") return <IconActivity size={18} />;
   if (id === "claude") return <IconAgentClaude size={18} />;
   if (id === "codex") return <IconAgentCodex size={18} />;
   if (id === "shell") return <IconAgentShell size={18} />;
@@ -112,7 +115,9 @@ export function CreateSessionDialog({
       setCreating(false);
       setClaudeAccounts(accounts);
       setAgentProfileId(
-        ["cursor", "claude", "codex", "shell"].includes(lastAgent)
+        ["antigravity", "cursor", "claude", "codex", "shell"].includes(
+          lastAgent,
+        )
           ? lastAgent
           : "cursor",
       );
@@ -137,7 +142,12 @@ export function CreateSessionDialog({
             }
           })
           .catch(() =>
-            setCliStatus({ cursor: true, claude: true, codex: true }),
+            setCliStatus({
+              antigravity: true,
+              cursor: true,
+              claude: true,
+              codex: true,
+            }),
           );
       }
     }
