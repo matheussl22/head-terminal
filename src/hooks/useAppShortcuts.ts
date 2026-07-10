@@ -53,6 +53,7 @@ export function useActivityNotifications(): void {
 }
 
 export function useKeyboardShortcuts(options: {
+  onCreateSession: () => void;
   onCommandPalette: () => void;
   onRenameSession: () => void;
   onSearch: () => void;
@@ -75,6 +76,12 @@ export function useKeyboardShortcuts(options: {
       if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "p") {
         event.preventDefault();
         options.onCommandPalette();
+        return;
+      }
+
+      if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        options.onCreateSession();
         return;
       }
 

@@ -4,6 +4,7 @@ import type { IDisposable } from "tauri-pty";
 import { AGENT_FALLBACK_OSC, getAgentProfile } from "../config/agents";
 import { ActivityDetector } from "../core/activity-detector";
 import { ContextMeter } from "../core/context-meter";
+import { resolveClaudeConfigDir } from "../core/claude-accounts";
 import { checkpoint, logError, logEvent } from "../core/logger";
 import { notifyUiReady } from "../core/startup-watchdog";
 import { fitPanes } from "../core/pane-fit-registry";
@@ -26,6 +27,7 @@ interface UsePtyProcessOptions {
   sessionId: string;
   cwd: string;
   agentProfileId: string;
+  claudeAccountId?: string;
   restartKey: number;
   continueConversation: boolean;
   isVisibleRef: React.RefObject<boolean>;
@@ -44,6 +46,7 @@ export function usePtyProcess({
   sessionId,
   cwd,
   agentProfileId,
+  claudeAccountId,
   restartKey,
   continueConversation,
   isVisibleRef,
@@ -119,11 +122,17 @@ export function usePtyProcess({
         const profile = getAgentProfile(agentProfileId, {
           continueConversation,
         });
+        const claudeConfigDir = claudeAccountId
+          ? resolveClaudeConfigDir(claudeAccountId)
+          : undefined;
         bridge = createPtyBridge({
           profile,
           cwd,
           cols: terminal.cols,
           rows: terminal.rows,
+          env: claudeConfigDir
+            ? { CLAUDE_CONFIG_DIR: claudeConfigDir }
+            : undefined,
         });
 
         if (instance.spawnCount.current > 0) {
@@ -222,6 +231,7 @@ export function usePtyProcess({
     };
   }, [
     agentProfileId,
+    claudeAccountId,
     continueConversation,
     cwd,
     instance,

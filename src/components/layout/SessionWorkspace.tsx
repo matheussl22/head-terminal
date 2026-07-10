@@ -102,6 +102,7 @@ export const SessionWorkspace = memo(function SessionWorkspace({
               sessionId={session.id}
               cwd={session.cwd}
               agentProfileId={session.agentProfileId}
+              claudeAccountId={session.claudeAccountId}
               isVisible={isVisible}
               shouldSpawn={shouldSpawn}
               isActive={isActive}

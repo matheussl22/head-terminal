@@ -6,9 +6,9 @@
   justify-content: space-between;
   gap: var(--space-4);
   min-height: var(--toolbar-height);
-  padding: 0 var(--space-3);
+  padding: 0 14px;
   border-bottom: 1px solid var(--border-subtle);
-  background: linear-gradient(180deg, var(--surface-toolbar), var(--surface-sidebar));
+  background: rgba(16, 16, 26, 0.96);
 }
 
 .agent-toolbar__brand {
@@ -23,7 +23,7 @@
   height: 8px;
   border-radius: 999px;
   background: var(--gradient-brand);
-  box-shadow: var(--glow-accent);
+  box-shadow: 0 0 10px rgba(248, 28, 229, 0.28);
 }
 
 .agent-toolbar__title {
@@ -31,6 +31,10 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  background: var(--gradient-brand);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .agent-toolbar__git-badge {
@@ -44,7 +48,7 @@
 .agent-toolbar__session-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin-left: var(--space-2);
   padding: 2px 8px;
   border-radius: 999px;
@@ -108,5 +112,8 @@
 }
 
 .agent-toolbar__button--icon {
-  padding: 5px 7px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  justify-content: center;
 }

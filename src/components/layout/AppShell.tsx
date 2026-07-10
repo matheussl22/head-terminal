@@ -85,6 +85,7 @@ export function AppShell({
   }, [activeSessionId, sessions.length]);
 
   useKeyboardShortcuts({
+    onCreateSession,
     onCommandPalette: () => setPaletteOpen(true),
     onRenameSession: () => {
       if (activeSessionId) {

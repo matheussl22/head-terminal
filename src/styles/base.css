@@ -27,6 +27,15 @@
   box-sizing: border-box;
 }
 
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.28);
+}
+
 html,
 body,
 #root {
@@ -67,7 +76,18 @@ button {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: var(--space-2);
+  padding: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Boot screen */

@@ -6,6 +6,8 @@ const FONT_SIZE_KEY = "head-terminal.font-size";
 const RENDERER_KEY = "head-terminal.renderer";
 const COPY_ON_SELECT_KEY = "head-terminal.copy-on-select";
 const RECENT_CWDS_KEY = "head-terminal.recent-cwds";
+const LAST_AGENT_KEY = "head-terminal.last-agent";
+const LAST_CLAUDE_ACCOUNT_KEY = "head-terminal.last-claude-account";
 
 export type TerminalRenderer = "auto" | "webgl" | "dom";
 
@@ -125,4 +127,20 @@ export function noteRecentCwd(cwd: string): void {
     8,
   );
   storageSet(RECENT_CWDS_KEY, JSON.stringify(next));
+}
+
+export function loadLastAgent(): string {
+  return storageGet(LAST_AGENT_KEY) ?? "cursor";
+}
+
+export function saveLastAgent(agentId: string): void {
+  storageSet(LAST_AGENT_KEY, agentId);
+}
+
+export function loadLastClaudeAccount(): string {
+  return storageGet(LAST_CLAUDE_ACCOUNT_KEY) ?? "default";
+}
+
+export function saveLastClaudeAccount(accountId: string): void {
+  storageSet(LAST_CLAUDE_ACCOUNT_KEY, accountId);
 }

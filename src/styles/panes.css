@@ -2,7 +2,7 @@
 
 .session-workspace {
   position: absolute;
-  inset: var(--space-2);
+  inset: 6px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -33,14 +33,14 @@
   min-width: 0;
   min-height: 0;
   box-sizing: border-box;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
 .terminal-pane-shell--active {
-  border-color: var(--accent-muted);
-  box-shadow: inset 0 0 0 1px var(--accent-muted);
+  border-color: rgba(248, 28, 229, 0.38);
+  box-shadow: 0 0 0 1px rgba(248, 28, 229, 0.08);
 }
 
 .terminal-pane-shell__body {
@@ -62,7 +62,7 @@
   border: none;
   border-bottom: 1px solid var(--border-subtle);
   border-radius: 0;
-  background: var(--surface-toolbar);
+  background: rgba(16, 16, 26, 0.94);
   color: var(--text-secondary);
   font-size: var(--font-xs);
   cursor: pointer;
@@ -112,18 +112,6 @@
 
 .terminal-pane-header__status--working {
   color: var(--status-working);
-  background: linear-gradient(
-      90deg,
-      var(--status-working) 42%,
-      #eaffea 50%,
-      var(--status-working) 58%
-    )
-    no-repeat;
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: status-shimmer 2.2s linear infinite;
 }
 
 .terminal-pane-header__status--waiting_input {
@@ -167,8 +155,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -189,8 +177,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: none;
   border-radius: var(--radius-sm);
@@ -292,32 +280,6 @@
 .session-workspace--visible:has(.terminal-pane-shell--active) .terminal-status-bar {
   border-color: var(--accent-muted);
   box-shadow: inset 0 -1px 0 var(--accent-muted);
-}
-
-.agent-instructions-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  padding: 0 6px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xs);
-  background: rgba(106, 118, 251, 0.08);
-  color: var(--status-starting);
-  font-size: var(--font-xs);
-  line-height: 1.4;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.agent-instructions-badge:hover {
-  background: rgba(106, 118, 251, 0.16);
-  border-color: var(--status-starting);
-}
-
-.agent-instructions-badge__icon {
-  font-size: 10px;
-  opacity: 0.85;
 }
 
 /* Overlays */

@@ -39,17 +39,8 @@ export const AGENT_COMMANDS: ToolbarCommand[] = [
   },
 ];
 
-export const AGENT_INSTRUCTION_ACTION: ToolbarCommand = {
-  id: "agent-instructions",
-  label: "Regras do projeto",
-  command: "__agent_instructions__",
-  description:
-    "Referencia AGENTS.md, CLAUDE.md ou GEMINI.md no agent ativo (@mention)",
-};
-
 export const PALETTE_ACTIONS: ToolbarCommand[] = [
   ...AGENT_COMMANDS,
-  AGENT_INSTRUCTION_ACTION,
   {
     id: "split-vertical",
     label: "Split vertical",

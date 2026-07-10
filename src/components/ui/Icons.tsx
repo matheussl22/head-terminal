@@ -2,16 +2,21 @@
 import {
   Activity,
   Command,
+  Check,
   GitBranch,
+  LockKeyhole,
   Mic,
   PanelLeftClose,
   PanelLeftOpen,
   Pencil,
   Plus,
   Settings2,
+  SlidersHorizontal,
   SquareSplitHorizontal,
   SquareSplitVertical,
   Terminal,
+  Trash2,
+  Plug,
   X,
 } from "lucide-react";
 
@@ -50,6 +55,26 @@ export function IconSettings({ className, size = 14 }: IconProps) {
 
 export function IconActivity({ className, size = 14 }: IconProps) {
   return <Activity className={className} size={size} aria-hidden />;
+}
+
+export function IconCheck({ className, size = 14 }: IconProps) {
+  return <Check className={className} size={size} aria-hidden />;
+}
+
+export function IconLock({ className, size = 14 }: IconProps) {
+  return <LockKeyhole className={className} size={size} aria-hidden />;
+}
+
+export function IconPlug({ className, size = 14 }: IconProps) {
+  return <Plug className={className} size={size} aria-hidden />;
+}
+
+export function IconSliders({ className, size = 14 }: IconProps) {
+  return <SlidersHorizontal className={className} size={size} aria-hidden />;
+}
+
+export function IconTrash({ className, size = 14 }: IconProps) {
+  return <Trash2 className={className} size={size} aria-hidden />;
 }
 
 export function IconSplitVertical({ className, size = 14 }: IconProps) {

@@ -17,6 +17,7 @@ export interface PersistedSession {
   title: string;
   cwd: string;
   agentProfileId: string;
+  claudeAccountId?: string;
   layout: LayoutNode;
   pinned?: boolean;
 }
@@ -34,6 +35,7 @@ function toPersistedSession(session: AgentSession): PersistedSession {
     title: session.title,
     cwd: session.cwd,
     agentProfileId: session.agentProfileId,
+    claudeAccountId: session.claudeAccountId,
     layout: session.layout,
     pinned: session.pinned,
   };

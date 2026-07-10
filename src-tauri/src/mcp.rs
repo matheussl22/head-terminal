@@ -52,7 +52,16 @@ fn parse_cursor_mcp_list(stdout: &str) -> Vec<McpServerStatus> {
 }
 
 #[tauri::command]
-pub fn get_mcp_servers(cwd: String, agent: String) -> McpServersPayload {
+pub async fn get_mcp_servers(cwd: String, agent: String) -> McpServersPayload {
+    tauri::async_runtime::spawn_blocking(move || get_mcp_servers_blocking(cwd, agent))
+        .await
+        .unwrap_or_else(|error| McpServersPayload {
+            servers: Vec::new(),
+            error: Some(error.to_string()),
+        })
+}
+
+fn get_mcp_servers_blocking(cwd: String, agent: String) -> McpServersPayload {
     let (binary, parser): (&str, fn(&str) -> Vec<McpServerStatus>) = match agent.as_str() {
         "claude" => ("claude", parse_claude_mcp_list),
         "cursor" => ("cursor-agent", parse_cursor_mcp_list),

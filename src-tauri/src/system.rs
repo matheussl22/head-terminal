@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 
@@ -70,30 +71,58 @@ pub fn path_exists(path: String) -> bool {
     Path::new(&path).is_dir()
 }
 
-/// Filenames checked in priority order — mirrors `AGENT_INSTRUCTION_FILES` in the frontend.
-const AGENT_INSTRUCTION_FILES: &[&str] = &[
-    "AGENTS.md",
-    "AGENT.md",
-    "CLAUDE.md",
-    "GEMINI.md",
-    ".cursorrules",
-    "CURSOR.md",
-];
+fn is_valid_claude_profile_dir(home: &Path, target: &Path) -> bool {
+    let root = home.join(".head-terminal/claude-profiles");
+    let Some(name) = target.file_name().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    let uuid_like = name.len() == 36
+        && name.chars().enumerate().all(|(index, ch)| {
+            if [8, 13, 18, 23].contains(&index) {
+                ch == '-'
+            } else {
+                ch.is_ascii_hexdigit()
+            }
+        });
+    uuid_like && target == root.join(name)
+}
 
 #[tauri::command]
-pub fn find_agent_instruction(repo_root: String) -> Option<String> {
-    let root = Path::new(&repo_root);
-    if !root.is_dir() {
-        return None;
+pub fn delete_claude_profile_dir(path: String) -> Result<(), String> {
+    let home = std::env::var_os("HOME").ok_or("HOME não encontrado")?;
+    let target = Path::new(&path);
+    if !is_valid_claude_profile_dir(Path::new(&home), target) {
+        return Err("Caminho de perfil inválido".to_string());
     }
-
-    for name in AGENT_INSTRUCTION_FILES {
-        if root.join(name).is_file() {
-            return Some((*name).to_string());
-        }
+    if target.exists() {
+        fs::remove_dir_all(target).map_err(|error| error.to_string())?;
     }
+    Ok(())
+}
 
-    None
+#[cfg(test)]
+mod claude_profile_tests {
+    use super::is_valid_claude_profile_dir;
+    use std::path::Path;
+
+    #[test]
+    fn only_accepts_direct_uuid_children_of_the_profile_root() {
+        let home = Path::new("/home/test");
+        assert!(is_valid_claude_profile_dir(
+            home,
+            Path::new(
+                "/home/test/.head-terminal/claude-profiles/123e4567-e89b-12d3-a456-426614174000"
+            ),
+        ));
+        assert!(!is_valid_claude_profile_dir(
+            home,
+            Path::new("/home/test/.head-terminal/claude-profiles/../.claude"),
+        ));
+        assert!(!is_valid_claude_profile_dir(
+            home,
+            Path::new("/tmp/123e4567-e89b-12d3-a456-426614174000"),
+        ));
+    }
 }
 
 #[derive(serde::Serialize)]

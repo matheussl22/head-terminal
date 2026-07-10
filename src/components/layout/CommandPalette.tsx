@@ -2,13 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { sendAgentCommand } from "../../actions/sendAgentCommand";
 import { PALETTE_ACTIONS } from "../../config/toolbar";
-import { formatAgentInstructionMention } from "../../core/agent-instructions";
 import { exportDiagnosticBundle } from "../../core/export-diagnostic";
-import { pickGitContextForSession } from "../../core/git-context-utils";
-import { collectPaneIds } from "../../core/session-layout";
 import { useSessionStore } from "../../core/session-manager";
 import { toggleVoiceInput } from "../../core/voice-input";
-import { useAgentInstructionFile } from "../../hooks/useAgentInstructionFile";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -29,49 +25,20 @@ export function CommandPalette({
   const splitActivePane = useSessionStore((state) => state.splitActivePane);
   const activePaneId = useSessionStore((state) => state.activePaneId);
   const closePane = useSessionStore((state) => state.closePane);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const sessions = useSessionStore((state) => state.sessions);
-  const paneGitContext = useSessionStore((state) => state.paneGitContext);
-  const sessionGitContext = useSessionStore((state) => state.sessionGitContext);
-
-  const activeSession = sessions.find((item) => item.id === activeSessionId);
-  const activePaneIds = activeSession
-    ? collectPaneIds(activeSession.layout)
-    : [];
-  const activeGitContext = activeSession
-    ? pickGitContextForSession(
-        activeSession.id,
-        activePaneIds,
-        paneGitContext,
-        sessionGitContext,
-        {
-          activePaneId,
-          isActiveSession: true,
-        },
-      )
-    : undefined;
-  const instructionFile = useAgentInstructionFile(activeGitContext?.repoRoot);
-
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const actions = PALETTE_ACTIONS.filter((action) => {
-      if (action.id === "agent-instructions" && !instructionFile) {
-        return false;
-      }
-      return true;
-    });
 
     if (!normalized) {
-      return actions;
+      return PALETTE_ACTIONS;
     }
 
-    return actions.filter(
+    return PALETTE_ACTIONS.filter(
       (action) =>
         action.label.toLowerCase().includes(normalized) ||
         action.command.toLowerCase().includes(normalized) ||
         action.description?.toLowerCase().includes(normalized),
     );
-  }, [instructionFile, query]);
+  }, [query]);
 
   useEffect(() => {
     if (open) {
@@ -105,17 +72,13 @@ export function CommandPalette({
         }
       } else if (command === "__export_diagnostic__") {
         void exportDiagnosticBundle();
-      } else if (command === "__agent_instructions__") {
-        if (instructionFile) {
-          sendAgentCommand(formatAgentInstructionMention(instructionFile));
-        }
       } else if (command.startsWith("/")) {
         sendAgentCommand(command);
       }
 
       onClose();
     },
-    [activePaneId, closePane, instructionFile, onClose, onRenameRequest, onSettingsRequest, splitActivePane],
+    [activePaneId, closePane, onClose, onRenameRequest, onSettingsRequest, splitActivePane],
   );
 
   useEffect(() => {

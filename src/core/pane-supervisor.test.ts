@@ -22,10 +22,22 @@ describe("PaneSupervisor", () => {
     vi.useRealTimers();
   });
 
-  it("schedules restart with exponential backoff", () => {
+  it("does not auto-restart on exit — waits for manual restart", () => {
     supervisor.noteSpawned("p1");
 
     supervisor.noteExit("p1");
+    expect(supervisor.getState("p1")).toMatchObject({ kind: "failed" });
+    vi.advanceTimersByTime(60_000);
+    expect(restart).not.toHaveBeenCalled();
+
+    supervisor.restartNow("p1");
+    expect(restart).toHaveBeenCalledTimes(1);
+  });
+
+  it("scheduleRestart uses exponential backoff", () => {
+    supervisor.noteSpawned("p1");
+
+    supervisor.scheduleRestart("p1");
     expect(supervisor.getState("p1")).toMatchObject({
       kind: "countdown",
       attempt: 1,
@@ -34,24 +46,24 @@ describe("PaneSupervisor", () => {
     expect(restart).toHaveBeenCalledTimes(1);
 
     supervisor.noteSpawned("p1");
-    supervisor.noteExit("p1");
+    supervisor.scheduleRestart("p1");
     vi.advanceTimersByTime(999);
     expect(restart).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(1);
     expect(restart).toHaveBeenCalledTimes(2);
   });
 
-  it("fails after max attempts", () => {
+  it("scheduleRestart fails after max attempts", () => {
     supervisor.noteSpawned("p1");
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      supervisor.noteExit("p1");
+      supervisor.scheduleRestart("p1");
       vi.advanceTimersByTime(10_000);
       supervisor.noteSpawned("p1");
     }
 
     expect(restart).toHaveBeenCalledTimes(5);
-    supervisor.noteExit("p1");
+    supervisor.scheduleRestart("p1");
     expect(supervisor.getState("p1")).toMatchObject({ kind: "failed" });
     vi.advanceTimersByTime(60_000);
     expect(restart).toHaveBeenCalledTimes(5);
@@ -59,13 +71,13 @@ describe("PaneSupervisor", () => {
 
   it("resets the attempt counter after 60s healthy", () => {
     supervisor.noteSpawned("p1");
-    supervisor.noteExit("p1");
+    supervisor.scheduleRestart("p1");
     vi.advanceTimersByTime(500);
     supervisor.noteSpawned("p1");
 
     // Stay healthy past the reset window.
     vi.setSystemTime(Date.now() + 61_000);
-    supervisor.noteExit("p1");
+    supervisor.scheduleRestart("p1");
 
     expect(supervisor.getState("p1")).toMatchObject({
       kind: "countdown",
@@ -75,7 +87,7 @@ describe("PaneSupervisor", () => {
 
   it("cancel stops respawning until manual restart", () => {
     supervisor.noteSpawned("p1");
-    supervisor.noteExit("p1");
+    supervisor.scheduleRestart("p1");
     supervisor.cancel("p1");
 
     vi.advanceTimersByTime(60_000);
@@ -91,7 +103,7 @@ describe("PaneSupervisor", () => {
 
   it("restartNow skips the countdown", () => {
     supervisor.noteSpawned("p1");
-    supervisor.noteExit("p1");
+    supervisor.scheduleRestart("p1");
     supervisor.restartNow("p1");
 
     expect(restart).toHaveBeenCalledTimes(1);
@@ -101,7 +113,7 @@ describe("PaneSupervisor", () => {
 
   it("forget drops state and timers", () => {
     supervisor.noteSpawned("p1");
-    supervisor.noteExit("p1");
+    supervisor.scheduleRestart("p1");
     supervisor.forget("p1");
 
     vi.advanceTimersByTime(60_000);

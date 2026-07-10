@@ -108,9 +108,11 @@ function App() {
   }, []);
 
   const handleCreateConfirm = useCallback(
-    (cwd: string, agentProfileId: string) => {
+    (cwd: string, agentProfileId: string, claudeAccountId?: string) => {
       const title = nextAgentSessionTitle(agentProfileId, sessions);
-      addSession(createInitialSession(cwd, title, agentProfileId));
+      addSession(
+        createInitialSession(cwd, title, agentProfileId, claudeAccountId),
+      );
     },
     [addSession, sessions],
   );

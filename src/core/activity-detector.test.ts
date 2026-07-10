@@ -80,4 +80,17 @@ describe("ActivityDetector", () => {
 
     expect(changes).not.toContain("error");
   });
+
+  it("não marca error em [ERRO] de apps (Playwright etc.) com PTY vivo", () => {
+    const changes: string[] = [];
+    const detector = new ActivityDetector((activity) => changes.push(activity));
+
+    detector.onRunning();
+    detector.onData(
+      '[ERRO] em gerarComprovantePixTransferenciaMiniApp: Locator.scroll_into_view_if_needed: Error: strict mode violation\n',
+    );
+
+    expect(changes).not.toContain("error");
+    expect(changes).toContain("working");
+  });
 });

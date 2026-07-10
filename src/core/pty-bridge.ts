@@ -10,6 +10,7 @@ export interface PtySpawnOptions {
   cwd: string;
   cols: number;
   rows: number;
+  env?: Record<string, string>;
 }
 
 export interface PtyBridge {
@@ -29,7 +30,7 @@ export function createPtyBridge(options: PtySpawnOptions): PtyBridge {
     rows,
     cwd: options.cwd,
     name: "xterm-256color",
-    env: buildPtyEnv(),
+    env: buildPtyEnv(options.env),
   });
 
   const write = createQueuedPtyWriter(pty);

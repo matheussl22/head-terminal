@@ -37,6 +37,7 @@ export function createInitialSession(
   cwd: string,
   title?: string,
   agentProfileId = DEFAULT_AGENT_PROFILE_ID,
+  claudeAccountId?: string,
 ): AgentSession {
   const profile = getAgentProfile(agentProfileId);
   const sessionTitle = title ?? basename(cwd);
@@ -46,6 +47,7 @@ export function createInitialSession(
     title: sessionTitle,
     cwd,
     agentProfileId: profile.id,
+    claudeAccountId,
   });
 }
 

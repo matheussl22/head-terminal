@@ -82,7 +82,10 @@ interface SessionStore {
     ratio: number,
     options?: { persist?: boolean },
   ) => void;
-  restartPane: (paneId: string) => void;
+  restartPane: (
+    paneId: string,
+    options?: { continueConversation?: boolean },
+  ) => void;
   restartTargetPanes: () => void;
   restartSessionPanes: (sessionId: string) => void;
   updatePaneStatus: (paneId: string, status: SessionStatus) => void;
@@ -431,7 +434,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       return next;
     }),
 
-  restartPane: (paneId) =>
+  restartPane: (paneId, options) =>
     set((state) => {
       const hasPane = state.sessions.some((session) =>
         sessionHasPane(session, paneId),
@@ -441,12 +444,22 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         return state;
       }
 
+      const restoredPaneIds = { ...state.restoredPaneIds };
+      // Explicit false: fresh agent (e.g. after /exit). Explicit true: keep
+      // --continue. Undefined: leave hydrate flag alone (supervisor/cwd).
+      if (options?.continueConversation === true) {
+        restoredPaneIds[paneId] = true;
+      } else if (options?.continueConversation === false) {
+        delete restoredPaneIds[paneId];
+      }
+
       return {
         paneRestartKeys: {
           ...state.paneRestartKeys,
           [paneId]: (state.paneRestartKeys[paneId] ?? 0) + 1,
         },
         paneRuntime: resetPaneRuntime(state.paneRuntime, paneId),
+        restoredPaneIds,
       };
     }),
 

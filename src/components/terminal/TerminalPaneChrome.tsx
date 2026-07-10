@@ -85,7 +85,13 @@ export function TerminalPaneOverlay({ paneId }: TerminalPaneOverlayProps) {
   if (supervisorState?.kind === "failed") {
     return (
       <div className="terminal-overlay terminal-overlay--error">
-        <span>Reconexão falhou após {supervisorState.attempt} tentativas</span>
+        <span>
+          {supervisorState.attempt > 0
+            ? `Reconexão falhou após ${supervisorState.attempt} tentativas`
+            : activity === "error"
+              ? "O terminal encontrou um erro"
+              : "Processo encerrado"}
+        </span>
         <button
           type="button"
           className="terminal-overlay__action"
@@ -106,7 +112,9 @@ export function TerminalPaneOverlay({ paneId }: TerminalPaneOverlayProps) {
     );
   }
 
-  if (activity === "error" || status === "exited") {
+  // Only block the pane when the PTY actually died. Text that looks like an
+  // error while the process is still running must not cover the terminal.
+  if (status === "exited") {
     return (
       <div className="terminal-overlay terminal-overlay--error">
         <span>
@@ -202,10 +210,12 @@ export function TerminalPaneHeader({
           <button
             type="button"
             className="terminal-pane-header__restart-agent"
-            title="O agent caiu e um shell assumiu o terminal. Reiniciar o agent."
+            title="Nova conversa. Segure Shift para continuar a anterior."
             onClick={(event) => {
               event.stopPropagation();
-              restartPane(paneId);
+              restartPane(paneId, {
+                continueConversation: event.shiftKey,
+              });
             }}
           >
             Reiniciar agent

@@ -14,6 +14,7 @@ interface TerminalPaneProps {
   sessionId: string;
   cwd: string;
   agentProfileId: string;
+  claudeAccountId?: string;
   isVisible: boolean;
   shouldSpawn: boolean;
   isActive: boolean;
@@ -31,6 +32,7 @@ export function TerminalPane({
   sessionId,
   cwd,
   agentProfileId,
+  claudeAccountId,
   isVisible,
   shouldSpawn,
   isActive,
@@ -51,6 +53,7 @@ export function TerminalPane({
     sessionId,
     cwd,
     agentProfileId,
+    claudeAccountId,
     isVisible,
     shouldSpawn,
     containerRef,

@@ -20,8 +20,8 @@
 
   /* Text */
   --text-primary: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.72);
-  --text-muted: rgba(255, 255, 255, 0.55);
+  --text-secondary: rgba(255, 255, 255, 0.76);
+  --text-muted: rgba(255, 255, 255, 0.58);
 
   /* Identity: Hyper magenta + electric cyan */
   --accent: #f81ce5;
@@ -72,10 +72,10 @@
   --focus-ring: 0 0 0 2px rgba(34, 211, 238, 0.4);
 
   /* Layout */
-  --sidebar-width: 236px;
+  --sidebar-width: 248px;
   --sidebar-collapsed-width: 52px;
-  --toolbar-height: 44px;
-  --pane-header-height: 24px;
+  --toolbar-height: 48px;
+  --pane-header-height: 28px;
 
   /* Motion */
   --transition-fast: 120ms ease;

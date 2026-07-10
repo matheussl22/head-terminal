@@ -10,6 +10,7 @@ import {
 
 import { createInitialSession } from "../../core/agent-launcher";
 import { formatSessionStatusLine } from "../../core/activity-duration";
+import { getClaudeAccountProfile } from "../../core/claude-accounts";
 import {
   countWorkingSessions,
   getSessionActivity,
@@ -107,6 +108,7 @@ function paneDotsKey(
 
 interface SessionListItemProps {
   session: AgentSession;
+  claudeAccountName?: string;
   sessionIndex: number;
   isActive: boolean;
   collapsed: boolean;
@@ -126,6 +128,7 @@ interface SessionListItemProps {
 
 const SessionListItem = memo(function SessionListItem({
   session,
+  claudeAccountName,
   sessionIndex,
   isActive,
   collapsed,
@@ -250,7 +253,7 @@ const SessionListItem = memo(function SessionListItem({
               ? "session-sidebar__compact-item session-sidebar__compact-item--active"
               : "session-sidebar__compact-item") + ringClass
           }
-          title={`${session.title} — ${ACTIVITY_LABEL[activity]}${gitContext?.branch ? ` — ${gitContext.branch}` : ""}`}
+          title={`${session.title}${claudeAccountName ? ` — ${claudeAccountName}` : ""} — ${ACTIVITY_LABEL[activity]}${gitContext?.branch ? ` — ${gitContext.branch}` : ""}`}
           aria-label={session.title}
           onClick={onSelect}
           onContextMenu={(event) => onContextMenu(event, session)}
@@ -333,6 +336,14 @@ const SessionListItem = memo(function SessionListItem({
             >
               <AgentIcon agentProfileId={session.agentProfileId} size={12} />
             </span>
+            {claudeAccountName && (
+              <span
+                className="session-sidebar__account-chip"
+                title={`Perfil Claude: ${claudeAccountName}`}
+              >
+                {claudeAccountName}
+              </span>
+            )}
           </div>
 
           <span className="session-sidebar__meta">{session.cwd}</span>
@@ -526,7 +537,7 @@ export function SessionSidebar({
             <button
               type="button"
               className="session-sidebar__new"
-              title="Nova sessão"
+              title="Nova sessão (Ctrl+Shift+N)"
               onClick={onCreateSession}
             >
               <IconPlus size={12} />
@@ -551,6 +562,11 @@ export function SessionSidebar({
           <SessionListItem
             key={session.id}
             session={session}
+            claudeAccountName={
+              session.agentProfileId === "claude"
+                ? getClaudeAccountProfile(session.claudeAccountId)?.name
+                : undefined
+            }
             sessionIndex={index}
             collapsed={collapsed}
             isActive={session.id === activeSessionId}
@@ -580,7 +596,7 @@ export function SessionSidebar({
           <button
             type="button"
             className="session-sidebar__compact-new"
-            title="Nova sessão"
+            title="Nova sessão (Ctrl+Shift+N)"
             aria-label="Nova sessão"
             onClick={onCreateSession}
           >
@@ -609,6 +625,7 @@ export function SessionSidebar({
                 contextMenu.session.cwd,
                 `${contextMenu.session.title} (cópia)`,
                 contextMenu.session.agentProfileId,
+                contextMenu.session.claudeAccountId,
               ),
             );
             setContextMenu(null);

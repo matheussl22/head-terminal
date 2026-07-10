@@ -46,8 +46,27 @@ export class PaneSupervisor {
     this.transition(paneId, record, { kind: "healthy" });
   }
 
-  /** PTY died while mounted. Schedules a respawn with backoff. */
+  /**
+   * PTY died while mounted. Does not auto-respawn — keeps scrollback visible
+   * and waits for a manual "Reiniciar". Call scheduleRestart() to opt into
+   * the old backoff loop.
+   */
   noteExit(paneId: string): void {
+    const record = this.ensure(paneId);
+    this.clearTimer(record);
+
+    if (record.state.kind === "user_stopped") {
+      return;
+    }
+
+    this.transition(paneId, record, {
+      kind: "failed",
+      attempt: record.attempts,
+    });
+  }
+
+  /** Optional auto-respawn with exponential backoff (disabled by default). */
+  scheduleRestart(paneId: string): void {
     const record = this.ensure(paneId);
     this.clearTimer(record);
 

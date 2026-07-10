@@ -46,4 +46,4 @@ fi
   echo "----- $(date -Is) start:dev bin=$DEV_BIN DISPLAY=$DISPLAY -----"
 } >>"$LOG_FILE"
 
-exec "$DEV_BIN" >>"$LOG_FILE" 2>&1
+exec zsh -ic 'exec "$1"' zsh "$DEV_BIN" >>"$LOG_FILE" 2>&1

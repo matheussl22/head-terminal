@@ -14,6 +14,7 @@ interface UseAgentSessionOptions {
   sessionId: string;
   cwd: string;
   agentProfileId: string;
+  claudeAccountId?: string;
   isVisible: boolean;
   shouldSpawn: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -24,6 +25,7 @@ export function useAgentSession({
   sessionId,
   cwd,
   agentProfileId,
+  claudeAccountId,
   isVisible,
   shouldSpawn,
   containerRef,
@@ -125,6 +127,7 @@ export function useAgentSession({
     sessionId,
     cwd,
     agentProfileId,
+    claudeAccountId,
     restartKey,
     continueConversation,
     isVisibleRef,

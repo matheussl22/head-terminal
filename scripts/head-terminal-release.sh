@@ -36,4 +36,4 @@ fi
   echo "----- $(date -Is) start:prod bin=$RELEASE_BIN DISPLAY=$DISPLAY -----"
 } >>"$LOG_FILE"
 
-exec "$RELEASE_BIN" >>"$LOG_FILE" 2>&1
+exec zsh -ic 'exec "$1"' zsh "$RELEASE_BIN" >>"$LOG_FILE" 2>&1
