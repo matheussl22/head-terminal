@@ -12,9 +12,6 @@ describe("startup-watchdog", () => {
   });
 
   async function loadWatchdog() {
-    vi.doMock("@tauri-apps/api/core", () => ({
-      invoke: vi.fn().mockResolvedValue(undefined),
-    }));
     vi.doMock("./startup-snapshot", () => ({
       captureStartupSnapshot: () => ({
         runId: "test",

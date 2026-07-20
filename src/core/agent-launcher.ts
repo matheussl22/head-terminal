@@ -1,7 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { homeDir } from "@tauri-apps/api/path";
-import { platform } from "@tauri-apps/plugin-os";
-
 import {
   DEFAULT_AGENT_PROFILE_ID,
   getAgentProfile,
@@ -11,7 +7,8 @@ import { collectPaneIds } from "./session-layout";
 import type { AgentSession } from "../types/session";
 
 function getFallbackShell(): string {
-  return platform() === "macos" ? "/bin/zsh" : "/usr/bin/zsh";
+  const platform = navigator.platform;
+  return /mac/i.test(platform) ? "/bin/zsh" : "/usr/bin/zsh";
 }
 
 function basename(path: string): string {
@@ -21,12 +18,7 @@ function basename(path: string): string {
 }
 
 async function resolveHomeDocumentsDir(): Promise<string> {
-  try {
-    const home = (await homeDir()).replace(/\/$/, "");
-    return `${home}/Documentos`;
-  } catch {
-    return invoke<string>("get_default_cwd");
-  }
+  return window.headTerminal.system.getDefaultCwd();
 }
 
 export async function resolveDefaultCwd(): Promise<string> {

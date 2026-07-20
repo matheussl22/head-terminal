@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DESKTOP_DIR="$HOME/.local/share/applications"
-ICON="$ROOT/src-tauri/icons/128x128.png"
-DEV_LAUNCHER="$ROOT/scripts/head-terminal-dev.sh"
-RELEASE_LAUNCHER="$ROOT/scripts/head-terminal-release.sh"
-RELEASE_BIN="$ROOT/src-tauri/target/release/head-terminal"
+ICON="$PROJECT_DIR/assets/icons/128x128.png"
+DEV_LAUNCHER="$PROJECT_DIR/scripts/head-terminal-dev.sh"
+RELEASE_LAUNCHER="$PROJECT_DIR/scripts/head-terminal-release.sh"
+RELEASE_BINARY="$PROJECT_DIR/out/Head Terminal-linux-x64/head-terminal"
+INSTALL_RELEASE=0
+
+if [[ "${1:-}" == "--release" ]]; then
+  INSTALL_RELEASE=1
+fi
 
 install_entry() {
   local file_name="$1"
@@ -15,22 +20,24 @@ install_entry() {
   local wm_class="$4"
   local desktop_file="$DESKTOP_DIR/$file_name"
 
-  cat > "$desktop_file" <<EOF
-[Desktop Entry]
-Type=Application
-Version=1.0
-Name=$name
-GenericName=Terminal
-Comment=Terminal focado em AI coding agents
-Exec=$exec_path
-Icon=$ICON
-Terminal=false
-Categories=Development;Utility;
-Keywords=terminal;agent;cursor;ai;developer;
-StartupNotify=true
-StartupWMClass=$wm_class
-EOF
+  # Paths originate from the local checkout and may contain spaces.
+  printf '%s\n' \
+    '[Desktop Entry]' \
+    'Type=Application' \
+    'Version=1.0' \
+    "Name=$name" \
+    'GenericName=AI Agent Terminal' \
+    'Comment=Terminal Electron para AI coding agents' \
+    "Exec=\"$exec_path\"" \
+    "Icon=$ICON" \
+    'Terminal=false' \
+    'Categories=Development;Utility;' \
+    'Keywords=terminal;agent;claude;cursor;codex;ai;developer;' \
+    'StartupNotify=true' \
+    "StartupWMClass=$wm_class" \
+    >"$desktop_file"
 
+  chmod 0644 "$desktop_file"
   echo "Atalho instalado: $desktop_file"
 }
 
@@ -41,29 +48,22 @@ install_entry \
   "head-terminal-dev.desktop" \
   "Head Terminal (Dev)" \
   "$DEV_LAUNCHER" \
-  "com.matheus.head-terminal.dev"
+  "head-terminal-dev"
 
-if [[ -x "$RELEASE_BIN" ]]; then
+if [[ -x "$RELEASE_BINARY" ]]; then
   install_entry \
     "head-terminal.desktop" \
     "Head Terminal" \
     "$RELEASE_LAUNCHER" \
-    "com.matheus.head-terminal"
+    "head-terminal"
+elif (( INSTALL_RELEASE == 1 )); then
+  echo "Pacote Electron ausente. Rode: npm run package" >&2
+  exit 1
 else
-  if [[ "${1:-}" == "--release" ]]; then
-    echo "Binário de release não encontrado. Rode: npm run build:release" >&2
-    exit 1
-  fi
-
-  echo "Release ainda não compilado — só o atalho Dev foi criado."
-  echo "Para prod: npm run build:release && npm run install:desktop"
+  echo "Pacote de produção ausente; somente o launcher Dev foi instalado."
+  echo "Para produção: npm run package && npm run install:desktop:release"
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
 fi
-
-echo ""
-echo "Uso recomendado:"
-echo "  Prod (estável, dogfooding): Head Terminal"
-echo "  Dev (hot reload, mata PTY ao salvar): Head Terminal (Dev)"

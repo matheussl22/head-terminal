@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { open as openDirectoryPicker } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 
 import { buildAgentProfiles } from "../../config/agents";
@@ -16,7 +14,6 @@ import {
   saveLastAgent,
   saveLastClaudeAccount,
 } from "../../core/ui-preferences";
-import type { GitContext } from "../../types/git-context";
 import {
   IconActivity,
   IconAgentClaude,
@@ -95,9 +92,7 @@ export function CreateSessionDialog({
     }
     const target = cwd.trim() || defaultCwd;
     const timer = window.setTimeout(() => {
-      void invoke<Pick<GitContext, "repoRoot">>("get_git_context", {
-        cwd: target,
-      })
+      void window.headTerminal.git.getContext(target)
         .then((context) => setIsGitRepo(Boolean(context.repoRoot)))
         .catch(() => setIsGitRepo(false));
     }, 300);
@@ -130,7 +125,7 @@ export function CreateSessionDialog({
       if (cliStatusCache) {
         setCliStatus(cliStatusCache);
       } else {
-        void invoke<AgentCliStatus>("check_agent_clis")
+        void window.headTerminal.system.checkAgentClis()
           .then((status) => {
             cliStatusCache = status;
             setCliStatus(status);
@@ -174,7 +169,7 @@ export function CreateSessionDialog({
     const nextCwd = cwd.trim() || defaultCwd;
     let exists = false;
     try {
-      exists = await invoke<boolean>("path_exists", { path: nextCwd });
+      exists = await window.headTerminal.system.pathExists(nextCwd);
     } catch {
       setCwdError("Não foi possível acessar o diretório");
       setCreating(false);
@@ -189,9 +184,7 @@ export function CreateSessionDialog({
     let sessionCwd = nextCwd;
     if (isGitRepo && useWorktree) {
       try {
-        sessionCwd = await invoke<string>("create_session_worktree", {
-          cwd: nextCwd,
-        });
+        sessionCwd = await window.headTerminal.git.createWorktree(nextCwd);
       } catch (error) {
         setCwdError(`Falha ao criar worktree: ${String(error)}`);
         setCreating(false);
@@ -213,11 +206,9 @@ export function CreateSessionDialog({
   };
 
   const browseDirectory = async () => {
-    const selected = await openDirectoryPicker({
-      directory: true,
-      multiple: false,
-      defaultPath: cwd || defaultCwd,
-    });
+    const selected = await window.headTerminal.system.selectDirectory(
+      cwd || defaultCwd,
+    );
     if (typeof selected === "string") {
       setCwd(selected);
       setCwdError(null);

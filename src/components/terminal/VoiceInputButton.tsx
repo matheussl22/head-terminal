@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { VOICE_SHORTCUT } from "../../config/toolbar";
 import { useSessionStore } from "../../core/session-manager";
 import { isVoiceInputBlocked, toggleVoiceInput } from "../../core/voice-input";
-import { stopAndTranscribeVoice } from "../../core/voice-bridge";
+import { cancelVoiceRecording } from "../../core/voice-bridge";
 import { IconMic } from "../ui/Icons";
 
 type VoiceButtonState = "idle" | "error";
@@ -35,9 +35,7 @@ export function VoiceInputButton({ paneId }: VoiceInputButtonProps) {
       }
       if (useSessionStore.getState().voiceRecordingPaneId === paneId) {
         setVoiceRecordingPaneId(null);
-        // Result discarded on unmount — pass "" so the backend skips the
-        // OpenAI call and just stops/cleans up the recording.
-        void stopAndTranscribeVoice("").catch(() => undefined);
+        void cancelVoiceRecording().catch(() => undefined);
       }
     };
   }, [paneId, setVoiceRecordingPaneId]);

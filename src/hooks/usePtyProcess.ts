@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import type { IDisposable } from "tauri-pty";
 
 import { AGENT_FALLBACK_OSC, getAgentProfile } from "../config/agents";
 import { ActivityDetector } from "../core/activity-detector";
@@ -13,6 +12,7 @@ import {
   attachPtyDataListener,
   attachPtyExitListener,
   createPtyBridge,
+  type IDisposable,
   type PtyBridge,
 } from "../core/pty-bridge";
 import type { PtyOutputBuffer } from "../core/pty-output-buffer";
@@ -106,7 +106,7 @@ export function usePtyProcess({
       }
     };
 
-    const bootstrap = () => {
+    const bootstrap = async () => {
       if (disposed) {
         return;
       }
@@ -125,7 +125,7 @@ export function usePtyProcess({
         const claudeConfigDir = claudeAccountId
           ? resolveClaudeConfigDir(claudeAccountId)
           : undefined;
-        bridge = createPtyBridge({
+        const nextBridge = await createPtyBridge({
           profile,
           cwd,
           cols: terminal.cols,
@@ -134,6 +134,12 @@ export function usePtyProcess({
             ? { CLAUDE_CONFIG_DIR: claudeConfigDir }
             : undefined,
         });
+
+        if (disposed) {
+          nextBridge.dispose();
+          return;
+        }
+        bridge = nextBridge;
 
         if (instance.spawnCount.current > 0) {
           const attempt = instance.spawnCount.current + 1;
@@ -214,7 +220,7 @@ export function usePtyProcess({
         if (!disposed) {
           // Fit before spawning so the PTY starts with real dimensions.
           fitPanes([paneId]);
-          bootstrap();
+          void bootstrap();
         }
       });
     });

@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import ReactDOM from "react-dom/client";
 import "@xterm/xterm/css/xterm.css";
 
@@ -18,11 +17,14 @@ async function bootstrapFrontend(): Promise<void> {
   };
 
   try {
-    const startupContext = await invoke<{
-      runId: string;
-      channel: "dev" | "prod";
-    }>("get_startup_context");
-    context = startupContext;
+    const startupContext = await window.headTerminal.app.getStartupContext();
+    context = {
+      runId: startupContext.runId,
+      channel: startupContext.channel,
+    };
+    document.documentElement.dataset.headTerminalSmoke = startupContext.smokeTest
+      ? "1"
+      : "0";
   } catch (error) {
     // runId local permanece como fallback
     console.error(error);

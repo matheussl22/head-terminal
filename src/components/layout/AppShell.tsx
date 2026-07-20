@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { clearAgentSession } from "../../actions/clearAgentSession";
 import {
@@ -105,32 +104,49 @@ export function AppShell({
     const base = import.meta.env.DEV ? "Head Terminal (Dev)" : "Head Terminal";
     const title =
       workingCount > 0 ? `● ${workingCount} executando — ${base}` : base;
-    void getCurrentWindow().setTitle(title);
+    void window.headTerminal.app.setTitle(title);
   }, [workingCount]);
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
-    void getCurrentWindow()
-      .onCloseRequested((event) => {
+    const unlisten = window.headTerminal.app.onCloseRequested(() => {
+      void (async () => {
         const state = useSessionStore.getState();
         const working = countWorkingSessions(state.sessions, state.paneRuntime);
         if (working > 0) {
-          const ok = window.confirm(
-            `${working} agent(s) ainda executando. Fechar mesmo assim?`,
-          );
+          const ok = await window.headTerminal.system.confirm({
+            title: "Fechar Head Terminal",
+            message: `${working} agent(s) ainda executando.`,
+            detail: "Fechar mesmo assim? Os processos em execução serão encerrados.",
+            confirmLabel: "Fechar",
+            cancelLabel: "Cancelar",
+          });
           if (!ok) {
-            event.preventDefault();
+            window.headTerminal.app.respondToClose(false);
             return;
           }
         }
-        flushPersistedWorkspace(workspaceFromStore(state));
-      })
-      .then((fn) => {
-        unlisten = fn;
-      });
-    return () => {
-      unlisten?.();
-    };
+        try {
+          await flushPersistedWorkspace(workspaceFromStore(state));
+        } catch (error) {
+          checkpoint("js.workspace.flush_failed", {
+            message: error instanceof Error ? error.message : String(error),
+          });
+          const closeWithoutSaving = await window.headTerminal.system.confirm({
+            title: "Falha ao salvar workspace",
+            message: "Não foi possível persistir o estado mais recente.",
+            detail: "Deseja fechar mesmo assim?",
+            confirmLabel: "Fechar sem salvar",
+            cancelLabel: "Cancelar",
+          });
+          if (!closeWithoutSaving) {
+            window.headTerminal.app.respondToClose(false);
+            return;
+          }
+        }
+        window.headTerminal.app.respondToClose(true);
+      })();
+    });
+    return unlisten;
   }, []);
 
   useEffect(() => {

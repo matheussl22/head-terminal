@@ -377,3 +377,6 @@ context menu + pin + drag reorder.
 | `.session-context-menu` | `global.css:654` | componente |
 | `.session-sidebar__working-badge` | `global.css:380` | renderizar |
 | `.session-sidebar__pin` | `global.css:517` | UI de pin |
+# Documento histórico
+
+> Este plano descreve a implementação Tauri anterior. O runtime atual é Electron; consulte `README.md` e `electron/` para a arquitetura vigente.

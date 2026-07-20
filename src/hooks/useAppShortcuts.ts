@@ -42,9 +42,18 @@ export function useActivityNotifications(): void {
       }
       timer = setTimeout(check, NOTIFY_DEBOUNCE_MS);
     });
+    const unsubscribeActivation = window.headTerminal.notifications.onActivated(
+      (sessionId) => {
+        const state = useSessionStore.getState();
+        if (state.sessions.some((session) => session.id === sessionId)) {
+          state.setActiveSessionId(sessionId);
+        }
+      },
+    );
 
     return () => {
       unsubscribe();
+      unsubscribeActivation();
       if (timer !== null) {
         clearTimeout(timer);
       }

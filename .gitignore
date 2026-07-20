@@ -9,7 +9,9 @@ lerna-debug.log*
 
 node_modules
 dist
-src-tauri/target
+out
+.vite
+*.tsbuildinfo
 dist-ssr
 *.local
 

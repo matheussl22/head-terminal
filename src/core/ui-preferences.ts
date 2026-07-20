@@ -8,6 +8,21 @@ const COPY_ON_SELECT_KEY = "head-terminal.copy-on-select";
 const RECENT_CWDS_KEY = "head-terminal.recent-cwds";
 const LAST_AGENT_KEY = "head-terminal.last-agent";
 const LAST_CLAUDE_ACCOUNT_KEY = "head-terminal.last-claude-account";
+const MIGRATION_APPLIED_KEY = "head-terminal.migration.preferences.v1";
+
+const MIGRATABLE_KEYS = new Set([
+  SIDEBAR_COLLAPSED_KEY,
+  RUN_EVERYTHING_KEY,
+  PANE_HEADERS_KEY,
+  FONT_SIZE_KEY,
+  RENDERER_KEY,
+  COPY_ON_SELECT_KEY,
+  RECENT_CWDS_KEY,
+  LAST_AGENT_KEY,
+  LAST_CLAUDE_ACCOUNT_KEY,
+  "head-terminal.claude-accounts",
+  "head-terminal.claude-default-account-name",
+]);
 
 export type TerminalRenderer = "auto" | "webgl" | "dom";
 
@@ -20,6 +35,27 @@ function storageSet(key: string, value: string): void {
   if (typeof localStorage !== "undefined") {
     localStorage.setItem(key, value);
   }
+}
+
+/** Applies the main-process migration snapshot before workspace hydration. */
+export function applyMigratedPreferences(values: Record<string, string>): void {
+  if (typeof localStorage === "undefined") return;
+  if (localStorage.getItem(MIGRATION_APPLIED_KEY) === "1") return;
+  if (Object.keys(values).length === 0) return;
+  for (const [key, value] of Object.entries(values)) {
+    if (
+      MIGRATABLE_KEYS.has(key)
+      && typeof value === "string"
+      && localStorage.getItem(key) === null
+    ) {
+      localStorage.setItem(key, value);
+    }
+  }
+  localStorage.setItem(MIGRATION_APPLIED_KEY, "1");
+  // Ensure lazy preference readers observe the newly imported values.
+  paneHeadersCache = null;
+  fontSizeCache = null;
+  copyOnSelectCache = null;
 }
 
 export function loadSidebarCollapsed(): boolean {

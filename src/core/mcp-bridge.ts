@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-
 export interface McpServerStatus {
   name: string;
   target: string;
@@ -35,10 +33,10 @@ export async function fetchMcpServers(
     return cached.payload;
   }
 
-  const payload = await invoke<McpServersPayload>("get_mcp_servers", {
-    cwd,
-    agent,
-  });
+  if (agent !== "claude" && agent !== "cursor") {
+    return { servers: [], error: "Agent não suportado" };
+  }
+  const payload = await window.headTerminal.mcp.list(cwd, agent);
   mcpServersCache.set(key, {
     payload,
     expiresAt: Date.now() + MCP_SERVERS_CACHE_TTL_MS,

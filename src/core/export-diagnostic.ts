@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-
 import { getFrontendDiagnosticBundle, getRunId, logEvent } from "./logger";
 
 export async function copyDiagnosticToClipboard(): Promise<void> {
@@ -12,9 +10,9 @@ export async function copyDiagnosticToClipboard(): Promise<void> {
 }
 
 export async function exportDiagnosticBundle(): Promise<string> {
-  const path = await invoke<string>("export_diagnostic_bundle", {
-    frontend: getFrontendDiagnosticBundle(),
-  });
+  const path = await window.headTerminal.diagnostics.export(
+    getFrontendDiagnosticBundle(),
+  );
   logEvent("info", "diagnostic.exported", { path, runId: getRunId() });
   return path;
 }

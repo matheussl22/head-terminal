@@ -1,5 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export interface LogEvent {
@@ -75,9 +73,9 @@ function pushEvent(
   console.log(`[head-terminal] ${line}`);
   persistLocal(line);
 
-  void invoke("append_log", { line }).catch(() => {
-    void invoke("frontend_log", { message: line }).catch(() => {});
-  });
+  if (typeof window !== "undefined" && window.headTerminal) {
+    window.headTerminal.diagnostics.appendEvent(line);
+  }
 
   return entry;
 }
@@ -124,11 +122,13 @@ export function checkpoint(
   };
   checkpoints.push(entry);
   pushEvent("info", "bootstrap.checkpoint", { stage, ...meta });
-  void invoke("append_checkpoint", {
-    stage,
-    elapsedMs: entry.elapsedMs,
-    meta: meta ?? null,
-  }).catch(() => {});
+  if (typeof window !== "undefined" && window.headTerminal) {
+    window.headTerminal.diagnostics.appendCheckpoint({
+      checkpoint: stage,
+      elapsedMs: entry.elapsedMs,
+      metadata: meta as Record<string, unknown> | undefined,
+    });
+  }
   return entry;
 }
 

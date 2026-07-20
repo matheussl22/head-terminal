@@ -33,17 +33,11 @@ export async function notifySessionAttention(
         ? `${sessionTitle}: o agent caiu — shell ativo`
         : `${sessionTitle} precisa de atenção`;
 
-  if (!("Notification" in window)) {
-    return;
-  }
-
-  if (Notification.permission === "default") {
-    await Notification.requestPermission();
-  }
-
-  if (Notification.permission === "granted") {
-    new Notification("Head Terminal", { body });
-  }
+  await window.headTerminal.notifications.show({
+    title: "Head Terminal",
+    body,
+    sessionId,
+  });
 }
 
 export function clearSessionNotification(sessionId: string): void {

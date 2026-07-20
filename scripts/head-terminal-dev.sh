@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
-source "$ROOT/scripts/lib/runtime-env.sh"
+source "$PROJECT_DIR/scripts/head-terminal-env.sh"
+# shellcheck disable=SC1091
+source "$PROJECT_DIR/scripts/lib/runtime-env.sh"
 
 notify_error() {
   local message="$1"
@@ -16,34 +18,21 @@ notify_error() {
   fi
 }
 
-DEV_BIN="$ROOT/src-tauri/target/debug/head-terminal-dev"
-LOG_DIR="$(ensure_log_dir)"
-LOG_FILE="$LOG_DIR/dev.log"
-
-if [[ ! -x "$DEV_BIN" ]]; then
-  if command -v npm >/dev/null 2>&1; then
-    (
-      cd "$ROOT"
-      npm run build:dev
-    ) >>"$LOG_FILE" 2>&1 || {
-      notify_error "Falha ao compilar o modo dev. Veja o log:\n$LOG_FILE"
-      exit 1
-    }
-  else
-    notify_error "Binário dev não encontrado. Rode no projeto:\n\nnpm run build:dev"
-    exit 1
-  fi
-fi
-
-ensure_display
-
-if [[ -z "${DISPLAY:-}" ]]; then
-  notify_error "DISPLAY não encontrado. Abra pelo terminal gráfico ou exporte DISPLAY=:0"
+if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+  notify_error "Node.js 20+ e npm são necessários para iniciar o modo dev."
   exit 1
 fi
 
-{
-  echo "----- $(date -Is) start:dev bin=$DEV_BIN DISPLAY=$DISPLAY -----"
-} >>"$LOG_FILE"
+if [[ ! -d "$PROJECT_DIR/node_modules" ]]; then
+  notify_error "Dependências ausentes. Rode no projeto: npm install"
+  exit 1
+fi
 
-exec zsh -ic 'exec "$1"' zsh "$DEV_BIN" >>"$LOG_FILE" 2>&1
+ensure_display
+LOG_DIR="$(ensure_log_dir)"
+LOG_FILE="$LOG_DIR/dev.log"
+export HEAD_TERMINAL_CHANNEL="dev"
+
+echo "----- $(date -Is) electron:dev DISPLAY=${DISPLAY:-wayland} -----" >>"$LOG_FILE"
+cd "$PROJECT_DIR"
+exec npm run dev -- --class=head-terminal-dev >>"$LOG_FILE" 2>&1

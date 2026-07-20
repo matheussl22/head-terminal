@@ -1,16 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn().mockResolvedValue(undefined),
-}));
-
 import {
   checkpoint,
   getCheckpoints,
   getLastCheckpoint,
   getRunId,
   initLogger,
+  logEvent,
 } from "./logger";
+
+type DiagnosticsApi = Window["headTerminal"]["diagnostics"];
 
 describe("logger", () => {
   beforeEach(() => {
@@ -19,6 +18,7 @@ describe("logger", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("stores checkpoints in order", () => {
@@ -41,5 +41,39 @@ describe("logger", () => {
 
   it("exposes run id after init", () => {
     expect(getRunId()).toBe("test-run-id");
+  });
+
+  it("logs safely when window and localStorage do not exist", () => {
+    vi.stubGlobal("window", undefined);
+    vi.stubGlobal("localStorage", undefined);
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(() => logEvent("info", "headless.event", { ok: true })).not.toThrow();
+    expect(consoleLog).toHaveBeenCalledOnce();
+  });
+
+  it("forwards events and checkpoints through the typed diagnostics API", () => {
+    const appendEvent = vi.fn<DiagnosticsApi["appendEvent"]>();
+    const appendCheckpoint = vi.fn<DiagnosticsApi["appendCheckpoint"]>();
+    const diagnostics: DiagnosticsApi = {
+      appendEvent,
+      appendCheckpoint,
+      export: vi.fn<DiagnosticsApi["export"]>(),
+    };
+    vi.stubGlobal("window", { headTerminal: { diagnostics } });
+    vi.stubGlobal("localStorage", {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(),
+    });
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    logEvent("warn", "renderer.warning", { paneId: "pane:1" });
+    checkpoint("renderer.ready", { panes: 2 });
+
+    expect(appendEvent).toHaveBeenCalledTimes(2);
+    expect(appendCheckpoint).toHaveBeenCalledWith({
+      checkpoint: "renderer.ready",
+      elapsedMs: expect.any(Number),
+      metadata: { panes: 2 },
+    });
   });
 });

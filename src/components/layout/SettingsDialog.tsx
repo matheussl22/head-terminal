@@ -1,6 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
-import { homeDir } from "@tauri-apps/api/path";
-import { confirm as confirmDialog } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 
 import { buildAgentProfiles } from "../../config/agents";
@@ -17,7 +14,7 @@ import { logEvent } from "../../core/logger";
 import { fetchMcpServers, type McpServerStatus } from "../../core/mcp-bridge";
 import {
   persistOpenAiApiKey,
-  resolveOpenAiApiKey,
+  hasOpenAiApiKey,
 } from "../../core/openai-credentials";
 import { useSessionStore } from "../../core/session-manager";
 import {
@@ -113,8 +110,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setApiKeyEdited(false);
     setApiKey("");
     const frame = requestAnimationFrame(() => {
-      void resolveOpenAiApiKey().then((stored) => {
-        setHasStoredKey(Boolean(stored));
+      void hasOpenAiApiKey().then((stored) => {
+        setHasStoredKey(stored);
       });
     });
     return () => cancelAnimationFrame(frame);
@@ -163,7 +160,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 
   const addClaudeProfile = async () => {
     try {
-      createClaudeAccountProfile(newClaudeAccountName, await homeDir());
+      const { homeDir } = await window.headTerminal.system.getPlatform();
+      createClaudeAccountProfile(newClaudeAccountName, homeDir);
       setNewClaudeAccountName("");
       setAddingProfile(false);
       setClaudeAccountError(null);
@@ -184,22 +182,21 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       return;
     }
 
-    const confirmed = await confirmDialog(
-      `Excluir “${account.name}”?\n\nCredenciais, configurações e histórico locais deste perfil serão removidos. Sua conta Claude não será excluída.`,
-      {
-        title: "Excluir perfil Claude",
-        kind: "warning",
-        okLabel: "Excluir",
-        cancelLabel: "Cancelar",
-      },
-    );
+    const confirmed = await window.headTerminal.system.confirm({
+      title: "Excluir perfil Claude",
+      message: `Excluir “${account.name}”?`,
+      detail:
+        "Credenciais, configurações e histórico locais deste perfil serão removidos. Sua conta Claude não será excluída.",
+      confirmLabel: "Excluir",
+      cancelLabel: "Cancelar",
+    });
     if (!confirmed) return;
 
     setDeletingAccountId(account.id);
     setClaudeAccountError(null);
     try {
       if (account.configDir) {
-        await invoke("delete_claude_profile_dir", { path: account.configDir });
+        await window.headTerminal.system.deleteClaudeProfile(account.configDir);
       }
       deleteClaudeAccountProfile(account.id);
       refreshAccounts();

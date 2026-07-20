@@ -2,11 +2,6 @@ import { SearchAddon } from "@xterm/addon-search";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
-import {
-  readText as readClipboardText,
-  writeText as writeClipboardText,
-} from "@tauri-apps/plugin-clipboard-manager";
-
 import { createTerminalOptions } from "../config/theme";
 import { logError, logEvent } from "./logger";
 import { recordPtyReadBatch } from "./dev-metrics";
@@ -57,7 +52,7 @@ export function createConfiguredTerminal(): ConfiguredTerminal {
       const selection = terminal.getSelection();
       if (selection) {
         event.preventDefault();
-        void writeClipboardText(selection).catch((error) => {
+        void window.headTerminal.clipboard.writeText(selection).catch((error) => {
           logError("terminal.clipboard_write_failed", error);
         });
       }
@@ -66,7 +61,7 @@ export function createConfiguredTerminal(): ConfiguredTerminal {
 
     if (mod && event.shiftKey && event.key.toLowerCase() === "v") {
       event.preventDefault();
-      void readClipboardText()
+      void window.headTerminal.clipboard.readText()
         .then((text) => {
           if (text) {
             terminal.paste(text);
@@ -85,7 +80,7 @@ export function createConfiguredTerminal(): ConfiguredTerminal {
     terminal.onSelectionChange(() => {
       const selection = terminal.getSelection();
       if (selection) {
-        void writeClipboardText(selection).catch((error) => {
+        void window.headTerminal.clipboard.writeText(selection).catch((error) => {
           logError("terminal.clipboard_write_failed", error);
         });
       }

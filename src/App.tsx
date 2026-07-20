@@ -15,6 +15,10 @@ import { CreateSessionDialog } from "./components/layout/CreateSessionDialog";
 import { BootScreen } from "./components/BootScreen";
 import { checkpoint, logError } from "./core/logger";
 import { prewarmOpenAiApiKey } from "./core/voice-input";
+import {
+  applyMigratedPreferences,
+  loadRunEverything,
+} from "./core/ui-preferences";
 
 import "./styles/global.css";
 
@@ -23,6 +27,7 @@ function App() {
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const addSession = useSessionStore((state) => state.addSession);
   const hydrateWorkspaceState = useSessionStore((state) => state.hydrateWorkspace);
+  const setRunEverything = useSessionStore((state) => state.setRunEverything);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [defaultCwd, setDefaultCwd] = useState<string | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
@@ -46,6 +51,13 @@ function App() {
       checkpoint("js.bootstrap.begin");
 
       try {
+        const migratedPreferences = await window.headTerminal.migration.loadPreferences();
+        applyMigratedPreferences(migratedPreferences);
+        setRunEverything(loadRunEverything());
+        checkpoint("js.bootstrap.preferences_ok", {
+          preferenceCount: Object.keys(migratedPreferences).length,
+        });
+
         const cwd = await resolveDefaultCwd();
         if (cancelled) {
           return;
@@ -55,7 +67,7 @@ function App() {
         setDefaultCwd(cwd);
         setBootstrapError(null);
 
-        const persisted = loadPersistedWorkspace();
+        const persisted = await loadPersistedWorkspace();
         if (persisted && persisted.sessions.length > 0) {
           const restored = hydrateWorkspace(persisted);
           hydrateWorkspaceState(
@@ -69,7 +81,12 @@ function App() {
             activePaneId: restored.activePaneId,
           });
         } else {
-          const session = createInitialSession(cwd);
+          const smokeTest = document.documentElement.dataset.headTerminalSmoke === "1";
+          const session = createInitialSession(
+            cwd,
+            undefined,
+            smokeTest ? "shell" : undefined,
+          );
           addSession(session);
           checkpoint("js.bootstrap.workspace_ok", {
             sessionCount: 1,
@@ -101,7 +118,7 @@ function App() {
     return () => {
       cancelled = true;
     };
-  }, [addSession, hydrateWorkspaceState]);
+  }, [addSession, hydrateWorkspaceState, setRunEverything]);
 
   const handleCreateSession = useCallback(() => {
     setCreateOpen(true);

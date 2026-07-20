@@ -1,12 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
-import type { IPty } from "tauri-pty";
-
 import { recordPtyWriteLatency } from "./dev-metrics";
-
-interface TauriPtyHandle extends IPty {
-  pid: number;
-  _init: Promise<void>;
-}
 
 const FLUSH_MS = 4;
 const ESCAPE_PREFIX = "\x1b";
@@ -15,31 +7,37 @@ function containsEscapeSequence(data: string): boolean {
   return data.includes(ESCAPE_PREFIX);
 }
 
-export function createQueuedPtyWriter(pty: IPty): (data: string) => void {
-  const handle = pty as TauriPtyHandle;
-  let chain = Promise.resolve();
+export interface QueuedPtyWriter {
+  (data: string): void;
+  dispose(): void;
+}
+
+export function createQueuedPtyWriter(
+  writeRaw: (data: string) => void,
+): QueuedPtyWriter {
   let buffer = "";
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
 
   const flush = () => {
+    if (flushTimer !== null) {
+      clearTimeout(flushTimer);
+    }
     flushTimer = null;
     const payload = buffer;
     buffer = "";
 
-    if (!payload) {
+    if (!payload || disposed) {
       return;
     }
 
     const startedAt = performance.now();
-    chain = chain
-      .then(async () => {
-        await handle._init;
-        await invoke("plugin:pty|write", { pid: handle.pid, data: payload });
-        recordPtyWriteLatency(performance.now() - startedAt);
-      })
-      .catch((error) => {
-        console.error("PTY write error:", error);
-      });
+    try {
+      writeRaw(payload);
+      recordPtyWriteLatency(performance.now() - startedAt);
+    } catch (error) {
+      console.error("PTY write error:", error);
+    }
   };
 
   const scheduleFlush = () => {
@@ -50,8 +48,8 @@ export function createQueuedPtyWriter(pty: IPty): (data: string) => void {
     flushTimer = setTimeout(flush, FLUSH_MS);
   };
 
-  return (data: string) => {
-    if (!data) {
+  const write: QueuedPtyWriter = (data: string) => {
+    if (!data || disposed) {
       return;
     }
 
@@ -74,4 +72,15 @@ export function createQueuedPtyWriter(pty: IPty): (data: string) => void {
 
     scheduleFlush();
   };
+
+  write.dispose = () => {
+    disposed = true;
+    buffer = "";
+    if (flushTimer !== null) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+  };
+
+  return write;
 }

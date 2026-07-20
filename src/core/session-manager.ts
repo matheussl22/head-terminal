@@ -162,7 +162,7 @@ function persistWorkspaceState(
   });
 
   if (options?.immediate) {
-    flushPersistedWorkspace(workspace);
+    void flushPersistedWorkspace(workspace).catch(() => undefined);
     return;
   }
 

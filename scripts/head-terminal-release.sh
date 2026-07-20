@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
-source "$ROOT/scripts/lib/runtime-env.sh"
+source "$PROJECT_DIR/scripts/lib/runtime-env.sh"
 
 notify_error() {
   local message="$1"
@@ -16,24 +16,30 @@ notify_error() {
   fi
 }
 
-RELEASE_BIN="$ROOT/src-tauri/target/release/head-terminal"
-LOG_DIR="$(ensure_log_dir)"
-LOG_FILE="$LOG_DIR/prod.log"
+case "$(uname -s)" in
+  Linux)
+    RELEASE_BINARY="$PROJECT_DIR/out/Head Terminal-linux-x64/head-terminal"
+    RELEASE_ARGS=("--class=head-terminal")
+    ;;
+  Darwin)
+    RELEASE_BINARY="$PROJECT_DIR/out/Head Terminal-darwin-$(uname -m)/Head Terminal.app/Contents/MacOS/head-terminal"
+    RELEASE_ARGS=()
+    ;;
+  *)
+    notify_error "Launcher local não configurado para esta plataforma. Use o artefato criado por npm run make."
+    exit 1
+    ;;
+esac
 
-if [[ ! -x "$RELEASE_BIN" ]]; then
-  notify_error "Binário de release não encontrado. Rode no projeto:\n\nnpm run build:release"
+if [[ ! -x "$RELEASE_BINARY" ]]; then
+  notify_error "Pacote Electron não encontrado. Rode no projeto: npm run package"
   exit 1
 fi
 
 ensure_display
+LOG_DIR="$(ensure_log_dir)"
+LOG_FILE="$LOG_DIR/prod.log"
+export HEAD_TERMINAL_CHANNEL="prod"
 
-if [[ -z "${DISPLAY:-}" ]]; then
-  notify_error "DISPLAY não encontrado. Abra pelo terminal gráfico ou exporte DISPLAY=:0"
-  exit 1
-fi
-
-{
-  echo "----- $(date -Is) start:prod bin=$RELEASE_BIN DISPLAY=$DISPLAY -----"
-} >>"$LOG_FILE"
-
-exec zsh -ic 'exec "$1"' zsh "$RELEASE_BIN" >>"$LOG_FILE" 2>&1
+echo "----- $(date -Is) electron:prod bin=$RELEASE_BINARY DISPLAY=${DISPLAY:-wayland} -----" >>"$LOG_FILE"
+exec "$RELEASE_BINARY" "${RELEASE_ARGS[@]}" >>"$LOG_FILE" 2>&1

@@ -375,3 +375,6 @@ Rodada 1 Fase 3 (design system) ──► §2.2, §5.1 (visual)
 | Restart do app = tela vazia | Scrollback restaurado + --continue |
 | Workspace some se limpar dados do webview | Arquivo JSON com backup |
 | Chave OpenAI em texto puro | Keyring do SO |
+# Documento histórico
+
+> Este plano descreve a implementação Tauri anterior. O runtime atual é Electron; consulte `README.md` e `electron/` para a arquitetura vigente.

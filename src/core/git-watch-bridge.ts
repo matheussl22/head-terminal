@@ -1,7 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-
 import type { GitContext, GitContextSource } from "../types/git-context";
+
+type UnlistenFn = () => void;
 
 interface GitContextPayload {
   repoRoot: string | null;
@@ -34,7 +33,7 @@ function toGitContext(
 }
 
 export async function fetchGitContext(cwd: string): Promise<GitContext> {
-  const payload = await invoke<GitContextPayload>("get_git_context", { cwd });
+  const payload = await window.headTerminal.git.getContext(cwd);
   return toGitContext(payload, "initial");
 }
 
@@ -42,20 +41,20 @@ export async function startGitWatch(
   watchId: string,
   cwd: string,
 ): Promise<void> {
-  await invoke("start_git_watch", { watchId, cwd });
+  await window.headTerminal.git.watch({ watchId, cwd });
 }
 
 export async function stopGitWatch(watchId: string): Promise<void> {
-  await invoke("stop_git_watch", { watchId });
+  await window.headTerminal.git.unwatch(watchId);
 }
 
 export async function subscribeGitContextChanges(
   onChange: (watchId: string, context: GitContext) => void,
 ): Promise<UnlistenFn> {
-  return listen<GitContextChangedEvent>("git-context://changed", (event) => {
+  return window.headTerminal.git.onChanged((event: GitContextChangedEvent) => {
     onChange(
-      event.payload.watchId,
-      toGitContext(event.payload.context, "watcher"),
+      event.watchId,
+      toGitContext(event.context, "watcher"),
     );
   });
 }
@@ -64,9 +63,7 @@ export async function fetchGitContextForPath(
   filePath: string,
   previous?: GitContext,
 ): Promise<GitContext> {
-  const payload = await invoke<GitContextPayload>("get_git_context", {
-    cwd: filePath,
-  });
+  const payload = await window.headTerminal.git.getContext(filePath);
 
   return {
     ...toGitContext(payload, "pty", previous),

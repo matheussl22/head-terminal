@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 interface SessionDiffPanelProps {
@@ -27,7 +26,7 @@ export function SessionDiffPanel({ cwd, onClose }: SessionDiffPanelProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    void invoke<string>("get_session_diff", { cwd })
+    void window.headTerminal.git.getDiff(cwd)
       .then(setDiff)
       .catch((cause) => setError(String(cause)));
   }, [cwd]);

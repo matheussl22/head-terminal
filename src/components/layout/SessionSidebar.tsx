@@ -287,10 +287,18 @@ const SessionListItem = memo(function SessionListItem({
         onContextMenu={(event) => onContextMenu(event, session)}
         onMouseLeave={() => setConfirmRemove(false)}
       >
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           className="session-sidebar__select"
           onClick={onSelect}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onSelect();
+            }
+          }}
         >
           <div className="session-sidebar__title-row">
             <StatusDot activity={activity} />
@@ -370,7 +378,7 @@ const SessionListItem = memo(function SessionListItem({
             </span>
             <SessionStatusLine activity={activity} activitySince={activitySince} />
           </span>
-        </button>
+        </div>
 
         {isActive && (
           <div className="session-sidebar__settings">

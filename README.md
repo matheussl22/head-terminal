@@ -1,142 +1,193 @@
 # Head Terminal
 
-Terminal desktop focado em **AI coding agents** (Antigravity, Claude Code, Codex, etc.).
+Terminal desktop para trabalhar com vários AI coding agents em paralelo. A aplicação usa Electron com uma UI React, um PTY nativo independente por pane e uma API restrita entre renderer e sistema operacional.
 
-- Tema preto/branco fixo
-- Toolbar com `/clear`, `/compact`, `/context`, `/help`
-- Spawn automático do agent com fallback para `zsh`
-- Linux + macOS via Tauri 2
+## Funcionalidades
 
-## Stack
+- sessões persistidas, fixação, renomeação, reordenação e troca rápida;
+- splits horizontais e verticais redimensionáveis, cada um com seu próprio PTY;
+- spawn lazy, restart por pane e preservação do scrollback;
+- perfis Antigravity, Cursor Agent, Claude Code, Codex e shell;
+- múltiplas contas Claude e worktrees Git `agent-N` opcionais;
+- busca, zoom, links, clipboard e renderização WebGL com fallback;
+- detecção de atividade, contexto restante, quedas e shell de fallback;
+- contexto, watcher e diff Git, inclusive arquivos não rastreados;
+- status MCP para Claude e Cursor;
+- voz com gravação local e transcrição OpenAI;
+- notificações, logs, checkpoints e exportação de diagnóstico;
+- instância única e confirmação antes de fechar agents trabalhando.
 
-| Camada | Tecnologia |
-|--------|------------|
-| Shell app | Tauri 2 |
+## Arquitetura
+
+```text
+React 19 + xterm.js + Zustand
+              │
+              ▼
+window.headTerminal (preload tipado)
+              │ IPC nomeado e validado
+              ▼
+Electron main ── node-pty / Git / filesystem / safeStorage / voz
+```
+
+O renderer não possui acesso a Node ou ao `ipcRenderer`. A janela usa `contextIsolation`, sandbox, CSP e `nodeIntegration: false`. Main e preload são empacotados pelo Vite; Electron Forge reconstrói e desempacota `node-pty` dentro do pacote.
+
+| Área | Tecnologia |
+|---|---|
+| Desktop | Electron 41 + Electron Forge |
 | UI | React 19 + TypeScript + Vite |
-| Terminal | xterm.js |
-| PTY | tauri-plugin-pty |
+| Terminal | xterm.js + node-pty |
+| Estado | Zustand + workspace JSON versionado |
+| Testes | Vitest + smoke Electron/X11 |
 
 ## Pré-requisitos
 
-### macOS
+### Todos os sistemas
+
+- Node.js 20 (o baseline atual é Node `20.18.3`);
+- npm;
+- toolchain nativa para compilar módulos Node (`node-pty`);
+- ao menos um shell suportado instalado.
+
+Instale as dependências JavaScript com:
 
 ```bash
-xcode-select --install
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+npm install
 ```
 
 ### Linux (Ubuntu/Debian)
 
 ```bash
-sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
-  libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+sudo apt install build-essential python3 make g++ libsecret-1-0
 ```
 
-### Ambos
+Para gravação por voz:
 
-- Node.js 20+
-- Rust stable
+```bash
+sudo apt install pulseaudio-utils
+command -v parecord
+```
+
+O smoke e o harness visual usam `xdotool` e, preferencialmente, um display isolado:
+
+```bash
+sudo apt install xvfb xdotool imagemagick
+```
+
+Em Wayland, a aplicação funciona via Electron/Ozone, mas a automação visual atual usa X11/XWayland. A gravação implementada hoje depende de `parecord`; sem ele, somente voz fica indisponível.
+
+### macOS
+
+```bash
+xcode-select --install
+```
+
+Desenvolvimento e pacote ZIP são suportados. A distribuição pública ainda exige configurar assinatura, hardened runtime, entitlements e notarização. A captura de voz atual usa `parecord`, portanto voz no macOS ainda requer um backend nativo próprio antes de ser considerada suportada.
 
 ## Comandos
 
 ```bash
-cd ~/Documentos/head-terminal
-npm install
-npm run tauri dev      # desenvolvimento
-npm run tauri build    # build de produção
-npm run build          # só frontend
+npm run dev                         # Electron + Vite com hot reload
+npm run typecheck                   # renderer, main, preload e configs
+npm test                            # testes do renderer/core
+npm run test:electron               # services e contrato IPC
+npm run package                     # app unpacked em out/
+npm run make                        # artefatos de distribuição da plataforma
+npm run build                       # typecheck + package
+npm run smoke:electron              # package + boot real e verificação da janela
+npm run smoke:electron:existing     # smoke no pacote já existente
 ```
 
-## Atalho no menu Ubuntu (favoritar no dock)
+No Linux, `npm run make` produz o `.deb` em `out/make/deb/`. No macOS, produz ZIP. Builds devem ser feitos na plataforma de destino; módulos nativos não são portáveis entre sistemas ou versões do Electron.
 
-O GNOME só mostra **“Adicionar aos favoritos”** quando o `.desktop` tem `StartupWMClass`
-igual ao da janela do app.
+O runtime e o empacotamento são exclusivamente Electron; o backend Tauri/Rust foi removido. O leitor WebKit no processo principal existe somente para importar, uma única vez, dados de instalações antigas.
 
-**Modo desenvolvimento** (abre via `npm run tauri dev`):
+## Launchers no Linux
+
+O instalador local cria duas entradas sem precisar de `sudo`:
 
 ```bash
-npm run install:desktop
+npm run install:desktop             # instala Head Terminal (Dev)
+npm run package
+npm run install:desktop:release     # instala também Head Terminal
 ```
 
-Depois: menu de aplicativos → busque **Head Terminal** → clique direito → **Adicionar aos favoritos**.
+| Entrada | Destino |
+|---|---|
+| Head Terminal | pacote Electron em `out/Head Terminal-linux-x64/` |
+| Head Terminal (Dev) | `npm run dev`, com Vite e hot reload |
 
-**Modo produção** (após build):
+O modo dev usa launcher, logs, classe de janela e diretório de dados próprios; não o use para sessões que não podem ser interrompidas por reload.
+
+Para instalar o pacote Debian gerado:
 
 ```bash
-npm run tauri build
-sudo apt install ./src-tauri/target/release/bundle/deb/head-terminal_*.deb
+npm run make
+sudo apt install ./out/make/deb/x64/head-terminal_*.deb
 ```
 
-Ou, para apontar o atalho local ao binário release:
-
-```bash
-npm run install:desktop:release
-```
-
-Se o favorito não agrupar com a janela aberta, reinicie a sessão GNOME (`Alt+F2` → `r`) após instalar o atalho.
-
-### Erro ao reabrir pelo menu
-
-O atalho **Head Terminal** usa o binário de **produção** (estável). Se você favoritou o modo dev por engano, ou o atalho apontava para `tauri dev`, ao fechar a janela o Vite podia continuar na porta `1420` e a segunda abertura falhava.
-
-**Correção:**
-
-```bash
-cd ~/Documentos/head-terminal
-npm run build:release      # se ainda não compilou
-npm run install:desktop    # recria os atalhos Dev + Prod
-```
-
-Depois remova o favorito antigo do dock e adicione de novo **Head Terminal** (sem “Dev”).
-
-| Atalho no menu | Uso |
-|----------------|-----|
-| **Head Terminal** | Uso diário — abre/fecha normalmente pelo dock |
-| **Head Terminal (Dev)** | Só para editar UI — hot reload mata sessões do agent |
-
-## Atalhos
+## Atalhos principais
 
 | Atalho | Ação |
-|--------|------|
-| Ctrl+Shift+L | `/clear` no terminal ativo (ou em todos com Run everything) |
+|---|---|
+| `Ctrl+Shift+P` | abrir paleta de comandos |
+| `Ctrl+F` | buscar no terminal ativo |
+| `Ctrl+Shift+C` / `Ctrl+Shift+V` | copiar / colar |
+| `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | zoom |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | próxima / sessão anterior |
+| `Ctrl+1..9` | selecionar sessão |
+| `Ctrl+Shift+L` | `/clear` no terminal ativo ou em todos |
 
-## Sessões e splits
+Os botões `Split ↓` e `Split →` dividem o pane ativo. “Run everything” envia comandos da toolbar a todos os panes da sessão.
 
-- **+ Nova** na sidebar cria outra sessão (PTY independente)
-- Trocar de sessão não encerra os agents — tudo continua em background
-- **Split ↓ / Split →** divide o terminal ativo da sessão atual
-- **Run everything**: comandos da toolbar vão para todos os terminais da sessão
+## Agents
 
-## Configuração de agents
+Os perfis ficam em `src/config/agents.ts`:
 
-Perfis em `src/config/agents.ts`. O padrão spawna:
-
-| Agent | Comando |
-|-------|---------|
+| Perfil | Executável esperado |
+|---|---|
 | Antigravity | `agy` |
-| Cursor Agent | `cursor agent` |
+| Cursor Agent | `cursor` |
 | Claude Code | `claude` |
 | Codex CLI | `codex` |
-| Shell | `zsh -l` |
+| Shell | shell configurado / `zsh` |
 
-Agent primeiro (Cursor Agent), shell normal ao sair.
+O Head Terminal herda o ambiente do launcher gráfico e completa `PATH`, locale e variáveis de terminal antes de iniciar o PTY.
 
 ## Estrutura
 
-```
+```text
+electron/
+├── main.ts              # lifecycle e BrowserWindow
+├── preload.ts           # window.headTerminal
+├── ipc/                 # canais, validação e handlers
+├── services/            # PTY, Git, sistema, segredo, voz e persistência
+└── types/               # contrato compartilhado
 src/
-├── actions/          # sendAgentCommand
-├── components/       # AppShell, toolbar, terminal
-├── config/           # theme, agents, toolbar
-├── core/             # session manager, pty bridge
-├── hooks/            # useAgentSession
+├── actions/
+├── components/
+├── config/
+├── core/
+├── hooks/
 └── types/
+tests/electron/          # services, contrato IPC e infraestrutura Electron
+scripts/                 # launchers, E2E e smoke
 ```
 
-## Próximas fases
+## Validação e diagnóstico
 
-- Múltiplas abas ativas
-- Botão "+ Nova" na sidebar
-- Persistência de sessões
-- Split pane agent + shell
+O smoke encerra o grupo de processos mesmo em falha e usa Xvfb quando não existe um `DISPLAY` utilizável. Para exigir display/xdotool em CI:
+
+```bash
+HEAD_TERMINAL_SMOKE_REQUIRE_DISPLAY=1 npm run smoke:electron
+```
+
+O harness interativo oferece screenshot, teclado e clique num display isolado:
+
+```bash
+npm run e2e -- start
+npm run e2e -- shot /tmp/head-terminal.png
+npm run e2e -- key ctrl+shift+p
+npm run e2e -- stop
+```
+
+Falhas do launcher local ficam em `~/.local/share/head-terminal/logs/`.

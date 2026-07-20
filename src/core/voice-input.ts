@@ -1,7 +1,7 @@
 import { sendTextToPane } from "../actions/sendAgentCommand";
 import { logEvent } from "./logger";
 import { useSessionStore } from "./session-manager";
-import { resolveOpenAiApiKey } from "./openai-credentials";
+import { hasOpenAiApiKey } from "./openai-credentials";
 import { startVoiceRecording, stopAndTranscribeVoice } from "./voice-bridge";
 
 let audioCtx: AudioContext | null = null;
@@ -77,17 +77,7 @@ export async function toggleVoiceInput(
   logEvent("info", "voice.transcribe_begin", { paneId });
 
   try {
-    const apiKey = await resolveOpenAiApiKey();
-    if (!apiKey) {
-      logEvent("error", "voice.transcribe_failed", {
-        paneId,
-        message: "Configure sua chave da OpenAI nas Configurações.",
-      });
-      options?.onError?.();
-      return;
-    }
-
-    const text = await stopAndTranscribeVoice(apiKey);
+    const text = await stopAndTranscribeVoice();
     if (text) {
       logEvent("info", "voice.transcribe_ok", {
         paneId,
@@ -110,6 +100,6 @@ export async function toggleVoiceInput(
 }
 
 export async function prewarmOpenAiApiKey(): Promise<void> {
-  const key = await resolveOpenAiApiKey();
-  logEvent("info", "voice.api_key.prewarm", { found: Boolean(key) });
+  const found = await hasOpenAiApiKey();
+  logEvent("info", "voice.api_key.prewarm", { found });
 }

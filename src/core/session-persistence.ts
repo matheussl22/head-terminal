@@ -80,7 +80,7 @@ export function hydrateWorkspace(workspace: PersistedWorkspace): {
   return { sessions, activeSessionId, activePaneId };
 }
 
-export function loadPersistedWorkspace(): PersistedWorkspace | null {
+function loadLegacyWorkspace(): PersistedWorkspace | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
@@ -103,17 +103,52 @@ export function loadPersistedWorkspace(): PersistedWorkspace | null {
   }
 }
 
-export function savePersistedWorkspace(workspace: PersistedWorkspace): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+export async function loadPersistedWorkspace(): Promise<PersistedWorkspace | null> {
+  if (typeof window !== "undefined" && window.headTerminal) {
+    try {
+      const stored = await window.headTerminal.workspace.load();
+      if (
+        stored &&
+        stored.version === 1 &&
+        Array.isArray(stored.sessions)
+      ) {
+        return stored as unknown as PersistedWorkspace;
+      }
+    } catch {
+      // A first-run migration may still recover the legacy renderer storage.
+    }
+  }
+
+  const legacy = loadLegacyWorkspace();
+  if (legacy && typeof window !== "undefined" && window.headTerminal) {
+    void window.headTerminal.workspace.save(legacy).catch(() => undefined);
+  }
+  return legacy;
 }
 
-const debouncedSave = debounce(savePersistedWorkspace, 400);
+export async function savePersistedWorkspace(
+  workspace: PersistedWorkspace,
+): Promise<void> {
+  if (typeof window !== "undefined" && window.headTerminal) {
+    await window.headTerminal.workspace.save(workspace);
+    return;
+  }
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+  }
+}
+
+const debouncedSave = debounce((workspace: PersistedWorkspace) => {
+  void savePersistedWorkspace(workspace).catch(() => undefined);
+}, 400);
 
 export function schedulePersistedWorkspace(workspace: PersistedWorkspace): void {
   debouncedSave(workspace);
 }
 
-export function flushPersistedWorkspace(workspace: PersistedWorkspace): void {
-  debouncedSave.flush();
-  savePersistedWorkspace(workspace);
+export async function flushPersistedWorkspace(
+  workspace: PersistedWorkspace,
+): Promise<void> {
+  debouncedSave.cancel();
+  await savePersistedWorkspace(workspace);
 }
