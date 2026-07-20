@@ -1,0 +1,312 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  background: var(--surface-window);
+  color: var(--text-primary);
+
+  /* Hyper palette — shared with xterm in src/config/theme.ts */
+  --hyper-bg: #000000;
+  --hyper-fg: #ffffff;
+  --hyper-accent: var(--accent);
+  --hyper-accent-muted: var(--accent-muted);
+  --hyper-enabled: var(--status-working);
+  --hyper-enabled-muted: rgba(103, 248, 111, 0.2);
+  --hyper-border: var(--border-default);
+  --hyper-green: #1dc121;
+  --hyper-light-green: #67f86f;
+  --hyper-light-magenta: #fd7cfc;
+  --hyper-terminal-padding: 12px 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.28);
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--surface-window);
+}
+
+button {
+  font: inherit;
+}
+
+:where(button, input, select):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* App shell */
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-window);
+}
+
+.app-shell__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-shell__main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Boot screen */
+
+.boot-screen {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-window);
+}
+
+.boot-screen__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+}
+
+.boot-screen__logo {
+  color: var(--accent);
+  font-size: 20px;
+}
+
+.boot-screen__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.boot-screen__subtitle {
+  margin: 0;
+  font-size: var(--font-md);
+  color: var(--text-secondary);
+}
+
+.boot-screen__subtitle--error {
+  color: var(--status-error);
+  text-align: center;
+  max-width: 360px;
+}
+
+.boot-screen__retry {
+  margin-top: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-sm);
+  background: var(--button-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.boot-screen__retry:hover {
+  background: var(--button-hover);
+}
+
+.boot-screen__progress {
+  width: 100%;
+  height: 3px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.boot-screen__progress-bar {
+  width: 40%;
+  height: 100%;
+  background: var(--gradient-brand);
+  border-radius: 999px;
+}
+
+.boot-screen__meta {
+  margin: 4px 0 0;
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+}
+
+.boot-screen__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.boot-screen__export-path {
+  margin: 4px 0 0;
+  font-size: var(--font-xs);
+  color: var(--text-secondary);
+}
+
+/* Shared status primitives */
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.status-badge--starting {
+  color: var(--status-starting);
+  background: rgba(106, 118, 251, 0.15);
+}
+
+.status-badge--idle {
+  color: var(--status-idle);
+  background: rgba(104, 104, 104, 0.2);
+}
+
+.status-badge--working {
+  color: var(--status-working);
+  background: rgba(103, 248, 111, 0.15);
+}
+
+.status-badge--waiting {
+  color: var(--status-waiting);
+  background: rgba(255, 250, 114, 0.12);
+}
+
+.status-badge--fallback {
+  color: var(--status-fallback);
+  background: rgba(255, 169, 77, 0.15);
+}
+
+.status-badge--error {
+  color: var(--status-error);
+  background: rgba(253, 111, 107, 0.15);
+}
+
+.status-badge--exited {
+  color: var(--status-exited);
+  background: rgba(104, 104, 104, 0.2);
+}
+
+/* Tooltip */
+
+.tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  z-index: var(--z-tooltip);
+}
+
+.tooltip:hover::after {
+  opacity: 1;
+}
+
+/* Git badge */
+
+.git-branch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: Menlo, "DejaVu Sans Mono", Consolas, monospace;
+  font-size: var(--font-xs);
+  color: var(--accent);
+}
+
+.git-branch-badge__icon {
+  color: var(--text-muted);
+}
+
+.git-branch-badge__path {
+  color: var(--text-muted);
+}
+
+/* Dev metrics */
+
+.dev-metrics {
+  position: fixed;
+  top: calc(var(--toolbar-height) + 6px);
+  right: 8px;
+  bottom: auto;
+  z-index: var(--z-menu);
+  display: flex;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--border-default);
+  font-size: 10px;
+  font-family: monospace;
+  color: rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
