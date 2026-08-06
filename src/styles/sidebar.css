@@ -1,188 +1,115 @@
-/* Sidebar — execution information center */
+/* Sidebar — compact navigation rail with tonal selection and crisp hairlines. */
 
 .session-sidebar {
   width: var(--sidebar-width);
   flex: 0 0 var(--sidebar-width);
-  border-right: 1px solid var(--border-subtle);
-  background: var(--surface-sidebar);
   display: flex;
   flex-direction: column;
-  transition:
-    width var(--transition-normal),
-    flex-basis var(--transition-normal);
+  border-right: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-sidebar) 94%, #101a2b 6%);
+  box-shadow: inset -1px 0 rgba(0, 0, 0, 0.12);
+  transition: width var(--transition-normal), flex-basis var(--transition-normal);
 }
 
-.session-sidebar--collapsed {
-  width: var(--sidebar-collapsed-width);
-  flex-basis: var(--sidebar-collapsed-width);
-}
+.session-sidebar--collapsed { width: var(--sidebar-collapsed-width); flex-basis: var(--sidebar-collapsed-width); }
 
 .session-sidebar__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
-  min-height: 44px;
-  padding: 8px 10px 8px 12px;
+  gap: 8px;
+  min-height: 48px;
+  padding: 7px 8px 7px 13px;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: var(--font-sm);
   color: var(--text-secondary);
+  font-size: var(--font-sm);
 }
 
 .session-sidebar__header-title {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .session-sidebar__working-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  height: 18px;
+  min-width: 19px;
+  height: 19px;
   padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--status-working) 24%, transparent);
   border-radius: 999px;
-  background: rgba(103, 248, 111, 0.2);
-  color: var(--status-working);
+  background: color-mix(in srgb, var(--status-working) 10%, transparent);
+  color: color-mix(in srgb, var(--status-working) 78%, var(--text-primary));
   font-size: 10px;
   font-weight: 700;
 }
 
-.session-sidebar--collapsed .session-sidebar__header {
-  justify-content: center;
-  padding: 10px var(--space-2);
-}
-
-.session-sidebar__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.session-sidebar--collapsed .session-sidebar__header-actions {
-  width: 100%;
-  flex-direction: column;
-  justify-content: center;
-}
+.session-sidebar__header-actions { display: flex; align-items: center; gap: 4px; }
+.session-sidebar--collapsed .session-sidebar__header { justify-content: center; padding: 8px 6px; }
+.session-sidebar--collapsed .session-sidebar__header-actions { width: 100%; flex-direction: column; justify-content: center; }
 
 .session-sidebar__toggle,
-.session-sidebar__new {
+.session-sidebar__new,
+.session-sidebar__compact-new,
+.session-sidebar__compact-item {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  border: 1px solid var(--button-border);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--border-default) 76%, transparent);
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
-.session-sidebar__toggle {
-  min-width: 28px;
-  height: 28px;
-  padding: 0 6px;
-}
-
-.session-sidebar__toggle:hover,
-.session-sidebar__new:hover {
-  background: var(--button-hover);
-}
-
-.session-sidebar__new {
-  min-height: 28px;
-  padding: 4px 9px;
-  border-color: rgba(248, 28, 229, 0.26);
-  background: var(--accent-subtle);
-  font-size: var(--font-sm);
-}
+.session-sidebar__toggle { width: 32px; height: 32px; padding: 0; border-color: transparent; border-radius: 7px; background: transparent; }
+.session-sidebar__new { min-height: 32px; gap: 5px; padding: 0 9px; border-radius: 7px; background: color-mix(in srgb, var(--text-primary) 5%, transparent); font-size: var(--font-sm); }
+.session-sidebar__toggle:hover, .session-sidebar__new:hover, .session-sidebar__compact-new:hover, .session-sidebar__compact-item:hover { background: color-mix(in srgb, var(--text-primary) 8%, transparent); color: var(--text-primary); }
+.session-sidebar__toggle:focus-visible, .session-sidebar__new:focus-visible, .session-sidebar__compact-new:focus-visible, .session-sidebar__compact-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 .session-sidebar__list {
-  list-style: none;
-  margin: 0;
-  padding: var(--space-2);
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
   overflow-y: auto;
-  flex: 1;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
 }
 
-.session-sidebar--collapsed .session-sidebar__list {
-  padding: 8px 6px;
-  align-items: center;
-}
-
-.session-sidebar__footer {
-  padding: 8px 6px 10px;
-  display: flex;
-  justify-content: center;
-}
-
-/* Collapsed rail: initial chip with activity status ring */
+.session-sidebar--collapsed .session-sidebar__list { align-items: center; padding: 8px 6px; gap: 5px; }
+.session-sidebar__footer { display: flex; justify-content: center; padding: 8px 6px 10px; border-top: 1px solid var(--border-subtle); }
 
 .session-sidebar__compact-new,
 .session-sidebar__compact-item {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 36px;
   height: 36px;
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.88);
-  font-size: var(--font-md);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  padding: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
 }
 
-.session-sidebar__compact-item--active {
-  background: var(--accent-subtle);
+.session-sidebar__compact-item::after {
+  position: absolute;
+  left: -7px;
+  width: 2px;
+  height: 14px;
+  border-radius: 2px;
+  background: transparent;
+  content: "";
 }
 
-.session-sidebar__compact-item--ring-working {
-  border-color: var(--status-working);
-  animation: status-pulse 1.5s ease-in-out infinite;
-}
-
-.session-sidebar__compact-item--ring-waiting_input {
-  border-color: var(--status-waiting);
-}
-
-.session-sidebar__compact-item--ring-error {
-  border-color: var(--status-error);
-}
-
-.session-sidebar__compact-item--ring-agent_fallback {
-  border-color: var(--status-fallback);
-}
-
-.session-sidebar__compact-new:hover,
-.session-sidebar__compact-item:hover {
-  background: var(--button-hover);
-}
-
-/* Session card */
-
-.session-sidebar__action--confirm {
-  background: var(--status-error);
-  color: #fff;
-  border-radius: var(--radius-sm);
-}
-
-.session-sidebar__item--glow-waiting_input {
-  border-color: rgba(255, 250, 114, 0.42);
-}
-
-.session-sidebar__item--glow-error,
-.session-sidebar__item--glow-agent_fallback {
-  border-color: rgba(253, 111, 107, 0.46);
-}
+.session-sidebar__compact-item--active { border-color: color-mix(in srgb, var(--text-primary) 15%, transparent); background: color-mix(in srgb, #8da2c4 16%, transparent); color: var(--text-primary); }
+.session-sidebar__compact-item--active::after { background: color-mix(in srgb, var(--text-primary) 70%, #8da2c4); }
+.session-sidebar__compact-item--ring-working { border-color: color-mix(in srgb, var(--status-working) 58%, var(--border-default)); }
+.session-sidebar__compact-item--ring-waiting_input { border-color: color-mix(in srgb, var(--status-waiting) 58%, var(--border-default)); }
+.session-sidebar__compact-item--ring-error { border-color: color-mix(in srgb, var(--status-error) 64%, var(--border-default)); }
+.session-sidebar__compact-item--ring-agent_fallback { border-color: color-mix(in srgb, var(--status-fallback) 58%, var(--border-default)); }
 
 .session-sidebar__item {
   position: relative;
@@ -190,69 +117,28 @@
   flex-direction: column;
   align-items: stretch;
   border: 1px solid transparent;
-  border-left: 2px solid transparent;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.025);
+  border-radius: 9px;
+  background: transparent;
   transition: background var(--transition-fast), border-color var(--transition-fast);
 }
 
-.session-sidebar__item:hover {
-  background: rgba(255, 255, 255, 0.052);
+.session-sidebar__item::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: -5px;
+  width: 2px;
+  border-radius: 2px;
+  background: transparent;
+  content: "";
 }
 
-.session-sidebar__item--active {
-  border-color: rgba(255, 255, 255, 0.12);
-  border-left-color: var(--accent);
-  background: rgba(255, 255, 255, 0.075);
-}
-
-.session-sidebar__title-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.session-sidebar__pin {
-  font-size: 10px;
-  line-height: 1;
-}
-
-.session-sidebar__title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-md);
-  font-weight: 600;
-}
-
-.session-sidebar__agent-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-default);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-secondary);
-}
-
-.session-sidebar__account-chip {
-  max-width: 92px;
-  overflow: hidden;
-  padding: 2px 5px;
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--text-secondary);
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.session-sidebar__item:hover { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+.session-sidebar__item:focus-within { border-color: color-mix(in srgb, var(--text-primary) 14%, transparent); }
+.session-sidebar__item--active { border-color: color-mix(in srgb, #9fb4d4 16%, transparent); background: color-mix(in srgb, #91a8c9 11%, transparent); }
+.session-sidebar__item--active::before { background: color-mix(in srgb, #aec2df 78%, var(--text-primary)); }
+.session-sidebar__item--glow-waiting_input { border-color: color-mix(in srgb, var(--status-waiting) 30%, transparent); }
+.session-sidebar__item--glow-error, .session-sidebar__item--glow-agent_fallback { border-color: color-mix(in srgb, var(--status-error) 34%, transparent); }
 
 .session-sidebar__select {
   display: flex;
@@ -260,184 +146,70 @@
   flex-direction: column;
   gap: 4px;
   width: 100%;
-  padding: 9px 52px 9px 10px;
+  min-height: 64px;
+  padding: 9px 56px 8px 10px;
   border: 0;
+  border-radius: inherit;
+  outline: none;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
 }
 
-.session-sidebar__actions {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
+.session-sidebar__select:focus-visible { box-shadow: inset var(--focus-ring); }
+.session-sidebar__title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.session-sidebar__pin { font-size: 10px; line-height: 1; filter: grayscale(1); opacity: 0.75; }
+.session-sidebar__title { flex: 1; min-width: 0; overflow: hidden; color: var(--text-primary); font-size: var(--font-md); font-weight: 590; letter-spacing: -0.005em; text-overflow: ellipsis; white-space: nowrap; }
 
-.session-sidebar__item:hover .session-sidebar__actions,
-.session-sidebar__item--active .session-sidebar__actions {
-  opacity: 1;
-}
-
-.session-sidebar__action {
+.session-sidebar__agent-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.45);
-  cursor: pointer;
-}
-
-.session-sidebar__action:hover {
-  color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.session-sidebar__action--remove:hover {
-  color: var(--status-error);
-  background: rgba(253, 111, 107, 0.15);
-}
-
-.session-sidebar__rename-input {
-  width: 100%;
-  padding: 2px 4px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.5);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--font-sm);
-  font-weight: 600;
-}
-
-.session-sidebar__meta {
-  font-family: Menlo, "DejaVu Sans Mono", Consolas, monospace;
-  font-size: var(--font-xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-sidebar__status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--font-xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.session-sidebar__pane-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
   flex: 0 0 auto;
+  width: 21px;
+  height: 21px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  color: var(--text-secondary);
 }
 
-.session-sidebar__pane-dot {
-  width: 8px;
-  height: 8px;
-  padding: 0;
-  border: 0;
-  border-radius: 2px;
-  cursor: pointer;
-  opacity: 0.85;
-}
+.session-sidebar__account-chip { max-width: 84px; overflow: hidden; padding: 2px 5px; border: 1px solid var(--border-subtle); border-radius: 999px; color: var(--text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.session-sidebar__meta { overflow: hidden; color: var(--text-muted); font-family: Menlo, "SFMono-Regular", "DejaVu Sans Mono", monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.session-sidebar__git-badge { display: block; overflow: hidden; margin-top: 1px; font-size: var(--font-xs); text-overflow: ellipsis; white-space: nowrap; }
+.session-sidebar__status { display: flex; align-items: center; gap: 6px; overflow: hidden; color: var(--text-muted); font-size: var(--font-xs); white-space: nowrap; }
+.session-sidebar__pane-dots { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; }
 
-.session-sidebar__pane-dot--starting,
-.session-sidebar__pane-dot--idle {
-  background: rgba(255, 255, 255, 0.2);
-}
+.session-sidebar__pane-dot { width: 8px; height: 8px; padding: 0; border: 1px solid color-mix(in srgb, var(--text-primary) 10%, transparent); border-radius: 50%; cursor: pointer; opacity: 0.82; }
+.session-sidebar__pane-dot:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.session-sidebar__pane-dot--starting, .session-sidebar__pane-dot--idle { background: color-mix(in srgb, var(--text-primary) 22%, transparent); }
+.session-sidebar__pane-dot--working { background: var(--status-working); }
+.session-sidebar__pane-dot--waiting_input { background: var(--status-waiting); }
+.session-sidebar__pane-dot--error { background: var(--status-error); }
+.session-sidebar__pane-dot--agent_fallback { background: var(--status-fallback); }
+.session-sidebar__pane-dot--exited { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
 
-.session-sidebar__pane-dot--working {
-  background: var(--status-working);
-  animation: status-pulse 1.5s ease-in-out infinite;
-}
+.session-sidebar__actions { position: absolute; top: 6px; right: 6px; display: flex; align-items: center; gap: 2px; opacity: 0; transition: opacity var(--transition-fast); }
+.session-sidebar__item:hover .session-sidebar__actions, .session-sidebar__item--active .session-sidebar__actions, .session-sidebar__item:focus-within .session-sidebar__actions { opacity: 1; }
+.session-sidebar__action { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.session-sidebar__action:hover { background: color-mix(in srgb, var(--text-primary) 9%, transparent); color: var(--text-primary); }
+.session-sidebar__action:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.session-sidebar__action--remove:hover { background: color-mix(in srgb, var(--status-error) 13%, transparent); color: var(--status-error); }
+.session-sidebar__action--confirm { background: var(--status-error); color: #fff; }
 
-.session-sidebar__pane-dot--waiting_input {
-  background: var(--status-waiting);
-}
+.session-sidebar__rename-input, .session-sidebar__cwd-input { width: 100%; border: 1px solid color-mix(in srgb, #9fb4d4 34%, var(--border-default)); border-radius: 7px; outline: none; background: color-mix(in srgb, var(--surface-window) 78%, transparent); color: var(--text-primary); font: inherit; }
+.session-sidebar__rename-input { padding: 3px 5px; font-size: var(--font-sm); font-weight: 600; }
+.session-sidebar__cwd-input { min-height: 32px; padding: 6px 8px; font-family: Menlo, "SFMono-Regular", monospace; font-size: var(--font-xs); }
+.session-sidebar__rename-input:focus, .session-sidebar__cwd-input:focus { box-shadow: var(--focus-ring); }
+.session-sidebar__settings { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 9px; }
 
-.session-sidebar__pane-dot--error {
-  background: var(--status-error);
-}
+.session-context-menu { position: fixed; z-index: var(--z-menu); min-width: 176px; padding: 5px; border: 1px solid var(--border-default); border-radius: 10px; background: color-mix(in srgb, var(--surface-elevated) 96%, #172135 4%); box-shadow: 0 14px 38px rgba(0, 0, 0, 0.42), inset 0 1px rgba(255, 255, 255, 0.04); }
+.session-context-menu button { display: block; width: 100%; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; }
+.session-context-menu button:hover { background: color-mix(in srgb, var(--text-primary) 8%, transparent); }
+.session-context-menu button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.session-context-menu__danger { color: var(--status-error) !important; }
 
-.session-sidebar__pane-dot--agent_fallback {
-  background: var(--status-fallback);
-}
-
-.session-sidebar__pane-dot--exited {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.session-sidebar__git-badge {
-  display: block;
-  margin-top: 2px;
-  font-size: var(--font-xs);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-sidebar__settings {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0 10px 8px;
-}
-
-.session-sidebar__cwd-input {
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.5);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--font-sm);
-}
-
-/* Context menu (right-click on a session) */
-
-.session-context-menu {
-  position: fixed;
-  z-index: var(--z-menu);
-  min-width: 160px;
-  padding: 4px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--surface-elevated);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-}
-
-.session-context-menu button {
-  display: block;
-  width: 100%;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-primary);
-  text-align: left;
-  cursor: pointer;
-}
-
-.session-context-menu button:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.session-context-menu__danger {
-  color: var(--status-error) !important;
+@media (prefers-reduced-motion: reduce) {
+  .session-sidebar, .session-sidebar__item, .session-sidebar__actions { transition: none; }
 }

@@ -203,7 +203,11 @@ export function TerminalPaneHeader({
             ctx {contextPercent}%
           </span>
         )}
-        <span className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}>
+        <span
+          className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}
+          aria-label={`Status do terminal: ${ACTIVITY_LABEL[activity]}`}
+        >
+          <span className="terminal-pane-header__status-dot" aria-hidden />
           {ACTIVITY_LABEL[activity]}
         </span>
         {activity === "agent_fallback" && (

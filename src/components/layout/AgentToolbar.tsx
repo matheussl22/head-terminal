@@ -70,7 +70,8 @@ export function AgentToolbar({
       </div>
 
       <div className="agent-toolbar__actions">
-        <Tooltip content="Dividir verticalmente (Ctrl+\\)">
+        <div className="agent-toolbar__action-group" aria-label="Organização dos painéis">
+          <Tooltip content="Dividir verticalmente (Ctrl+\\)">
           <button
             type="button"
             className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
@@ -79,9 +80,9 @@ export function AgentToolbar({
           >
             <IconSplitVertical />
           </button>
-        </Tooltip>
+          </Tooltip>
 
-        <Tooltip content="Dividir horizontalmente (Ctrl+Shift+\\)">
+          <Tooltip content="Dividir horizontalmente (Ctrl+Shift+\\)">
           <button
             type="button"
             className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
@@ -90,9 +91,11 @@ export function AgentToolbar({
           >
             <IconSplitHorizontal />
           </button>
-        </Tooltip>
+          </Tooltip>
+        </div>
 
-        <Tooltip content={`Paleta de comandos (${COMMAND_PALETTE_SHORTCUT})`}>
+        <div className="agent-toolbar__action-group" aria-label="Ferramentas">
+          <Tooltip content={`Paleta de comandos (${COMMAND_PALETTE_SHORTCUT})`}>
           <button
             type="button"
             className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
@@ -101,9 +104,9 @@ export function AgentToolbar({
           >
             <IconCommand />
           </button>
-        </Tooltip>
+          </Tooltip>
 
-        <Tooltip content="Configurações">
+          <Tooltip content="Configurações">
           <button
             type="button"
             className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
@@ -112,7 +115,8 @@ export function AgentToolbar({
           >
             <IconSettings />
           </button>
-        </Tooltip>
+          </Tooltip>
+        </div>
       </div>
     </header>
   );

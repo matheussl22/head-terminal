@@ -929,3 +929,95 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Obsidian Spatial modal system. */
+.create-session-backdrop,
+.command-palette-backdrop {
+  background: rgba(2, 4, 8, 0.66);
+  backdrop-filter: blur(10px) saturate(115%);
+}
+
+.create-session-dialog,
+.command-palette,
+.settings-dialog {
+  border-color: var(--border-default);
+  background: linear-gradient(180deg, rgba(26, 32, 48, 0.98), rgba(13, 15, 22, 0.98));
+  box-shadow: var(--shadow-elevated), inset 0 1px 0 rgba(255, 255, 255, 0.055);
+}
+
+.create-session-dialog__header,
+.settings-dialog__header {
+  border-bottom-color: var(--border-subtle);
+  background: rgba(255, 255, 255, 0.012);
+}
+
+.create-session-dialog__close,
+.settings-icon-button {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.create-session-dialog__field input,
+.settings-content input,
+.settings-content select,
+.command-palette__input {
+  min-height: 40px;
+  border-color: var(--border-default);
+  border-radius: var(--radius-sm);
+  background: rgba(5, 6, 9, 0.62);
+  color: var(--text-primary);
+}
+
+.create-session-dialog__agent,
+.create-session-dialog__profile,
+.create-session-dialog__worktree,
+.settings-card,
+.settings-profile-card {
+  border-color: var(--border-subtle);
+  background: rgba(255, 255, 255, 0.025);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.create-session-dialog__agent:hover:not(:disabled),
+.create-session-dialog__profile:hover,
+.settings-card:hover {
+  border-color: var(--border-default);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.create-session-dialog__agent--active,
+.create-session-dialog__profile--active,
+.settings-nav__item--active {
+  border-color: var(--border-active);
+  background: var(--accent-subtle);
+}
+
+.create-session-dialog__actions .create-session-dialog__create,
+.settings-primary-button {
+  border-color: var(--border-active);
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.18), rgba(167, 139, 250, 0.14));
+}
+
+.command-palette__item--active {
+  background: var(--accent-subtle);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.session-context-menu {
+  border-color: var(--border-default);
+  background: rgba(18, 22, 33, 0.98);
+  box-shadow: var(--shadow-elevated);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .create-session-backdrop,
+  .command-palette-backdrop {
+    backdrop-filter: none;
+  }
+
+  .create-session-dialog,
+  .command-palette,
+  .settings-dialog {
+    background: var(--bg-2);
+  }
+}

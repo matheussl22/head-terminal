@@ -1,4 +1,4 @@
-/* Toolbar — three zones: brand+global status | agent commands | layout/settings */
+/* Navigation chrome — quiet, tactile and deliberately macOS-like. */
 
 .agent-toolbar {
   display: flex;
@@ -6,114 +6,134 @@
   justify-content: space-between;
   gap: var(--space-4);
   min-height: var(--toolbar-height);
-  padding: 0 14px;
+  padding: 0 12px 0 15px;
   border-bottom: 1px solid var(--border-subtle);
-  background: rgba(16, 16, 26, 0.96);
+  background: color-mix(in srgb, var(--surface-toolbar) 94%, #152033 6%);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
 }
 
 .agent-toolbar__brand {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
   min-width: 0;
 }
 
 .agent-toolbar__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--gradient-brand);
-  box-shadow: 0 0 10px rgba(248, 28, 229, 0.28);
+  position: relative;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 18%, transparent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 38% 32%, rgba(255, 255, 255, 0.75) 0 5%, transparent 7%),
+    radial-gradient(circle at 50% 55%, #71809a 0, #394559 46%, #171e2b 74%);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.14), 0 1px 2px rgba(0, 0, 0, 0.38);
 }
 
 .agent-toolbar__title {
+  color: var(--text-primary);
   font-size: var(--font-md);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: 620;
+  letter-spacing: -0.01em;
   white-space: nowrap;
-  background: var(--gradient-brand);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .agent-toolbar__git-badge {
-  margin-left: 4px;
   max-width: 240px;
+  margin-left: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agent-toolbar__session-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: var(--space-2);
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
-  font-size: var(--font-xs);
-  color: var(--text-secondary);
-}
-
+.agent-toolbar__session-status,
 .agent-toolbar__global-status {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-left: var(--space-2);
-  padding: 2px 8px;
+  min-height: 24px;
+  margin-left: 4px;
+  padding: 0 8px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
   border-radius: 999px;
-  border: 1px solid rgba(103, 248, 111, 0.25);
-  background: rgba(103, 248, 111, 0.08);
+  background: color-mix(in srgb, var(--surface-elevated) 64%, transparent);
+  color: var(--text-secondary);
   font-size: var(--font-xs);
-  color: var(--status-working);
   white-space: nowrap;
 }
 
-.agent-toolbar__actions {
+.agent-toolbar__global-status {
+  color: color-mix(in srgb, var(--status-working) 76%, var(--text-primary));
+}
+
+.agent-toolbar__actions,
+.agent-toolbar__action-group {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+}
+
+.agent-toolbar__actions {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.agent-toolbar__action-group {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 65%, transparent);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface-window) 40%, transparent);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
 }
 
 .agent-toolbar__button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  padding: 5px 10px;
-  border: 1px solid var(--button-border);
-  border-radius: var(--radius-sm);
-  background: var(--button-bg);
-  color: var(--text-primary);
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
 }
 
 .agent-toolbar__button:hover:not(:disabled) {
-  background: var(--button-hover);
-}
-
-.agent-toolbar__button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.agent-toolbar__button--ghost {
-  background: transparent;
-  border-color: transparent;
-  color: var(--text-secondary);
-}
-
-.agent-toolbar__button--ghost:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--border-default) 72%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
   color: var(--text-primary);
 }
 
+.agent-toolbar__button:active:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 11%, transparent);
+  transform: translateY(1px);
+}
+
+.agent-toolbar__button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.agent-toolbar__button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .agent-toolbar__button--icon {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  justify-content: center;
+}
+
+@media (max-width: 720px) {
+  .agent-toolbar__session-status,
+  .agent-toolbar__global-status {
+    display: none;
+  }
 }

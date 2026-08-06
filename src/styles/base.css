@@ -9,8 +9,8 @@
   background: var(--surface-window);
   color: var(--text-primary);
 
-  /* Hyper palette — shared with xterm in src/config/theme.ts */
-  --hyper-bg: #000000;
+  /* Terminal palette — shared with xterm in src/config/theme.ts */
+  --hyper-bg: #050609;
   --hyper-fg: #ffffff;
   --hyper-accent: var(--accent);
   --hyper-accent-muted: var(--accent-muted);
@@ -46,11 +46,23 @@ body,
   background: var(--surface-window);
 }
 
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% -8%, rgba(125, 211, 252, 0.07), transparent 34%),
+    radial-gradient(circle at 88% 12%, rgba(167, 139, 250, 0.06), transparent 30%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.018), transparent 42%);
+  z-index: 0;
+}
+
 button {
   font: inherit;
 }
 
-:where(button, input, select):focus-visible {
+:where(button, input, select, textarea, a[href], [tabindex]):focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
@@ -58,11 +70,13 @@ button {
 /* App shell */
 
 .app-shell {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: var(--surface-window);
+  background: rgba(8, 9, 13, 0.72);
 }
 
 .app-shell__body {
@@ -209,37 +223,37 @@ button {
 
 .status-badge--starting {
   color: var(--status-starting);
-  background: rgba(106, 118, 251, 0.15);
+  background: rgba(125, 211, 252, 0.13);
 }
 
 .status-badge--idle {
   color: var(--status-idle);
-  background: rgba(104, 104, 104, 0.2);
+  background: rgba(148, 163, 184, 0.14);
 }
 
 .status-badge--working {
   color: var(--status-working);
-  background: rgba(103, 248, 111, 0.15);
+  background: rgba(74, 222, 128, 0.13);
 }
 
 .status-badge--waiting {
   color: var(--status-waiting);
-  background: rgba(255, 250, 114, 0.12);
+  background: rgba(250, 204, 21, 0.13);
 }
 
 .status-badge--fallback {
   color: var(--status-fallback);
-  background: rgba(255, 169, 77, 0.15);
+  background: rgba(251, 146, 60, 0.13);
 }
 
 .status-badge--error {
   color: var(--status-error);
-  background: rgba(253, 111, 107, 0.15);
+  background: rgba(251, 113, 133, 0.13);
 }
 
 .status-badge--exited {
   color: var(--status-exited);
-  background: rgba(104, 104, 104, 0.2);
+  background: rgba(100, 116, 139, 0.14);
 }
 
 /* Tooltip */

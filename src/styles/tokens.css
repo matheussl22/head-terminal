@@ -1,54 +1,54 @@
 :root {
-  /* Layered surfaces (depth) — terminal itself stays pure black */
-  --bg-0: #050507;
-  --bg-1: #0a0a10;
-  --bg-2: #10101a;
-  --bg-3: #171724;
+  /* Layered graphite surfaces — quiet depth, macOS-inspired hierarchy */
+  --bg-0: #08090d;
+  --bg-1: #0d0f16;
+  --bg-2: #131722;
+  --bg-3: #1a2030;
 
   /* Surfaces (legacy aliases now mapped onto the layers) */
-  --surface-terminal: #000000;
+  --surface-terminal: #050609;
   --surface-window: var(--bg-0);
   --surface-sidebar: var(--bg-1);
   --surface-toolbar: var(--bg-2);
   --surface-elevated: var(--bg-3);
-  --surface-overlay: rgba(5, 5, 7, 0.78);
+  --surface-overlay: rgba(8, 9, 13, 0.82);
 
   /* Borders */
-  --border-subtle: #1a1a24;
-  --border-default: #2c2c3a;
-  --border-active: rgba(248, 28, 229, 0.45);
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-default: rgba(255, 255, 255, 0.12);
+  --border-active: rgba(125, 211, 252, 0.48);
 
   /* Text */
-  --text-primary: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.76);
-  --text-muted: rgba(255, 255, 255, 0.58);
+  --text-primary: #f4f7fb;
+  --text-secondary: rgba(226, 232, 240, 0.78);
+  --text-muted: rgba(203, 213, 225, 0.58);
 
-  /* Identity: Hyper magenta + electric cyan */
-  --accent: #f81ce5;
-  --accent-muted: rgba(248, 28, 229, 0.35);
-  --accent-subtle: rgba(248, 28, 229, 0.12);
-  --accent-2: #22d3ee;
-  --accent-2-muted: rgba(34, 211, 238, 0.35);
-  --accent-2-subtle: rgba(34, 211, 238, 0.12);
+  /* Identity: cool cyan with restrained violet depth */
+  --accent: #7dd3fc;
+  --accent-muted: rgba(125, 211, 252, 0.34);
+  --accent-subtle: rgba(125, 211, 252, 0.11);
+  --accent-2: #a78bfa;
+  --accent-2-muted: rgba(167, 139, 250, 0.34);
+  --accent-2-subtle: rgba(167, 139, 250, 0.11);
   --gradient-brand: linear-gradient(135deg, var(--accent), var(--accent-2));
 
   /* Glow — use sparingly on active elements */
-  --glow-accent: 0 0 12px rgba(248, 28, 229, 0.35);
-  --glow-working: 0 0 8px rgba(103, 248, 111, 0.4);
+  --glow-accent: 0 0 16px rgba(125, 211, 252, 0.2);
+  --glow-working: 0 0 10px rgba(74, 222, 128, 0.28);
 
   /* Activity states */
-  --status-idle: #686868;
-  --status-working: #67f86f;
-  --status-waiting: #fffa72;
-  --status-error: #fd6f6b;
-  --status-fallback: #ffa94d;
-  --status-starting: #6a76fb;
-  --status-exited: #686868;
+  --status-idle: #94a3b8;
+  --status-working: #4ade80;
+  --status-waiting: #facc15;
+  --status-error: #fb7185;
+  --status-fallback: #fb923c;
+  --status-starting: #7dd3fc;
+  --status-exited: #64748b;
 
   /* Buttons */
   --button-bg: rgba(255, 255, 255, 0.06);
   --button-border: rgba(255, 255, 255, 0.15);
-  --button-hover: var(--bg-3);
+  --button-hover: rgba(125, 211, 252, 0.1);
 
   /* Scales */
   --space-1: 4px;
@@ -69,7 +69,7 @@
   --z-modal: 100;
 
   /* Focus ring (cyan for interactives) */
-  --focus-ring: 0 0 0 2px rgba(34, 211, 238, 0.4);
+  --focus-ring: 0 0 0 2px var(--bg-0), 0 0 0 4px rgba(125, 211, 252, 0.72);
 
   /* Layout */
   --sidebar-width: 248px;
