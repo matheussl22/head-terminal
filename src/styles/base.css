@@ -79,6 +79,9 @@ button {
   min-height: 0;
   padding: 0;
   background: var(--ambient-canvas);
+  /* Inactive sessions are parked off-screen (see .session-workspace--hidden)
+     — they must never widen this area or produce a scrollbar. */
+  overflow: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {

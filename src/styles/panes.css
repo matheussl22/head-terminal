@@ -12,6 +12,15 @@
 }
 
 .session-workspace--hidden {
+  /* Parked outside the viewport rather than merely visibility:hidden.
+     xterm pauses its renderer for a terminal that doesn't intersect the
+     viewport and does one full refresh when it comes back, so an inactive
+     session can stay fully live — receiving output, scrolled where it
+     belongs — at parsing cost only. Switching sessions is then a pure
+     visibility flip instead of replaying a backlog. translate keeps the
+     element laid out at its real size, so the pty dimensions stay valid
+     and coming back never triggers a resize/SIGWINCH repaint. */
+  transform: translateX(-200vw);
   visibility: hidden;
   pointer-events: none;
   z-index: 0;

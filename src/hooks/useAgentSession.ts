@@ -4,7 +4,6 @@ import { dirname } from "../core/git-context-utils";
 import { acquireGitContext } from "../core/git-context-registry";
 import { fetchGitContextForPath } from "../core/git-watch-bridge";
 import { fitPanes } from "../core/pane-fit-registry";
-import { PtyOutputBuffer } from "../core/pty-output-buffer";
 import { useSessionStore } from "../core/session-manager";
 import { usePtyProcess } from "./usePtyProcess";
 import { useTerminalInstance } from "./useTerminalInstance";
@@ -43,10 +42,6 @@ export function useAgentSession({
     (state) => state.paneResumeSessionIds[paneId],
   );
 
-  const isVisibleRef = useRef(isVisible);
-  isVisibleRef.current = isVisible;
-
-  const outputBufferRef = useRef(new PtyOutputBuffer());
   const pathDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchedRepoRef = useRef<string | null>(null);
   const releaseGitWatchRef = useRef<(() => void) | null>(null);
@@ -134,11 +129,12 @@ export function useAgentSession({
     restartKey,
     continueConversation,
     resumeSessionId,
-    isVisibleRef,
-    outputBufferRef,
     onWorkspacePath,
   });
 
+  // Panes stay written-to while hidden, so becoming visible needs no
+  // replay — only a fit, in case the window changed size meanwhile (the
+  // pty is only told about it when the dimensions actually differ).
   useEffect(() => {
     if (!shouldSpawn || !isVisible || !instance) {
       return;
@@ -146,9 +142,6 @@ export function useAgentSession({
 
     requestAnimationFrame(() => {
       fitPanes([paneId]);
-      for (const chunk of outputBufferRef.current.drain()) {
-        instance.terminal.write(chunk);
-      }
     });
   }, [instance, isVisible, paneId, shouldSpawn]);
 }

@@ -16,7 +16,6 @@ import {
   type IDisposable,
   type PtyBridge,
 } from "../core/pty-bridge";
-import type { PtyOutputBuffer } from "../core/pty-output-buffer";
 import { useSessionStore } from "../core/session-manager";
 import { createRafPtyWriter } from "../core/terminal-factory";
 import { WorkspaceDetector } from "../core/workspace-detector";
@@ -32,8 +31,6 @@ interface UsePtyProcessOptions {
   restartKey: number;
   continueConversation: boolean;
   resumeSessionId?: string;
-  isVisibleRef: React.RefObject<boolean>;
-  outputBufferRef: React.RefObject<PtyOutputBuffer>;
   onWorkspacePath: (path: string) => void;
 }
 
@@ -52,8 +49,6 @@ export function usePtyProcess({
   restartKey,
   continueConversation,
   resumeSessionId,
-  isVisibleRef,
-  outputBufferRef,
   onWorkspacePath,
 }: UsePtyProcessOptions): void {
   const registerPtyWriter = useSessionStore((state) => state.registerPtyWriter);
@@ -102,12 +97,6 @@ export function usePtyProcess({
         return true;
       },
     );
-
-    const flushBufferedOutput = () => {
-      for (const chunk of outputBufferRef.current.drain()) {
-        terminal.write(chunk);
-      }
-    };
 
     const bootstrap = async () => {
       if (disposed) {
@@ -159,8 +148,6 @@ export function usePtyProcess({
 
         const writePtyData = createRafPtyWriter(
           terminal,
-          () => !isVisibleRef.current,
-          (data) => outputBufferRef.current.push(data),
           (frameText) => {
             activityDetector.onData(frameText);
             workspaceDetector.onData(frameText);
@@ -204,10 +191,6 @@ export function usePtyProcess({
         registerPtyWriter(paneId, (data) => {
           bridge?.write(data);
         });
-
-        if (isVisibleRef.current) {
-          flushBufferedOutput();
-        }
 
         checkpoint("js.pty.spawn_ok", { paneId, sessionId });
         updatePaneStatus(paneId, "running");
@@ -264,11 +247,9 @@ export function usePtyProcess({
     resumeSessionId,
     cwd,
     instance,
-    isVisibleRef,
-    notePaneOutput,
+      notePaneOutput,
     onWorkspacePath,
-    outputBufferRef,
-    paneId,
+      paneId,
     registerPtyWriter,
     restartKey,
     sessionId,

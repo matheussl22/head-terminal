@@ -163,8 +163,6 @@ const frameTextDecoder = new TextDecoder();
 
 export function createRafPtyWriter(
   terminal: Terminal,
-  isSuspended: () => boolean,
-  bufferOutput: (data: Uint8Array) => void,
   onFrameText?: (text: string) => void,
 ): (data: Uint8Array) => void {
   let pending: Uint8Array[] = [];
@@ -184,14 +182,14 @@ export function createRafPtyWriter(
 
     recordPtyReadBatch(bytes);
 
-    if (isSuspended()) {
-      for (const chunk of batch) {
-        bufferOutput(chunk);
-      }
-    } else {
-      for (const chunk of batch) {
-        terminal.write(chunk);
-      }
+    // Hidden panes are written to just like visible ones: xterm pauses its
+    // own renderer while a terminal sits outside the viewport (see
+    // .session-workspace--hidden), so keeping every pane current costs
+    // parsing only — and switching sessions becomes a pure visibility flip
+    // onto an already-correct, already-scrolled screen instead of replaying
+    // a backlog.
+    for (const chunk of batch) {
+      terminal.write(chunk);
     }
 
     if (onFrameText) {
