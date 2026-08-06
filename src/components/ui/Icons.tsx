@@ -1,6 +1,7 @@
 // Barrel over lucide-react so swapping the icon set later touches one file.
 import {
   Activity,
+  ChevronDown,
   Command,
   Check,
   GitBranch,
@@ -10,6 +11,7 @@ import {
   PanelLeftOpen,
   Pencil,
   Plus,
+  RefreshCw,
   Settings2,
   SlidersHorizontal,
   SquareSplitHorizontal,
@@ -75,6 +77,14 @@ export function IconSliders({ className, size = 14 }: IconProps) {
 
 export function IconTrash({ className, size = 14 }: IconProps) {
   return <Trash2 className={className} size={size} aria-hidden />;
+}
+
+export function IconRefresh({ className, size = 14 }: IconProps) {
+  return <RefreshCw className={className} size={size} aria-hidden />;
+}
+
+export function IconChevronDown({ className, size = 14 }: IconProps) {
+  return <ChevronDown className={className} size={size} aria-hidden />;
 }
 
 export function IconSplitVertical({ className, size = 14 }: IconProps) {

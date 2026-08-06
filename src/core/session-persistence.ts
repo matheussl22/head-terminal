@@ -27,6 +27,10 @@ export interface PersistedWorkspace {
   activeSessionId: string | null;
   activePaneId: string | null;
   sessions: PersistedSession[];
+  /** paneId -> last known CLI session id, so a restart can `--resume` each
+   * pane's own conversation instead of a blanket `--continue` that collides
+   * whenever panes share a cwd. */
+  paneResumeSessionIds?: Record<string, string>;
 }
 
 function toPersistedSession(session: AgentSession): PersistedSession {
@@ -45,12 +49,14 @@ export function workspaceFromStore(state: {
   sessions: AgentSession[];
   activeSessionId: string | null;
   activePaneId: string | null;
+  paneResumeSessionIds?: Record<string, string>;
 }): PersistedWorkspace {
   return {
     version: 1,
     activeSessionId: state.activeSessionId,
     activePaneId: state.activePaneId,
     sessions: state.sessions.map(toPersistedSession),
+    paneResumeSessionIds: state.paneResumeSessionIds,
   };
 }
 
@@ -58,6 +64,7 @@ export function hydrateWorkspace(workspace: PersistedWorkspace): {
   sessions: AgentSession[];
   activeSessionId: string | null;
   activePaneId: string | null;
+  paneResumeSessionIds: Record<string, string>;
 } {
   const sessions: AgentSession[] = workspace.sessions.map((session) => ({
     ...session,
@@ -77,7 +84,23 @@ export function hydrateWorkspace(workspace: PersistedWorkspace): {
       ? workspace.activePaneId
       : (paneIds[0] ?? null);
 
-  return { sessions, activeSessionId, activePaneId };
+  // Only keep anchors for panes that actually survived hydration — stale
+  // ids from a since-closed pane must not leak onto whatever new pane
+  // happens to reuse... (they never do, paneId is a fresh uuid, but this
+  // keeps the persisted map from growing unbounded across the app's life).
+  const allPaneIds = new Set(
+    sessions.flatMap((session) => collectPaneIds(session.layout)),
+  );
+  const paneResumeSessionIds: Record<string, string> = {};
+  for (const [paneId, sessionId] of Object.entries(
+    workspace.paneResumeSessionIds ?? {},
+  )) {
+    if (allPaneIds.has(paneId)) {
+      paneResumeSessionIds[paneId] = sessionId;
+    }
+  }
+
+  return { sessions, activeSessionId, activePaneId, paneResumeSessionIds };
 }
 
 function loadLegacyWorkspace(): PersistedWorkspace | null {

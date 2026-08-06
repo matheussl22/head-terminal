@@ -25,6 +25,8 @@ import type {
   PtyExitEvent,
   PtyHandle,
   ResizePtyInput,
+  ResumableAgent,
+  ResumableSessionEntry,
   SecretBackendStatus,
   SpawnPtyInput,
   StartupContext,
@@ -74,6 +76,13 @@ export interface IpcServices {
   };
   mcp?: {
     list(cwd: string, agent: SupportedAgent): Promise<McpServersPayload>;
+  };
+  sessions?: {
+    listResumable(
+      cwd: string,
+      agent: ResumableAgent,
+      claudeConfigDir?: string,
+    ): Promise<ResumableSessionEntry[]>;
   };
   diagnostics?: {
     appendEvent(line: string): Promise<void> | void;
@@ -273,6 +282,13 @@ export function registerIpc({
       validateAgent(agent),
     ) ?? unsupported("mcp.list"),
   );
+  handle(IPC_CHANNELS.sessions.listResumable, (_event, cwd, agent, claudeConfigDir) =>
+    services.sessions?.listResumable(
+      asString(cwd, "cwd", { maxLength: 16_384 }),
+      validateResumableAgent(agent),
+      asOptionalString(claudeConfigDir, "claudeConfigDir", { maxLength: 4_096 }),
+    ) ?? unsupported("sessions.listResumable"),
+  );
 
   handle(IPC_CHANNELS.clipboard.readText, () => clipboard.readText());
   handle(IPC_CHANNELS.clipboard.writeText, (_event, value) => {
@@ -459,6 +475,13 @@ function validateAgent(value: unknown): SupportedAgent {
   return value;
 }
 
+function validateResumableAgent(value: unknown): ResumableAgent {
+  if (value !== "claude" && value !== "codex" && value !== "cursor") {
+    throw new TypeError("agent must be claude, codex or cursor");
+  }
+  return value;
+}
+
 function validateNotificationInput(value: unknown): NotificationInput {
   const input = asRecord(value, "input");
   return {
@@ -490,6 +513,17 @@ function positiveInteger(value: unknown, field: string, max: number): number {
     throw new TypeError(`${field} must be an integer between 1 and ${max}`);
   }
   return value as number;
+}
+
+function asOptionalString(
+  value: unknown,
+  field: string,
+  options: { maxLength?: number } = {},
+): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return asString(value, field, { maxLength: options.maxLength });
 }
 
 function asStringRecord(value: unknown, field: string): Record<string, string> {

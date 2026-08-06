@@ -4,6 +4,7 @@ import { AGENT_FALLBACK_OSC, getAgentProfile } from "../config/agents";
 import { ActivityDetector } from "../core/activity-detector";
 import { ContextMeter } from "../core/context-meter";
 import { resolveClaudeConfigDir } from "../core/claude-accounts";
+import { anchorPaneResumeSession } from "../core/pane-resume-anchor";
 import { checkpoint, logError, logEvent } from "../core/logger";
 import { notifyUiReady } from "../core/startup-watchdog";
 import { fitPanes } from "../core/pane-fit-registry";
@@ -30,6 +31,7 @@ interface UsePtyProcessOptions {
   claudeAccountId?: string;
   restartKey: number;
   continueConversation: boolean;
+  resumeSessionId?: string;
   isVisibleRef: React.RefObject<boolean>;
   outputBufferRef: React.RefObject<PtyOutputBuffer>;
   onWorkspacePath: (path: string) => void;
@@ -49,6 +51,7 @@ export function usePtyProcess({
   claudeAccountId,
   restartKey,
   continueConversation,
+  resumeSessionId,
   isVisibleRef,
   outputBufferRef,
   onWorkspacePath,
@@ -111,16 +114,20 @@ export function usePtyProcess({
         return;
       }
 
+      const spawnStartMs = Date.now();
+
       checkpoint("js.pty.spawn_begin", {
         paneId,
         sessionId,
         cwd,
         continueConversation,
+        resumeSessionId,
       });
 
       try {
         const profile = getAgentProfile(agentProfileId, {
           continueConversation,
+          resumeSessionId,
         });
         const claudeConfigDir = claudeAccountId
           ? resolveClaudeConfigDir(claudeAccountId)
@@ -191,6 +198,7 @@ export function usePtyProcess({
           bridge?.write(data);
         };
         instance.resizePty.current = (cols, rows) => {
+          activityDetector.onResize();
           bridge?.pty.resize(cols, rows);
         };
         registerPtyWriter(paneId, (data) => {
@@ -205,6 +213,20 @@ export function usePtyProcess({
         updatePaneStatus(paneId, "running");
         activityDetector.onRunning();
         paneSupervisor.noteSpawned(paneId);
+
+        // An explicit --resume already pins this pane to a known id; only
+        // a fresh/--continue spawn needs to discover which transcript it
+        // actually landed on (see pane-resume-anchor.ts).
+        if (!resumeSessionId) {
+          void anchorPaneResumeSession({
+            paneId,
+            cwd,
+            agentProfileId,
+            claudeAccountId,
+            spawnStartMs,
+            isDisposed: () => disposed,
+          });
+        }
       } catch (error) {
         logError("js.pty.spawn_failed", error, { paneId, sessionId });
         const message =
@@ -239,6 +261,7 @@ export function usePtyProcess({
     agentProfileId,
     claudeAccountId,
     continueConversation,
+    resumeSessionId,
     cwd,
     instance,
     isVisibleRef,

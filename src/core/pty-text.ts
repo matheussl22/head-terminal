@@ -20,3 +20,18 @@ export function isBareMouseHoverReport(data: string): boolean {
   const cb = Number(match[1]);
   return (cb & 32) !== 0 && (cb & 3) === 3;
 }
+
+// DECSET 1004 focus-in/out report. xterm.js sends this the moment its
+// hidden textarea gains/loses DOM focus — i.e. every time the user clicks a
+// pane to switch focus between splits, completely independent of whether
+// anything is actually happening in it. Head-terminal already shows the
+// focused pane with its own chrome (border highlight), so forwarding this
+// upstream buys nothing — but focus-tracking CLIs (Claude Code, Cursor
+// Agent) redraw their whole screen on every one, which the activity
+// detector then misreads as "working" (see isBareMouseHoverReport above —
+// same failure mode, different escape sequence).
+const FOCUS_REPORT = /^\x1b\[[IO]$/;
+
+export function isFocusReport(data: string): boolean {
+  return FOCUS_REPORT.test(data);
+}

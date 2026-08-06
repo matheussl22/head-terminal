@@ -2,6 +2,7 @@ export type Unsubscribe = () => void;
 
 export type AllowedSecretKey = "openai-api-key";
 export type SupportedAgent = "claude" | "cursor";
+export type ResumableAgent = "claude" | "codex" | "cursor";
 
 export interface StartupContext {
   isPackaged: boolean;
@@ -107,6 +108,14 @@ export interface McpServersPayload {
   error: string | null;
 }
 
+/** One CLI-level agent conversation that can be resumed by id (best-effort
+ * metadata read from that agent's on-disk transcript — never authoritative). */
+export interface ResumableSessionEntry {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
 export interface NotificationInput {
   title: string;
   body: string;
@@ -133,6 +142,10 @@ export interface PersistedWorkspace {
     layout: unknown;
     pinned?: boolean;
   }>;
+  /** paneId -> last known CLI session id, so a restart can `--resume` each
+   * pane's own conversation instead of a blanket `--continue` that collides
+   * whenever panes share a cwd (see session-manager.ts hydrateWorkspace). */
+  paneResumeSessionIds?: Record<string, string>;
 }
 
 export type MigratedPreferences = Record<string, string>;
@@ -183,6 +196,13 @@ export interface HeadTerminalApi {
   };
   mcp: {
     list(cwd: string, agent: SupportedAgent): Promise<McpServersPayload>;
+  };
+  sessions: {
+    listResumable(
+      cwd: string,
+      agent: ResumableAgent,
+      claudeConfigDir?: string,
+    ): Promise<ResumableSessionEntry[]>;
   };
   clipboard: {
     readText(): Promise<string>;

@@ -46,6 +46,18 @@ export class ActivityDetector {
   private recentText = "";
   private agentFallback = false;
   private approvalPending = false;
+  // Output that the pane produced on its own rather than because an agent
+  // is doing work: a freshly spawned CLI painting its banner/restored
+  // conversation, or a full-screen agent repainting after a SIGWINCH.
+  // Neither matches a WORKING/WAITING pattern, so the generic "anything
+  // unrecognized means working" fallback below used to flip every pane to
+  // "executando" — for a whole session at once when it lazily spawned on
+  // first switch — and only self-corrected after the WAITING_AFTER_MS
+  // decay. While this is set the fallback is off; explicit signals
+  // (spinner, keywords, a real prompt) still fire immediately, and the
+  // idle timer clears it as soon as the burst goes quiet, so it can never
+  // suppress the fallback for genuine later work.
+  private suppressWorkFallback = false;
 
   constructor(private readonly onActivityChange: (activity: PaneActivity) => void) {}
 
@@ -63,7 +75,14 @@ export class ActivityDetector {
     }
 
     const detected = this.detectFromRecentText();
-    this.setActivity(detected ?? "working");
+    if (detected) {
+      // An explicit signal is trustworthy whenever it shows up, and proves
+      // the pane is past whatever self-inflicted burst was in flight.
+      this.suppressWorkFallback = false;
+      this.setActivity(detected);
+    } else if (!this.suppressWorkFallback) {
+      this.setActivity("working");
+    }
     this.scheduleIdleCheck();
   }
 
@@ -79,7 +98,18 @@ export class ActivityDetector {
 
   onRunning(): void {
     this.lastOutputAt = Date.now();
+    this.suppressWorkFallback = true;
     this.setActivity("idle");
+    this.scheduleIdleCheck();
+  }
+
+  /** The pty was resized (pane shown, split dragged, window resized): the
+   * SIGWINCH makes full-screen agents repaint everything, and a repaint is
+   * not work. */
+  onResize(): void {
+    this.suppressWorkFallback = true;
+    // Guarantees a pending timer to clear the flag even if the resize
+    // produces no output at all.
     this.scheduleIdleCheck();
   }
 
@@ -127,6 +157,10 @@ export class ActivityDetector {
   private scheduleIdleCheck(): void {
     this.clearIdleTimer();
     this.idleTimer = setTimeout(() => {
+      // Output stopped: whatever burst was in flight (agent boot chrome, a
+      // resize repaint) is over, so unrecognized output means work again.
+      this.suppressWorkFallback = false;
+
       const elapsed = Date.now() - this.lastOutputAt;
 
       if (this.currentActivity === "exited" || this.currentActivity === "error") {

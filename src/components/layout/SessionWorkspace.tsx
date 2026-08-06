@@ -111,10 +111,12 @@ export const SessionWorkspace = memo(function SessionWorkspace({
               layoutStyle={
                 rect
                   ? {
-                      top: `${rect.top}%`,
-                      left: `${rect.left}%`,
-                      width: `${rect.width}%`,
-                      height: `${rect.height}%`,
+                      // Inset each card so splits read as floating windows
+                      // with a black void between them (matches multi-agent cards).
+                      top: `calc(${rect.top}% + (var(--pane-gap) / 2))`,
+                      left: `calc(${rect.left}% + (var(--pane-gap) / 2))`,
+                      width: `calc(${rect.width}% - var(--pane-gap))`,
+                      height: `calc(${rect.height}% - var(--pane-gap))`,
                     }
                   : undefined
               }

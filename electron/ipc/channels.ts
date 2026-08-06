@@ -43,6 +43,7 @@ export const IPC_CHANNELS = {
     cancel: "voice:cancel",
   },
   mcp: { list: "mcp:list" },
+  sessions: { listResumable: "sessions:list-resumable" },
   clipboard: {
     readText: "clipboard:read-text",
     writeText: "clipboard:write-text",

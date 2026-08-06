@@ -3,13 +3,15 @@
 .session-sidebar {
   width: var(--sidebar-width);
   flex: 0 0 var(--sidebar-width);
-  border-right: 1px solid var(--border-subtle);
-  background: var(--surface-sidebar);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(10, 8, 18, 0.98) 0%, rgba(0, 0, 0, 1) 40%);
   display: flex;
   flex-direction: column;
   transition:
     width var(--transition-normal),
     flex-basis var(--transition-normal);
+  box-shadow: inset -1px 0 0 rgba(248, 28, 229, 0.06);
 }
 
 .session-sidebar--collapsed {
@@ -94,9 +96,19 @@
 .session-sidebar__new {
   min-height: 28px;
   padding: 4px 9px;
-  border-color: rgba(248, 28, 229, 0.26);
-  background: var(--accent-subtle);
+  border-color: rgba(248, 28, 229, 0.4);
+  background: linear-gradient(
+    135deg,
+    rgba(248, 28, 229, 0.2),
+    rgba(34, 211, 238, 0.08)
+  );
   font-size: var(--font-sm);
+  box-shadow: 0 0 16px rgba(248, 28, 229, 0.18);
+}
+
+.session-sidebar__new:hover {
+  border-color: rgba(248, 28, 229, 0.6);
+  box-shadow: 0 0 22px rgba(248, 28, 229, 0.3);
 }
 
 .session-sidebar__list {
@@ -189,21 +201,32 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  border: 1px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-left: 2px solid transparent;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.025);
-  transition: background var(--transition-fast), border-color var(--transition-fast);
+  background: rgba(255, 255, 255, 0.03);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .session-sidebar__item:hover {
-  background: rgba(255, 255, 255, 0.052);
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 
 .session-sidebar__item--active {
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(248, 28, 229, 0.35);
   border-left-color: var(--accent);
-  background: rgba(255, 255, 255, 0.075);
+  background: linear-gradient(
+    135deg,
+    rgba(248, 28, 229, 0.14),
+    rgba(34, 211, 238, 0.05)
+  );
+  box-shadow:
+    0 0 0 1px rgba(248, 28, 229, 0.12),
+    0 0 22px rgba(248, 28, 229, 0.18);
 }
 
 .session-sidebar__title-row {

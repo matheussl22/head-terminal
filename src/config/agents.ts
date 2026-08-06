@@ -12,6 +12,18 @@ export interface AgentProfile {
 // output. Payload: "agent-exited:<exit code>".
 export const AGENT_FALLBACK_OSC = 7770;
 
+// Session ids picked from the resume dropdown are always claude/codex/cursor
+// UUIDs (see electron/services/agent-sessions-service.ts) or codex's rollout
+// id — this guards the shell interpolation below against anything else that
+// might end up here, defense in depth rather than trusting the IPC boundary.
+const RESUMABLE_SESSION_ID = /^[0-9a-f-]{8,64}$/i;
+
+function sanitizeResumeSessionId(resumeSessionId?: string): string | undefined {
+  return resumeSessionId && RESUMABLE_SESSION_ID.test(resumeSessionId)
+    ? resumeSessionId
+    : undefined;
+}
+
 function withShellFallback(agentCmd: string): string[] {
   return [
     "-l",
@@ -20,20 +32,40 @@ function withShellFallback(agentCmd: string): string[] {
   ];
 }
 
-function cursorWithFallbackArgs(continueConversation: boolean): string[] {
+function cursorWithFallbackArgs(
+  continueConversation: boolean,
+  resumeSessionId?: string,
+): string[] {
+  const id = sanitizeResumeSessionId(resumeSessionId);
   return withShellFallback(
-    continueConversation ? "cursor agent --continue" : "cursor agent",
+    id
+      ? `cursor agent --resume ${id}`
+      : continueConversation
+        ? "cursor agent --continue"
+        : "cursor agent",
   );
 }
 
-function claudeWithFallbackArgs(continueConversation: boolean): string[] {
-  return withShellFallback(continueConversation ? "claude --continue" : "claude");
+function claudeWithFallbackArgs(
+  continueConversation: boolean,
+  resumeSessionId?: string,
+): string[] {
+  const id = sanitizeResumeSessionId(resumeSessionId);
+  return withShellFallback(
+    id
+      ? `claude --resume ${id}`
+      : continueConversation
+        ? "claude --continue"
+        : "claude",
+  );
 }
 
-function codexWithFallbackArgs(): string[] {
+function codexWithFallbackArgs(resumeSessionId?: string): string[] {
   // ponytail: codex CLI not installed locally, no confirmed --continue
-  // equivalent — always spawns fresh until that's verified.
-  return withShellFallback("codex");
+  // equivalent — always spawns fresh until that's verified. --resume <id>
+  // is confirmed (`codex resume <id>`), so that path is wired regardless.
+  const id = sanitizeResumeSessionId(resumeSessionId);
+  return withShellFallback(id ? `codex resume ${id}` : "codex");
 }
 
 function antigravityWithFallbackArgs(): string[] {
@@ -42,6 +74,9 @@ function antigravityWithFallbackArgs(): string[] {
 
 export interface AgentProfileOptions {
   continueConversation?: boolean;
+  /** Resume this exact CLI session instead of --continue/fresh. Takes
+   * precedence over `continueConversation` when both are set. */
+  resumeSessionId?: string;
 }
 
 export function buildAgentProfiles(
@@ -49,6 +84,7 @@ export function buildAgentProfiles(
 ): Record<string, AgentProfile> {
   const shell = getShellPath();
   const continueConversation = options.continueConversation ?? false;
+  const { resumeSessionId } = options;
 
   return {
     antigravity: {
@@ -61,19 +97,19 @@ export function buildAgentProfiles(
       id: "cursor",
       label: "Cursor Agent",
       command: shell,
-      args: cursorWithFallbackArgs(continueConversation),
+      args: cursorWithFallbackArgs(continueConversation, resumeSessionId),
     },
     claude: {
       id: "claude",
       label: "Claude Code",
       command: shell,
-      args: claudeWithFallbackArgs(continueConversation),
+      args: claudeWithFallbackArgs(continueConversation, resumeSessionId),
     },
     codex: {
       id: "codex",
       label: "Codex CLI",
       command: shell,
-      args: codexWithFallbackArgs(),
+      args: codexWithFallbackArgs(resumeSessionId),
     },
     shell: {
       id: "shell",

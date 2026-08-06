@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from "react";
+import { useEffect, useReducer, type ComponentType } from "react";
 
 import { ACTIVITY_LABEL } from "../../types/activity";
 import { contextColor } from "../../core/context-meter";
@@ -9,8 +9,50 @@ import {
 } from "../../core/pane-supervisor";
 import { useSessionStore } from "../../core/session-manager";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
-import { IconClose } from "../ui/Icons";
+import {
+  IconActivity,
+  IconAgentClaude,
+  IconAgentCodex,
+  IconAgentCursor,
+  IconAgentShell,
+  IconClose,
+  IconRefresh,
+} from "../ui/Icons";
+import { StatusDot } from "../ui/StatusDot";
+import { ResumeSessionMenu } from "./ResumeSessionMenu";
 import { VoiceInputButton } from "./VoiceInputButton";
+
+const AGENT_ICON: Record<string, ComponentType<{ size?: number }>> = {
+  antigravity: IconActivity,
+  cursor: IconAgentCursor,
+  claude: IconAgentClaude,
+  codex: IconAgentCodex,
+  shell: IconAgentShell,
+};
+
+const AGENT_LABEL: Record<string, string> = {
+  antigravity: "agy",
+  cursor: "cx",
+  claude: "cc",
+  codex: "cdx",
+  shell: "sh",
+};
+
+function AgentIcon({
+  agentProfileId,
+  size = 14,
+}: {
+  agentProfileId: string;
+  size?: number;
+}) {
+  const Icon = AGENT_ICON[agentProfileId] ?? IconAgentShell;
+  return <Icon size={size} />;
+}
+
+function paneShortLabel(agentProfileId: string, paneIndex: number): string {
+  const prefix = AGENT_LABEL[agentProfileId] ?? agentProfileId.slice(0, 3);
+  return `${prefix}${paneIndex + 1}`;
+}
 
 interface TerminalPaneOverlayProps {
   paneId: string;
@@ -138,6 +180,9 @@ export function TerminalPaneOverlay({ paneId }: TerminalPaneOverlayProps) {
 
 interface TerminalPaneHeaderProps {
   paneId: string;
+  cwd: string;
+  agentProfileId: string;
+  claudeAccountId?: string;
   paneIndex: number;
   paneCount: number;
   isActive: boolean;
@@ -147,6 +192,9 @@ interface TerminalPaneHeaderProps {
 
 export function TerminalPaneHeader({
   paneId,
+  cwd,
+  agentProfileId,
+  claudeAccountId,
   paneIndex,
   paneCount,
   isActive,
@@ -162,6 +210,7 @@ export function TerminalPaneHeader({
     (state) => state.paneRuntime[paneId]?.contextPercent,
   );
   const branchLabel = formatBranchLabel(gitContext);
+  const shortLabel = paneShortLabel(agentProfileId, paneIndex);
 
   return (
     <div
@@ -173,20 +222,21 @@ export function TerminalPaneHeader({
       onClick={onFocus}
     >
       <span className="terminal-pane-header__title">
-        <span>
-          Terminal {paneIndex + 1}
-          {paneCount > 1 ? `/${paneCount}` : ""}
+        <span
+          className={`terminal-pane-header__agent terminal-pane-header__agent--${agentProfileId}`}
+          title={agentProfileId}
+        >
+          <AgentIcon agentProfileId={agentProfileId} size={13} />
         </span>
+        <span className="terminal-pane-header__name">{shortLabel}</span>
+        <StatusDot activity={activity} />
         {branchLabel && (
-          <>
-            <span className="terminal-pane-header__sep" aria-hidden>
-              ·
-            </span>
+          <span className="terminal-pane-header__branch" title={branchLabel}>
             <GitBranchBadge
               context={gitContext}
-              className="terminal-pane-header__branch"
+              className="terminal-pane-header__branch-badge"
             />
-          </>
+          </span>
         )}
       </span>
       <span className="terminal-pane-header__right">
@@ -203,7 +253,9 @@ export function TerminalPaneHeader({
             ctx {contextPercent}%
           </span>
         )}
-        <span className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}>
+        <span
+          className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}
+        >
           {ACTIVITY_LABEL[activity]}
         </span>
         {activity === "agent_fallback" && (
@@ -222,18 +274,38 @@ export function TerminalPaneHeader({
           </button>
         )}
         <VoiceInputButton paneId={paneId} />
+        <ResumeSessionMenu
+          paneId={paneId}
+          agentProfileId={agentProfileId}
+          cwd={cwd}
+          claudeAccountId={claudeAccountId}
+        />
+        <button
+          type="button"
+          className="terminal-pane-header__action"
+          title="Reiniciar pane (Shift: continuar conversa)"
+          aria-label={`Reiniciar ${shortLabel}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            restartPane(paneId, {
+              continueConversation: event.shiftKey,
+            });
+          }}
+        >
+          <IconRefresh size={13} />
+        </button>
         {paneCount > 1 && (
           <button
             type="button"
-            className="terminal-pane-header__close"
+            className="terminal-pane-header__action terminal-pane-header__close"
             title="Fechar terminal"
-            aria-label={`Fechar terminal ${paneIndex + 1}`}
+            aria-label={`Fechar ${shortLabel}`}
             onClick={(event) => {
               event.stopPropagation();
               onClose();
             }}
           >
-            <IconClose />
+            <IconClose size={13} />
           </button>
         )}
       </span>

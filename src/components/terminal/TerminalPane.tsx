@@ -71,6 +71,9 @@ export function TerminalPane({
       {showHeader && (
         <TerminalPaneHeader
           paneId={paneId}
+          cwd={cwd}
+          agentProfileId={agentProfileId}
+          claudeAccountId={claudeAccountId}
           paneIndex={paneIndex}
           paneCount={paneCount}
           isActive={isActive}

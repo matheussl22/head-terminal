@@ -44,6 +44,7 @@ export function isPersistedWorkspace(value: unknown): value is PersistedWorkspac
     return false;
   }
   if (value.sessions.length > 500) return false;
+  if (!isPaneResumeSessionIds(value.paneResumeSessionIds)) return false;
   return value.sessions.every((session) =>
     isRecord(session)
     && isBoundedString(session.id, 256)
@@ -54,6 +55,17 @@ export function isPersistedWorkspace(value: unknown): value is PersistedWorkspac
       || isBoundedString(session.claudeAccountId, 256))
     && (session.pinned === undefined || typeof session.pinned === "boolean")
     && isLayoutNode(session.layout));
+}
+
+function isPaneResumeSessionIds(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  const entries = Object.entries(value);
+  if (entries.length > 2_000) return false;
+  return entries.every(
+    ([paneId, sessionId]) =>
+      isBoundedString(paneId, 256) && isBoundedString(sessionId, 256),
+  );
 }
 
 export class WorkspaceService {

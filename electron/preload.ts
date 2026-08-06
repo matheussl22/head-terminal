@@ -71,6 +71,15 @@ const api: HeadTerminalApi = {
   mcp: {
     list: (cwd, agent) => ipcRenderer.invoke(IPC_CHANNELS.mcp.list, cwd, agent),
   },
+  sessions: {
+    listResumable: (cwd, agent, claudeConfigDir) =>
+      ipcRenderer.invoke(
+        IPC_CHANNELS.sessions.listResumable,
+        cwd,
+        agent,
+        claudeConfigDir,
+      ),
+  },
   clipboard: {
     readText: () => ipcRenderer.invoke(IPC_CHANNELS.clipboard.readText),
     writeText: (text) => ipcRenderer.invoke(IPC_CHANNELS.clipboard.writeText, text),

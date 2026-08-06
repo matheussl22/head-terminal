@@ -11,14 +11,14 @@
 
   /* Hyper palette — shared with xterm in src/config/theme.ts */
   --hyper-bg: #000000;
-  --hyper-fg: #ffffff;
+  --hyper-fg: #e8e8ec;
   --hyper-accent: var(--accent);
   --hyper-accent-muted: var(--accent-muted);
   --hyper-enabled: var(--status-working);
   --hyper-enabled-muted: rgba(103, 248, 111, 0.2);
   --hyper-border: var(--border-default);
-  --hyper-green: #1dc121;
-  --hyper-light-green: #67f86f;
+  --hyper-green: #5af78e;
+  --hyper-light-green: #7ffa8a;
   --hyper-light-magenta: #fd7cfc;
   --hyper-terminal-padding: 12px 14px;
 }
@@ -62,13 +62,14 @@ button {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: var(--surface-window);
+  background: #000000;
 }
 
 .app-shell__body {
   display: flex;
   flex: 1;
   min-height: 0;
+  background: #000000;
 }
 
 .app-shell__main {
@@ -76,7 +77,8 @@ button {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  padding: 6px;
+  padding: 0;
+  background: var(--ambient-canvas);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -195,6 +197,7 @@ button {
   height: 8px;
   border-radius: 999px;
   flex: 0 0 auto;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 10px currentColor;
 }
 
 .status-badge {

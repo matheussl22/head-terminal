@@ -39,6 +39,9 @@ export function useAgentSession({
   const continueConversation = useSessionStore((state) =>
     Boolean(state.restoredPaneIds[paneId]),
   );
+  const resumeSessionId = useSessionStore(
+    (state) => state.paneResumeSessionIds[paneId],
+  );
 
   const isVisibleRef = useRef(isVisible);
   isVisibleRef.current = isVisible;
@@ -130,6 +133,7 @@ export function useAgentSession({
     claudeAccountId,
     restartKey,
     continueConversation,
+    resumeSessionId,
     isVisibleRef,
     outputBufferRef,
     onWorkspacePath,

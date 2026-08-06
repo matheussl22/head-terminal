@@ -17,7 +17,7 @@ import {
   unregisterTerminal,
 } from "../core/terminal-registry";
 import { attachOrphanCompositionEndGuard } from "../core/terminal-composition-guard";
-import { isBareMouseHoverReport } from "../core/pty-text";
+import { isBareMouseHoverReport, isFocusReport } from "../core/pty-text";
 
 /**
  * One xterm instance per pane. It outlives the PTY: process restarts swap the
@@ -71,6 +71,7 @@ export function useTerminalInstance(
     };
 
     let loggedFitOk = false;
+    let lastSentSize: { cols: number; rows: number } | null = null;
     const fitPane = () => {
       fitTerminal(fitAddon, terminal);
 
@@ -89,14 +90,22 @@ export function useTerminalInstance(
         });
       }
 
-      if (terminal.cols > 0 && terminal.rows > 0) {
+      // fitPane runs on every visibility flip and every ResizeObserver
+      // tick, usually landing on the exact size the pty already has —
+      // re-sending it just churns SIGWINCH at the agent for nothing.
+      if (
+        terminal.cols > 0 &&
+        terminal.rows > 0 &&
+        (lastSentSize?.cols !== terminal.cols || lastSentSize.rows !== terminal.rows)
+      ) {
+        lastSentSize = { cols: terminal.cols, rows: terminal.rows };
         created.resizePty.current?.(terminal.cols, terminal.rows);
       }
     };
     registerPaneFitter(paneId, fitPane);
 
     const dataListener = terminal.onData((data) => {
-      if (isBareMouseHoverReport(data)) {
+      if (isBareMouseHoverReport(data) || isFocusReport(data)) {
         return;
       }
       created.writeToPty.current?.(data);

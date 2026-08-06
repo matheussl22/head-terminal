@@ -57,6 +57,12 @@ interface SessionStore {
   runEverything: boolean;
   spawnedSessionIds: Record<string, boolean>;
   restoredPaneIds: Record<string, boolean>;
+  /** CLI session id to resume, set only via `resumePane` (dropdown pick). */
+  paneResumeSessionIds: Record<string, string>;
+  /** paneId -> last known CLI session id, persisted across app restarts so
+   * `hydrateWorkspace` can `--resume` each pane's own conversation instead
+   * of a blanket `--continue` that collides whenever panes share a cwd. */
+  paneResumeAnchors: Record<string, string>;
   sessionGitContext: Record<string, GitContext>;
   paneGitContext: Record<string, GitContext>;
   addSession: (session: AgentSession) => void;
@@ -64,6 +70,7 @@ interface SessionStore {
     sessions: AgentSession[],
     activeSessionId: string | null,
     activePaneId: string | null,
+    paneResumeAnchors?: Record<string, string>,
   ) => void;
   setActiveSessionId: (sessionId: string) => void;
   setActivePaneId: (paneId: string) => void;
@@ -86,6 +93,11 @@ interface SessionStore {
     paneId: string,
     options?: { continueConversation?: boolean },
   ) => void;
+  resumePane: (paneId: string, sessionId: string) => void;
+  /** Best-effort auto-detected anchor (see pane-resume-anchor.ts) — records
+   * which CLI session id a pane's conversation actually landed on, without
+   * forcing an immediate --resume the way `resumePane` does. */
+  notePaneResumeAnchor: (paneId: string, sessionId: string) => void;
   restartTargetPanes: () => void;
   restartSessionPanes: (sessionId: string) => void;
   updatePaneStatus: (paneId: string, status: SessionStatus) => void;
@@ -159,6 +171,7 @@ function persistWorkspaceState(
     sessions: state.sessions,
     activeSessionId: state.activeSessionId,
     activePaneId: state.activePaneId,
+    paneResumeSessionIds: state.paneResumeAnchors,
   });
 
   if (options?.immediate) {
@@ -174,21 +187,37 @@ function cleanupPaneState(
   paneIds: string[],
 ): Pick<
   SessionStore,
-  "paneRuntime" | "ptyWriters" | "paneRestartKeys" | "paneGitContext"
+  | "paneRuntime"
+  | "ptyWriters"
+  | "paneRestartKeys"
+  | "paneGitContext"
+  | "paneResumeSessionIds"
+  | "paneResumeAnchors"
 > {
   const paneRuntime = { ...state.paneRuntime };
   const ptyWriters = { ...state.ptyWriters };
   const paneRestartKeys = { ...state.paneRestartKeys };
   const paneGitContext = { ...state.paneGitContext };
+  const paneResumeSessionIds = { ...state.paneResumeSessionIds };
+  const paneResumeAnchors = { ...state.paneResumeAnchors };
 
   for (const paneId of paneIds) {
     delete paneRuntime[paneId];
     delete ptyWriters[paneId];
     delete paneRestartKeys[paneId];
     delete paneGitContext[paneId];
+    delete paneResumeSessionIds[paneId];
+    delete paneResumeAnchors[paneId];
   }
 
-  return { paneRuntime, ptyWriters, paneRestartKeys, paneGitContext };
+  return {
+    paneRuntime,
+    ptyWriters,
+    paneRestartKeys,
+    paneGitContext,
+    paneResumeSessionIds,
+    paneResumeAnchors,
+  };
 }
 
 function resetPaneRuntime(
@@ -218,6 +247,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   runEverything: loadRunEverything(),
   spawnedSessionIds: {},
   restoredPaneIds: {},
+  paneResumeSessionIds: {},
+  paneResumeAnchors: {},
   sessionGitContext: {},
   paneGitContext: {},
 
@@ -244,13 +275,27 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       return next;
     }),
 
-  hydrateWorkspace: (sessions, activeSessionId, activePaneId) => {
+  hydrateWorkspace: (sessions, activeSessionId, activePaneId, paneResumeAnchors = {}) => {
     const paneRuntime: Record<string, PaneRuntime> = {};
     const restoredPaneIds: Record<string, boolean> = {};
+    const paneResumeSessionIds: Record<string, string> = {};
     for (const session of sessions) {
       for (const paneId of collectPaneIds(session.layout)) {
         paneRuntime[paneId] = createPaneRuntime();
-        restoredPaneIds[paneId] = true;
+        const anchor = paneResumeAnchors[paneId];
+        if (anchor) {
+          // Precise: --resume this exact conversation, no collision even
+          // when other panes share the same cwd.
+          restoredPaneIds[paneId] = true;
+          paneResumeSessionIds[paneId] = anchor;
+        } else if (paneId === activePaneId) {
+          // No anchor yet (first restart on this app version, or the
+          // auto-detect race lost) — only the pane the user was last
+          // looking at falls back to a blanket --continue. Every other
+          // anchor-less pane starts fresh rather than risk several CLI
+          // processes racing to append the same transcript file.
+          restoredPaneIds[paneId] = true;
+        }
       }
     }
 
@@ -268,6 +313,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       ptyWriters: {},
       spawnedSessionIds,
       restoredPaneIds,
+      paneResumeSessionIds,
+      paneResumeAnchors,
     });
     logSpawnState(
       "session.spawn_state",
@@ -445,22 +492,83 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       }
 
       const restoredPaneIds = { ...state.restoredPaneIds };
+      const paneResumeSessionIds = { ...state.paneResumeSessionIds };
+      const paneResumeAnchors = { ...state.paneResumeAnchors };
       // Explicit false: fresh agent (e.g. after /exit). Explicit true: keep
       // --continue. Undefined: leave hydrate flag alone (supervisor/cwd).
       if (options?.continueConversation === true) {
         restoredPaneIds[paneId] = true;
       } else if (options?.continueConversation === false) {
         delete restoredPaneIds[paneId];
+        // The old anchor no longer reflects what this pane is doing — a
+        // fresh spawn re-anchors itself once pane-resume-anchor.ts detects
+        // the new transcript, but until then a restart shouldn't leave a
+        // stale --resume id sitting around for the next app launch.
+        delete paneResumeAnchors[paneId];
+      }
+      // A plain restart (either direction) always leaves any explicitly
+      // picked --resume id behind — only `resumePane` should set it.
+      if (options?.continueConversation !== undefined) {
+        delete paneResumeSessionIds[paneId];
       }
 
-      return {
+      const next = {
         paneRestartKeys: {
           ...state.paneRestartKeys,
           [paneId]: (state.paneRestartKeys[paneId] ?? 0) + 1,
         },
         paneRuntime: resetPaneRuntime(state.paneRuntime, paneId),
         restoredPaneIds,
+        paneResumeSessionIds,
+        paneResumeAnchors,
       };
+      persistWorkspaceState({ ...state, ...next });
+      return next;
+    }),
+
+  resumePane: (paneId, sessionId) =>
+    set((state) => {
+      const hasPane = state.sessions.some((session) =>
+        sessionHasPane(session, paneId),
+      );
+
+      if (!hasPane) {
+        return state;
+      }
+
+      // A manual pick from the dropdown also anchors the pane, so the next
+      // app restart resumes this exact conversation instead of falling
+      // back to a blanket --continue.
+      const paneResumeAnchors = { ...state.paneResumeAnchors, [paneId]: sessionId };
+
+      const next = {
+        paneRestartKeys: {
+          ...state.paneRestartKeys,
+          [paneId]: (state.paneRestartKeys[paneId] ?? 0) + 1,
+        },
+        paneRuntime: resetPaneRuntime(state.paneRuntime, paneId),
+        restoredPaneIds: { ...state.restoredPaneIds, [paneId]: true },
+        paneResumeSessionIds: { ...state.paneResumeSessionIds, [paneId]: sessionId },
+        paneResumeAnchors,
+      };
+      persistWorkspaceState({ ...state, ...next });
+      return next;
+    }),
+
+  notePaneResumeAnchor: (paneId, sessionId) =>
+    set((state) => {
+      const hasPane = state.sessions.some((session) =>
+        sessionHasPane(session, paneId),
+      );
+      if (!hasPane || state.paneResumeAnchors[paneId] === sessionId) {
+        return state;
+      }
+
+      const next = {
+        paneResumeAnchors: { ...state.paneResumeAnchors, [paneId]: sessionId },
+      };
+      persistWorkspaceState({ ...state, ...next });
+      return next;
     }),
 
   restartTargetPanes: () =>

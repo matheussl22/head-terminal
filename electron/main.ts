@@ -14,6 +14,7 @@ import {
 
 import { IPC_CHANNELS } from "./ipc/channels";
 import { registerIpc, type IpcServices } from "./ipc/register";
+import { listResumableSessions } from "./services/agent-sessions-service";
 import { DiagnosticService } from "./services/diagnostic-service";
 import { createGitService } from "./services/git-watch-service";
 import { McpService } from "./services/mcp-service";
@@ -212,6 +213,10 @@ async function createServices(): Promise<{
     secrets,
     voice,
     mcp,
+    sessions: {
+      listResumable: (cwd, agent, claudeConfigDir) =>
+        listResumableSessions(cwd, agent, claudeConfigDir),
+    },
     diagnostics,
     workspace,
     migration: {
@@ -249,7 +254,7 @@ function createMainWindow(): BrowserWindow {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    backgroundColor: "#0d1117",
+    backgroundColor: "#000000",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -301,7 +306,7 @@ function isSafeExternalUrl(rawUrl: string): boolean {
 function installContentSecurityPolicy(): void {
   const isDevelopment = Boolean(MAIN_WINDOW_VITE_DEV_SERVER_URL);
   const policy = isDevelopment
-    ? "default-src 'self' http://localhost:*; script-src 'self' http://localhost:*; style-src 'self' 'unsafe-inline' http://localhost:*; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:*; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    ? "default-src 'self' http://localhost:*; script-src 'self' 'unsafe-inline' http://localhost:*; style-src 'self' 'unsafe-inline' http://localhost:*; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://localhost:* ws://localhost:*; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
     : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'";
 
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
