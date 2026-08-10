@@ -59,6 +59,11 @@ export async function anchorPaneResumeSession(
       agentProfileId,
       claudeAccountId,
     ).catch(() => []);
+    // The pane header names the conversation from this same list, so hand the
+    // titles over instead of making it read the transcripts again.
+    if (entries.length > 0 && !isDisposed()) {
+      useSessionStore.getState().noteConversationTitles(entries);
+    }
     const fresh = entries.find((entry) => Date.parse(entry.updatedAt) >= threshold);
     if (fresh) {
       if (!isDisposed()) {

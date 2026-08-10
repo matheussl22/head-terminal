@@ -45,6 +45,7 @@ export function isPersistedWorkspace(value: unknown): value is PersistedWorkspac
   }
   if (value.sessions.length > 500) return false;
   if (!isPaneResumeSessionIds(value.paneResumeSessionIds)) return false;
+  if (!isConversationLabels(value.conversationLabels)) return false;
   return value.sessions.every((session) =>
     isRecord(session)
     && isBoundedString(session.id, 256)
@@ -65,6 +66,20 @@ function isPaneResumeSessionIds(value: unknown): boolean {
   return entries.every(
     ([paneId, sessionId]) =>
       isBoundedString(paneId, 256) && isBoundedString(sessionId, 256),
+  );
+}
+
+/** CLI session id -> user-chosen conversation name. The renderer caps both
+ * the entry count and the name length well below these bounds; they exist so
+ * a hand-edited workspace file can't grow without limit. */
+function isConversationLabels(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!isRecord(value)) return false;
+  const entries = Object.entries(value);
+  if (entries.length > 1_000) return false;
+  return entries.every(
+    ([cliSessionId, label]) =>
+      isBoundedString(cliSessionId, 256) && isBoundedString(label, 256),
   );
 }
 

@@ -12,6 +12,15 @@ export interface AgentProfile {
 // output. Payload: "agent-exited:<exit code>".
 export const AGENT_FALLBACK_OSC = 7770;
 
+// Private OSC emitted when a `--resume` never got off the ground and the
+// pane started a fresh conversation instead. Payload:
+// "resume-failed:<exit code>".
+export const AGENT_RESUME_FALLBACK_OSC = 7771;
+
+/** How long a resumed agent has to live before its failure counts as a real
+ * session ending rather than a resume that never started. */
+const RESUME_FAILURE_WINDOW_SECONDS = 5;
+
 // Session ids picked from the resume dropdown are always claude/codex/cursor
 // UUIDs (see electron/services/agent-sessions-service.ts) or codex's rollout
 // id — this guards the shell interpolation below against anything else that
@@ -22,6 +31,26 @@ function sanitizeResumeSessionId(resumeSessionId?: string): string | undefined {
   return resumeSessionId && RESUMABLE_SESSION_ID.test(resumeSessionId)
     ? resumeSessionId
     : undefined;
+}
+
+/**
+ * `--resume <id>` dies immediately when the CLI won't take the id — the
+ * transcript was deleted, belongs to another account, or the CLI rejects it
+ * for reasons of its own ("No conversation found with session ID"). Without
+ * this the pane lands on the bare shell fallback and the user has to notice
+ * and restart it by hand; instead it starts a fresh agent and says so.
+ *
+ * A resumed session that ran for a while and then exited non-zero is a real
+ * session ending, so it keeps falling through to the shell as before.
+ */
+function withResumeFallback(resumeCmd: string, freshCmd: string): string {
+  return (
+    `__ht_resume_start=$SECONDS; ${resumeCmd}; __ht_resume_code=$?; `
+    + `if [ $__ht_resume_code -ne 0 ] `
+    + `&& [ $((SECONDS - __ht_resume_start)) -lt ${RESUME_FAILURE_WINDOW_SECONDS} ]; then `
+    + `printf "\\033]${AGENT_RESUME_FALLBACK_OSC};resume-failed:%s\\007" $__ht_resume_code; `
+    + `${freshCmd}; fi`
+  );
 }
 
 function withShellFallback(agentCmd: string): string[] {
@@ -39,7 +68,7 @@ function cursorWithFallbackArgs(
   const id = sanitizeResumeSessionId(resumeSessionId);
   return withShellFallback(
     id
-      ? `cursor agent --resume ${id}`
+      ? withResumeFallback(`cursor agent --resume ${id}`, "cursor agent")
       : continueConversation
         ? "cursor agent --continue"
         : "cursor agent",
@@ -53,7 +82,7 @@ function claudeWithFallbackArgs(
   const id = sanitizeResumeSessionId(resumeSessionId);
   return withShellFallback(
     id
-      ? `claude --resume ${id}`
+      ? withResumeFallback(`claude --resume ${id}`, "claude")
       : continueConversation
         ? "claude --continue"
         : "claude",
@@ -65,7 +94,9 @@ function codexWithFallbackArgs(resumeSessionId?: string): string[] {
   // equivalent — always spawns fresh until that's verified. --resume <id>
   // is confirmed (`codex resume <id>`), so that path is wired regardless.
   const id = sanitizeResumeSessionId(resumeSessionId);
-  return withShellFallback(id ? `codex resume ${id}` : "codex");
+  return withShellFallback(
+    id ? withResumeFallback(`codex resume ${id}`, "codex") : "codex",
+  );
 }
 
 function antigravityWithFallbackArgs(): string[] {

@@ -2,10 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const listResumable = vi.fn();
 const notePaneResumeAnchor = vi.fn();
+const noteConversationTitles = vi.fn();
 
 vi.mock("./session-manager", () => ({
   useSessionStore: {
-    getState: () => ({ notePaneResumeAnchor }),
+    getState: () => ({ notePaneResumeAnchor, noteConversationTitles }),
   },
 }));
 
@@ -15,6 +16,7 @@ describe("anchorPaneResumeSession", () => {
   beforeEach(() => {
     listResumable.mockReset();
     notePaneResumeAnchor.mockReset();
+    noteConversationTitles.mockReset();
     vi.stubGlobal("window", {
       headTerminal: { sessions: { listResumable } },
     });
@@ -63,6 +65,9 @@ describe("anchorPaneResumeSession", () => {
 
     expect(listResumable).toHaveBeenCalledTimes(2);
     expect(notePaneResumeAnchor).toHaveBeenCalledExactlyOnceWith("pane-1", "fresh");
+    // Every lookup feeds the title cache the pane header reads, including the
+    // one whose entries were all too old to anchor on.
+    expect(noteConversationTitles).toHaveBeenCalledTimes(2);
   });
 
   it("stops before the next fetch once the pane is disposed", async () => {

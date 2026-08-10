@@ -7,6 +7,7 @@ Terminal desktop para trabalhar com vários AI coding agents em paralelo. A apli
 - sessões persistidas, fixação, renomeação, reordenação e troca rápida;
 - splits horizontais e verticais redimensionáveis, cada um com seu próprio PTY;
 - spawn lazy, restart por pane e preservação do scrollback;
+- nome da conversa do agent visível no header do pane, com rename manual que também vale na lista de retomada;
 - perfis Antigravity, Cursor Agent, Claude Code, Codex e shell;
 - múltiplas contas Claude e worktrees Git `agent-N` opcionais;
 - busca, zoom, links, clipboard e renderização WebGL com fallback;

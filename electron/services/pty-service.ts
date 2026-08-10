@@ -149,6 +149,17 @@ function normalizeArgs(args: string[] | undefined): string[] {
   });
 }
 
+/** Environment an agent CLI uses to recognise that it is running *inside*
+ * another agent session. Anything matching this or the `CLAUDE_CODE_` prefix
+ * describes the parent, never a pane. */
+const PARENT_AGENT_ENV = new Set([
+  "AI_AGENT",
+  "CLAUDECODE",
+  "CLAUDE_CONFIG_DIR",
+  "CLAUDE_EFFORT",
+  "CLAUDE_PID",
+]);
+
 function buildEnvironment(
   base: NodeJS.ProcessEnv,
   overrides: Record<string, string> | undefined,
@@ -163,6 +174,19 @@ function buildEnvironment(
   // A real PTY is color-capable, so inherited output preferences must not leak.
   delete env.NO_COLOR;
   delete env.NODE_DISABLE_COLORS;
+
+  // The app itself can be started from inside an agent session — a terminal
+  // running Claude Code, an agent-driven `npm run start:dev`. Those markers
+  // make the CLI in a pane behave as a nested child session: transcript
+  // saving is off, so nothing it does is saved or resumable, and an
+  // inherited CLAUDE_CONFIG_DIR silently overrides the pane's own account.
+  // A pane is always a top-level session. The per-pane overrides below still
+  // win, and a login shell still applies whatever the user's own profile sets.
+  for (const key of Object.keys(env)) {
+    if (PARENT_AGENT_ENV.has(key) || key.startsWith("CLAUDE_CODE_")) {
+      delete env[key];
+    }
+  }
 
   Object.assign(env, {
     TERM: "xterm-256color",

@@ -31,6 +31,9 @@ export interface PersistedWorkspace {
    * pane's own conversation instead of a blanket `--continue` that collides
    * whenever panes share a cwd. */
   paneResumeSessionIds?: Record<string, string>;
+  /** CLI session id -> name the user gave that conversation, so a renamed
+   * conversation stays renamed in the pane header and the resume dropdown. */
+  conversationLabels?: Record<string, string>;
 }
 
 function toPersistedSession(session: AgentSession): PersistedSession {
@@ -50,6 +53,7 @@ export function workspaceFromStore(state: {
   activeSessionId: string | null;
   activePaneId: string | null;
   paneResumeSessionIds?: Record<string, string>;
+  conversationLabels?: Record<string, string>;
 }): PersistedWorkspace {
   return {
     version: 1,
@@ -57,6 +61,7 @@ export function workspaceFromStore(state: {
     activePaneId: state.activePaneId,
     sessions: state.sessions.map(toPersistedSession),
     paneResumeSessionIds: state.paneResumeSessionIds,
+    conversationLabels: state.conversationLabels,
   };
 }
 
@@ -65,6 +70,7 @@ export function hydrateWorkspace(workspace: PersistedWorkspace): {
   activeSessionId: string | null;
   activePaneId: string | null;
   paneResumeSessionIds: Record<string, string>;
+  conversationLabels: Record<string, string>;
 } {
   const sessions: AgentSession[] = workspace.sessions.map((session) => ({
     ...session,
@@ -100,7 +106,24 @@ export function hydrateWorkspace(workspace: PersistedWorkspace): {
     }
   }
 
-  return { sessions, activeSessionId, activePaneId, paneResumeSessionIds };
+  // Conversation names are keyed by CLI session id, which no pane owns — they
+  // outlive panes on purpose, so they are restored as-is.
+  const conversationLabels: Record<string, string> = {};
+  for (const [cliSessionId, label] of Object.entries(
+    workspace.conversationLabels ?? {},
+  )) {
+    if (typeof label === "string" && label) {
+      conversationLabels[cliSessionId] = label;
+    }
+  }
+
+  return {
+    sessions,
+    activeSessionId,
+    activePaneId,
+    paneResumeSessionIds,
+    conversationLabels,
+  };
 }
 
 function loadLegacyWorkspace(): PersistedWorkspace | null {

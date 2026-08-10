@@ -1,4 +1,10 @@
-import { useEffect, useReducer, type ComponentType } from "react";
+import {
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 
 import { ACTIVITY_LABEL } from "../../types/activity";
 import { contextColor } from "../../core/context-meter";
@@ -7,7 +13,11 @@ import {
   paneSupervisor,
   useSupervisorStore,
 } from "../../core/pane-supervisor";
-import { useSessionStore } from "../../core/session-manager";
+import {
+  CONVERSATION_LABEL_MAX_LENGTH,
+  useSessionStore,
+} from "../../core/session-manager";
+import { usePaneConversation } from "../../hooks/usePaneConversation";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import {
   IconActivity,
@@ -16,6 +26,7 @@ import {
   IconAgentCursor,
   IconAgentShell,
   IconClose,
+  IconPencil,
   IconRefresh,
 } from "../ui/Icons";
 import { StatusDot } from "../ui/StatusDot";
@@ -178,6 +189,109 @@ export function TerminalPaneOverlay({ paneId }: TerminalPaneOverlayProps) {
   return null;
 }
 
+/** Name of the agent conversation the pane is on, with inline rename. Shows
+ * "nova conversa" until the CLI writes its transcript and the pane anchors
+ * onto it — renaming before that still works, the name is applied as soon as
+ * the conversation is identified. */
+function PaneConversationName({
+  paneId,
+  cwd,
+  agentProfileId,
+  claudeAccountId,
+}: {
+  paneId: string;
+  cwd: string;
+  agentProfileId: string;
+  claudeAccountId?: string;
+}) {
+  const conversation = usePaneConversation({
+    paneId,
+    cwd,
+    agentProfileId,
+    claudeAccountId,
+  });
+  const setPaneConversationLabel = useSessionStore(
+    (state) => state.setPaneConversationLabel,
+  );
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [isEditing]);
+
+  if (!conversation.supported) {
+    return null;
+  }
+
+  const displayName = conversation.name ?? "nova conversa";
+  const modifier = conversation.isCustom
+    ? " terminal-pane-header__conversation--named"
+    : conversation.name
+      ? ""
+      : " terminal-pane-header__conversation--empty";
+
+  if (isEditing) {
+    return (
+      <input
+        ref={inputRef}
+        className="terminal-pane-header__conversation-input"
+        value={draft}
+        maxLength={CONVERSATION_LABEL_MAX_LENGTH}
+        placeholder="Nome da conversa"
+        onChange={(event) => setDraft(event.target.value)}
+        onClick={(event) => event.stopPropagation()}
+        onBlur={() => {
+          setPaneConversationLabel(paneId, draft);
+          setIsEditing(false);
+        }}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Enter") {
+            event.preventDefault();
+            setPaneConversationLabel(paneId, draft);
+            setIsEditing(false);
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setIsEditing(false);
+          }
+        }}
+      />
+    );
+  }
+
+  return (
+    <>
+      <span className="terminal-pane-header__sep" aria-hidden>
+        ·
+      </span>
+      <button
+        type="button"
+        className={`terminal-pane-header__conversation${modifier}`}
+        title={`Conversa: ${displayName} — clique para renomear (vazio volta ao nome automático)`}
+        onClick={(event) => {
+          event.stopPropagation();
+          setDraft(conversation.name ?? "");
+          setIsEditing(true);
+        }}
+      >
+        <span className="terminal-pane-header__conversation-text">
+          {displayName}
+        </span>
+        <IconPencil
+          size={11}
+          className="terminal-pane-header__conversation-pencil"
+        />
+      </button>
+    </>
+  );
+}
+
 interface TerminalPaneHeaderProps {
   paneId: string;
   cwd: string;
@@ -238,6 +352,18 @@ export function TerminalPaneHeader({
             />
           </span>
         )}
+        <PaneConversationName
+          paneId={paneId}
+          cwd={cwd}
+          agentProfileId={agentProfileId}
+          claudeAccountId={claudeAccountId}
+        />
+        <ResumeSessionMenu
+          paneId={paneId}
+          agentProfileId={agentProfileId}
+          cwd={cwd}
+          claudeAccountId={claudeAccountId}
+        />
       </span>
       <span className="terminal-pane-header__right">
         {contextPercent !== undefined && (
@@ -274,12 +400,6 @@ export function TerminalPaneHeader({
           </button>
         )}
         <VoiceInputButton paneId={paneId} />
-        <ResumeSessionMenu
-          paneId={paneId}
-          agentProfileId={agentProfileId}
-          cwd={cwd}
-          claudeAccountId={claudeAccountId}
-        />
         <button
           type="button"
           className="terminal-pane-header__action"

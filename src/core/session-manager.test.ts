@@ -188,6 +188,19 @@ describe("useSessionStore notePaneResumeAnchor", () => {
     expect(useSessionStore.getState()).toBe(before);
   });
 
+  it("clears the anchor when the CLI refuses to resume it, without restarting the pane", () => {
+    const first = session("first");
+    const paneId = collectPaneIds(first.layout)[0];
+    useSessionStore.getState().addSession(first);
+    useSessionStore.getState().notePaneResumeAnchor(paneId, "detected-xyz");
+    const restartKeyBefore = useSessionStore.getState().paneRestartKeys[paneId] ?? 0;
+
+    useSessionStore.getState().clearPaneResumeAnchor(paneId);
+
+    expect(useSessionStore.getState().paneResumeAnchors[paneId]).toBeUndefined();
+    expect(useSessionStore.getState().paneRestartKeys[paneId] ?? 0).toBe(restartKeyBefore);
+  });
+
   it("drops the anchor when the pane is closed", () => {
     const first = session("first");
     const [firstPaneId] = collectPaneIds(first.layout);
@@ -257,5 +270,118 @@ describe("useSessionStore resumePane", () => {
     useSessionStore.getState().closePane(paneId);
 
     expect(useSessionStore.getState().paneResumeSessionIds[paneId]).toBeUndefined();
+  });
+});
+
+describe("useSessionStore conversation labels", () => {
+  beforeEach(() => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
+  });
+
+  it("names a conversation by its CLI session id and clears it with an empty name", () => {
+    useSessionStore.getState().setConversationLabel("abc-123", "  Refactor   do PDF  ");
+    expect(useSessionStore.getState().conversationLabels["abc-123"]).toBe(
+      "Refactor do PDF",
+    );
+
+    useSessionStore.getState().setConversationLabel("abc-123", "   ");
+    expect(useSessionStore.getState().conversationLabels["abc-123"]).toBeUndefined();
+  });
+
+  it("renames the conversation a pane is already on", () => {
+    const first = session("first");
+    const paneId = collectPaneIds(first.layout)[0];
+    useSessionStore.getState().addSession(first);
+    useSessionStore.getState().notePaneResumeAnchor(paneId, "abc-123");
+
+    useSessionStore.getState().setPaneConversationLabel(paneId, "Faturamento");
+
+    expect(useSessionStore.getState().conversationLabels["abc-123"]).toBe(
+      "Faturamento",
+    );
+    expect(useSessionStore.getState().pendingConversationLabels[paneId]).toBeUndefined();
+  });
+
+  it("parks a name typed before the CLI session id is known and applies it on anchor", () => {
+    const first = session("first");
+    const paneId = collectPaneIds(first.layout)[0];
+    useSessionStore.getState().addSession(first);
+
+    useSessionStore.getState().setPaneConversationLabel(paneId, "Faturamento");
+    expect(useSessionStore.getState().pendingConversationLabels[paneId]).toBe(
+      "Faturamento",
+    );
+
+    useSessionStore.getState().notePaneResumeAnchor(paneId, "abc-123");
+
+    expect(useSessionStore.getState().conversationLabels["abc-123"]).toBe(
+      "Faturamento",
+    );
+    expect(useSessionStore.getState().pendingConversationLabels[paneId]).toBeUndefined();
+  });
+
+  it("does not carry a parked name onto a conversation picked from the dropdown", () => {
+    const first = session("first");
+    const paneId = collectPaneIds(first.layout)[0];
+    useSessionStore.getState().addSession(first);
+    useSessionStore.getState().setPaneConversationLabel(paneId, "Faturamento");
+
+    useSessionStore.getState().resumePane(paneId, "other-999");
+
+    expect(useSessionStore.getState().conversationLabels["other-999"]).toBeUndefined();
+    expect(useSessionStore.getState().pendingConversationLabels[paneId]).toBeUndefined();
+  });
+
+  it("drops a parked name when the pane restarts into a fresh conversation", () => {
+    const first = session("first");
+    const paneId = collectPaneIds(first.layout)[0];
+    useSessionStore.getState().addSession(first);
+    useSessionStore.getState().setPaneConversationLabel(paneId, "Faturamento");
+
+    useSessionStore.getState().restartPane(paneId, { continueConversation: false });
+
+    expect(useSessionStore.getState().pendingConversationLabels[paneId]).toBeUndefined();
+  });
+
+  it("keeps names of conversations whose panes are gone, since ids outlive panes", () => {
+    const first = session("first");
+    const [firstPaneId] = collectPaneIds(first.layout);
+    useSessionStore.getState().addSession(first);
+    useSessionStore.getState().splitActivePane("vertical");
+    const paneId = collectPaneIds(
+      useSessionStore.getState().sessions[0].layout,
+    ).find((id) => id !== firstPaneId)!;
+    useSessionStore.getState().notePaneResumeAnchor(paneId, "abc-123");
+    useSessionStore.getState().setPaneConversationLabel(paneId, "Faturamento");
+
+    useSessionStore.getState().closePane(paneId);
+
+    expect(useSessionStore.getState().conversationLabels["abc-123"]).toBe(
+      "Faturamento",
+    );
+  });
+
+  it("caches transcript titles without touching the user's names", () => {
+    useSessionStore.getState().setConversationLabel("abc-123", "Faturamento");
+    useSessionStore.getState().noteConversationTitles([
+      { id: "abc-123", title: "primeira mensagem" },
+      { id: "def-456", title: "outra conversa" },
+    ]);
+
+    expect(useSessionStore.getState().conversationTitles["abc-123"]).toBe(
+      "primeira mensagem",
+    );
+    expect(useSessionStore.getState().conversationTitles["def-456"]).toBe(
+      "outra conversa",
+    );
+    expect(useSessionStore.getState().conversationLabels["abc-123"]).toBe(
+      "Faturamento",
+    );
   });
 });

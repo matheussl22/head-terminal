@@ -5,8 +5,11 @@ import {
   isResumableAgent,
   type ResumableSessionEntry,
 } from "../../core/agent-sessions-bridge";
-import { useSessionStore } from "../../core/session-manager";
-import { IconChevronDown } from "../ui/Icons";
+import {
+  CONVERSATION_LABEL_MAX_LENGTH,
+  useSessionStore,
+} from "../../core/session-manager";
+import { IconChevronDown, IconPencil } from "../ui/Icons";
 
 interface ResumeSessionMenuProps {
   paneId: string;
@@ -40,12 +43,30 @@ export function ResumeSessionMenu({
   claudeAccountId,
 }: ResumeSessionMenuProps) {
   const resumePane = useSessionStore((state) => state.resumePane);
+  const conversationLabels = useSessionStore(
+    (state) => state.conversationLabels,
+  );
+  const setConversationLabel = useSessionStore(
+    (state) => state.setConversationLabel,
+  );
+  const noteConversationTitles = useSessionStore(
+    (state) => state.noteConversationTitles,
+  );
+  const currentSessionId = useSessionStore(
+    (state) => state.paneResumeAnchors[paneId],
+  );
   const [position, setPosition] = useState<MenuPosition | null>(null);
   const [entries, setEntries] = useState<ResumableSessionEntry[] | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const requestIdRef = useRef(0);
 
-  const close = useCallback(() => setPosition(null), []);
+  const close = useCallback(() => {
+    setPosition(null);
+    setEditingId(null);
+  }, []);
 
   useEffect(() => {
     if (!position) {
@@ -69,6 +90,13 @@ export function ResumeSessionMenu({
     };
   }, [position, close]);
 
+  useEffect(() => {
+    if (editingId) {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }
+  }, [editingId]);
+
   if (!isResumableAgent(agentProfileId)) {
     return null;
   }
@@ -85,8 +113,16 @@ export function ResumeSessionMenu({
       .then((result) => {
         if (requestIdRef.current === requestId) {
           setEntries(result);
+          // Same lookup the pane header needs for its own name — cache it once
+          // so opening this menu doubles as a refresh for every pane on this cwd.
+          noteConversationTitles(result);
         }
       });
+  };
+
+  const commitRename = (entryId: string) => {
+    setConversationLabel(entryId, draft);
+    setEditingId(null);
   };
 
   return (
@@ -115,23 +151,79 @@ export function ResumeSessionMenu({
               Nenhuma sessão anterior encontrada
             </div>
           )}
-          {entries?.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              className="resume-session-menu__item"
-              role="menuitem"
-              onClick={() => {
-                resumePane(paneId, entry.id);
-                close();
-              }}
-            >
-              <span className="resume-session-menu__item-title">{entry.title}</span>
-              <span className="resume-session-menu__item-time">
-                {formatRelativeLabel(entry.updatedAt)}
-              </span>
-            </button>
-          ))}
+          {entries?.map((entry) => {
+            const label = conversationLabels[entry.id];
+            const isCurrent = entry.id === currentSessionId;
+
+            if (editingId === entry.id) {
+              return (
+                <div key={entry.id} className="resume-session-menu__row">
+                  <input
+                    ref={inputRef}
+                    className="resume-session-menu__rename-input"
+                    value={draft}
+                    maxLength={CONVERSATION_LABEL_MAX_LENGTH}
+                    placeholder="Nome da conversa"
+                    onChange={(event) => setDraft(event.target.value)}
+                    onBlur={() => commitRename(entry.id)}
+                    onKeyDown={(event) => {
+                      event.stopPropagation();
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        commitRename(entry.id);
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        setEditingId(null);
+                      }
+                    }}
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <div
+                key={entry.id}
+                className={
+                  isCurrent
+                    ? "resume-session-menu__row resume-session-menu__row--current"
+                    : "resume-session-menu__row"
+                }
+              >
+                <button
+                  type="button"
+                  className="resume-session-menu__item"
+                  role="menuitem"
+                  title={isCurrent ? "Conversa atual deste terminal" : undefined}
+                  onClick={() => {
+                    resumePane(paneId, entry.id);
+                    close();
+                  }}
+                >
+                  <span className="resume-session-menu__item-title">
+                    {label ?? entry.title}
+                  </span>
+                  <span className="resume-session-menu__item-time">
+                    {formatRelativeLabel(entry.updatedAt)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="resume-session-menu__rename"
+                  title="Renomear conversa (vazio volta ao nome automático)"
+                  aria-label={`Renomear ${label ?? entry.title}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setDraft(label ?? entry.title);
+                    setEditingId(entry.id);
+                  }}
+                >
+                  <IconPencil size={11} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </>

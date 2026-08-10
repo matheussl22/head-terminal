@@ -146,6 +146,9 @@ export interface PersistedWorkspace {
    * pane's own conversation instead of a blanket `--continue` that collides
    * whenever panes share a cwd (see session-manager.ts hydrateWorkspace). */
   paneResumeSessionIds?: Record<string, string>;
+  /** CLI session id -> name the user gave that conversation, so a renamed
+   * conversation stays renamed across restarts. */
+  conversationLabels?: Record<string, string>;
 }
 
 export type MigratedPreferences = Record<string, string>;

@@ -55,6 +55,26 @@ describe("workspace-service", () => {
     expect(await readdir(directory)).toContain("workspace.v1.json.corrupt-2026-07-19T12-00-00-000Z");
   });
 
+  it("round-trips conversation names and rejects malformed ones", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ht-workspace-"));
+    cleanup.push(directory);
+    const service = new WorkspaceService({ userDataPath: directory });
+    const named = {
+      ...workspace,
+      conversationLabels: { "cli-session-1": "Faturamento" },
+    } satisfies PersistedWorkspace;
+
+    await service.save(named);
+    await expect(service.load()).resolves.toEqual(named);
+
+    await expect(
+      service.save({
+        ...workspace,
+        conversationLabels: { "cli-session-1": 42 },
+      } as unknown as PersistedWorkspace),
+    ).rejects.toThrow("Workspace inválido");
+  });
+
   it("rejects unsupported schemas before touching disk", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ht-workspace-"));
     cleanup.push(directory);

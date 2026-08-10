@@ -35,6 +35,26 @@ export interface PaneRuntime {
 
 const LAST_OUTPUT_THROTTLE_MS = 1000;
 
+/** Custom conversation names are keyed by CLI session id, and those ids are
+ * never reused, so the map would otherwise grow for the life of the app.
+ * Object key order is insertion order, so the oldest entries drop first. */
+const MAX_CONVERSATION_LABELS = 500;
+export const CONVERSATION_LABEL_MAX_LENGTH = 120;
+
+function pruneConversationLabels(
+  labels: Record<string, string>,
+): Record<string, string> {
+  const entries = Object.entries(labels);
+  if (entries.length <= MAX_CONVERSATION_LABELS) {
+    return labels;
+  }
+  return Object.fromEntries(entries.slice(-MAX_CONVERSATION_LABELS));
+}
+
+function normalizeConversationLabel(label: string): string {
+  return label.replace(/\s+/gu, " ").trim().slice(0, CONVERSATION_LABEL_MAX_LENGTH);
+}
+
 export function createPaneRuntime(): PaneRuntime {
   return {
     status: "starting",
@@ -63,6 +83,15 @@ interface SessionStore {
    * `hydrateWorkspace` can `--resume` each pane's own conversation instead
    * of a blanket `--continue` that collides whenever panes share a cwd. */
   paneResumeAnchors: Record<string, string>;
+  /** CLI session id -> name the user gave that conversation. Persisted, so a
+   * conversation keeps its name across restarts and in the resume dropdown. */
+  conversationLabels: Record<string, string>;
+  /** CLI session id -> title derived from the agent's transcript. Cache only:
+   * refilled from disk on demand, never persisted. */
+  conversationTitles: Record<string, string>;
+  /** paneId -> name typed before the pane's CLI session id was known. Promoted
+   * onto `conversationLabels` as soon as the anchor shows up. */
+  pendingConversationLabels: Record<string, string>;
   sessionGitContext: Record<string, GitContext>;
   paneGitContext: Record<string, GitContext>;
   addSession: (session: AgentSession) => void;
@@ -71,6 +100,7 @@ interface SessionStore {
     activeSessionId: string | null,
     activePaneId: string | null,
     paneResumeAnchors?: Record<string, string>,
+    conversationLabels?: Record<string, string>,
   ) => void;
   setActiveSessionId: (sessionId: string) => void;
   setActivePaneId: (paneId: string) => void;
@@ -98,6 +128,22 @@ interface SessionStore {
    * which CLI session id a pane's conversation actually landed on, without
    * forcing an immediate --resume the way `resumePane` does. */
   notePaneResumeAnchor: (paneId: string, sessionId: string) => void;
+  /** Drops a pane's anchor without restarting it — for when the CLI refused
+   * to resume that conversation, so neither the header nor the next app
+   * launch should keep pointing at it. */
+  clearPaneResumeAnchor: (paneId: string) => void;
+  /** Renames one CLI conversation by its id (an entry of the resume list).
+   * An empty name clears the custom label and falls back to the transcript
+   * title. */
+  setConversationLabel: (cliSessionId: string, label: string) => void;
+  /** Renames whatever conversation a pane is on. Before the pane's CLI
+   * session id is known the name is parked on the pane and promoted later,
+   * so naming a just-spawned conversation is never rejected. */
+  setPaneConversationLabel: (paneId: string, label: string) => void;
+  /** Feeds the transcript-title cache from a resume-list lookup. */
+  noteConversationTitles: (
+    entries: Array<{ id: string; title: string }>,
+  ) => void;
   restartTargetPanes: () => void;
   restartSessionPanes: (sessionId: string) => void;
   updatePaneStatus: (paneId: string, status: SessionStatus) => void;
@@ -172,6 +218,7 @@ function persistWorkspaceState(
     activeSessionId: state.activeSessionId,
     activePaneId: state.activePaneId,
     paneResumeSessionIds: state.paneResumeAnchors,
+    conversationLabels: state.conversationLabels,
   });
 
   if (options?.immediate) {
@@ -193,6 +240,7 @@ function cleanupPaneState(
   | "paneGitContext"
   | "paneResumeSessionIds"
   | "paneResumeAnchors"
+  | "pendingConversationLabels"
 > {
   const paneRuntime = { ...state.paneRuntime };
   const ptyWriters = { ...state.ptyWriters };
@@ -200,6 +248,7 @@ function cleanupPaneState(
   const paneGitContext = { ...state.paneGitContext };
   const paneResumeSessionIds = { ...state.paneResumeSessionIds };
   const paneResumeAnchors = { ...state.paneResumeAnchors };
+  const pendingConversationLabels = { ...state.pendingConversationLabels };
 
   for (const paneId of paneIds) {
     delete paneRuntime[paneId];
@@ -208,6 +257,7 @@ function cleanupPaneState(
     delete paneGitContext[paneId];
     delete paneResumeSessionIds[paneId];
     delete paneResumeAnchors[paneId];
+    delete pendingConversationLabels[paneId];
   }
 
   return {
@@ -217,6 +267,7 @@ function cleanupPaneState(
     paneGitContext,
     paneResumeSessionIds,
     paneResumeAnchors,
+    pendingConversationLabels,
   };
 }
 
@@ -249,6 +300,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   restoredPaneIds: {},
   paneResumeSessionIds: {},
   paneResumeAnchors: {},
+  conversationLabels: {},
+  conversationTitles: {},
+  pendingConversationLabels: {},
   sessionGitContext: {},
   paneGitContext: {},
 
@@ -275,7 +329,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       return next;
     }),
 
-  hydrateWorkspace: (sessions, activeSessionId, activePaneId, paneResumeAnchors = {}) => {
+  hydrateWorkspace: (
+    sessions,
+    activeSessionId,
+    activePaneId,
+    paneResumeAnchors = {},
+    conversationLabels = {},
+  ) => {
     const paneRuntime: Record<string, PaneRuntime> = {};
     const restoredPaneIds: Record<string, boolean> = {};
     const paneResumeSessionIds: Record<string, string> = {};
@@ -315,6 +375,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       restoredPaneIds,
       paneResumeSessionIds,
       paneResumeAnchors,
+      conversationLabels,
+      conversationTitles: {},
+      pendingConversationLabels: {},
     });
     logSpawnState(
       "session.spawn_state",
@@ -494,6 +557,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const restoredPaneIds = { ...state.restoredPaneIds };
       const paneResumeSessionIds = { ...state.paneResumeSessionIds };
       const paneResumeAnchors = { ...state.paneResumeAnchors };
+      const pendingConversationLabels = { ...state.pendingConversationLabels };
       // Explicit false: fresh agent (e.g. after /exit). Explicit true: keep
       // --continue. Undefined: leave hydrate flag alone (supervisor/cwd).
       if (options?.continueConversation === true) {
@@ -505,6 +569,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         // the new transcript, but until then a restart shouldn't leave a
         // stale --resume id sitting around for the next app launch.
         delete paneResumeAnchors[paneId];
+        // The parked name belonged to the conversation being dropped.
+        delete pendingConversationLabels[paneId];
       }
       // A plain restart (either direction) always leaves any explicitly
       // picked --resume id behind — only `resumePane` should set it.
@@ -521,6 +587,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         restoredPaneIds,
         paneResumeSessionIds,
         paneResumeAnchors,
+        pendingConversationLabels,
       };
       persistWorkspaceState({ ...state, ...next });
       return next;
@@ -540,6 +607,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       // app restart resumes this exact conversation instead of falling
       // back to a blanket --continue.
       const paneResumeAnchors = { ...state.paneResumeAnchors, [paneId]: sessionId };
+      // The pane is jumping to a conversation that already exists, so a name
+      // typed for the previous one must not follow it over.
+      const pendingConversationLabels = { ...state.pendingConversationLabels };
+      delete pendingConversationLabels[paneId];
 
       const next = {
         paneRestartKeys: {
@@ -550,6 +621,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         restoredPaneIds: { ...state.restoredPaneIds, [paneId]: true },
         paneResumeSessionIds: { ...state.paneResumeSessionIds, [paneId]: sessionId },
         paneResumeAnchors,
+        pendingConversationLabels,
       };
       persistWorkspaceState({ ...state, ...next });
       return next;
@@ -564,11 +636,95 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         return state;
       }
 
+      const parked = state.pendingConversationLabels[paneId];
+      const pendingConversationLabels = { ...state.pendingConversationLabels };
+      delete pendingConversationLabels[paneId];
+
       const next = {
         paneResumeAnchors: { ...state.paneResumeAnchors, [paneId]: sessionId },
+        conversationLabels: parked
+          ? pruneConversationLabels({
+              ...state.conversationLabels,
+              [sessionId]: parked,
+            })
+          : state.conversationLabels,
+        pendingConversationLabels,
       };
       persistWorkspaceState({ ...state, ...next });
       return next;
+    }),
+
+  clearPaneResumeAnchor: (paneId) =>
+    set((state) => {
+      if (state.paneResumeAnchors[paneId] === undefined) {
+        return state;
+      }
+
+      const paneResumeAnchors = { ...state.paneResumeAnchors };
+      delete paneResumeAnchors[paneId];
+
+      const next = { paneResumeAnchors };
+      persistWorkspaceState({ ...state, ...next }, { immediate: true });
+      return next;
+    }),
+
+  setConversationLabel: (cliSessionId, label) =>
+    set((state) => {
+      const normalized = normalizeConversationLabel(label);
+      if ((state.conversationLabels[cliSessionId] ?? "") === normalized) {
+        return state;
+      }
+
+      const conversationLabels = { ...state.conversationLabels };
+      if (normalized) {
+        conversationLabels[cliSessionId] = normalized;
+      } else {
+        delete conversationLabels[cliSessionId];
+      }
+
+      const next = {
+        conversationLabels: pruneConversationLabels(conversationLabels),
+      };
+      persistWorkspaceState({ ...state, ...next });
+      return next;
+    }),
+
+  setPaneConversationLabel: (paneId, label) => {
+    const anchor = get().paneResumeAnchors[paneId];
+    if (anchor) {
+      get().setConversationLabel(anchor, label);
+      return;
+    }
+
+    set((state) => {
+      const normalized = normalizeConversationLabel(label);
+      if ((state.pendingConversationLabels[paneId] ?? "") === normalized) {
+        return state;
+      }
+
+      const pendingConversationLabels = { ...state.pendingConversationLabels };
+      if (normalized) {
+        pendingConversationLabels[paneId] = normalized;
+      } else {
+        delete pendingConversationLabels[paneId];
+      }
+
+      // Parked names live only until the anchor shows up, so nothing to persist.
+      return { pendingConversationLabels };
+    });
+  },
+
+  noteConversationTitles: (entries) =>
+    set((state) => {
+      let changed = false;
+      const conversationTitles = { ...state.conversationTitles };
+      for (const entry of entries) {
+        if (conversationTitles[entry.id] !== entry.title) {
+          conversationTitles[entry.id] = entry.title;
+          changed = true;
+        }
+      }
+      return changed ? { conversationTitles } : state;
     }),
 
   restartTargetPanes: () =>

@@ -1,6 +1,10 @@
 import { useEffect } from "react";
 
-import { AGENT_FALLBACK_OSC, getAgentProfile } from "../config/agents";
+import {
+  AGENT_FALLBACK_OSC,
+  AGENT_RESUME_FALLBACK_OSC,
+  getAgentProfile,
+} from "../config/agents";
 import { ActivityDetector } from "../core/activity-detector";
 import { ContextMeter } from "../core/context-meter";
 import { resolveClaudeConfigDir } from "../core/claude-accounts";
@@ -94,6 +98,38 @@ export function usePtyProcess({
         const exitCode = Number(payload.split(":")[1] ?? "0");
         logEvent("warn", "agent.fallback", { paneId, sessionId, exitCode });
         activityDetector.onAgentFallback();
+        return true;
+      },
+    );
+
+    // The pane asked to resume a conversation the CLI wouldn't take, so it
+    // is now on a brand new one: say so and find out which one it landed on,
+    // since the id this pane was carrying is dead.
+    const resumeFallbackHandler = terminal.parser.registerOscHandler(
+      AGENT_RESUME_FALLBACK_OSC,
+      (payload) => {
+        const exitCode = Number(payload.split(":")[1] ?? "0");
+        logEvent("warn", "agent.resume_fallback", {
+          paneId,
+          sessionId,
+          resumeSessionId,
+          exitCode,
+        });
+        terminal.writeln(
+          "\x1b[2m── conversa anterior não pôde ser retomada, iniciando uma nova ──\x1b[0m",
+        );
+        // Until the new conversation is identified the pane has none: better
+        // an honest "nova conversa" in the header than the name of the one
+        // the CLI just refused, which is also what a restart would retry.
+        useSessionStore.getState().clearPaneResumeAnchor(paneId);
+        void anchorPaneResumeSession({
+          paneId,
+          cwd,
+          agentProfileId,
+          claudeAccountId,
+          spawnStartMs: Date.now(),
+          isDisposed: () => disposed,
+        });
         return true;
       },
     );
@@ -233,6 +269,7 @@ export function usePtyProcess({
     return () => {
       disposed = true;
       oscHandler.dispose();
+      resumeFallbackHandler.dispose();
       activityDetector.dispose();
       listeners.forEach((listener) => listener.dispose());
       unregisterPtyWriter(paneId);

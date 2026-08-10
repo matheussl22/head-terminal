@@ -110,6 +110,47 @@ describe("PtyService", () => {
     });
   });
 
+  it("drops the parent agent session markers so a pane is never a nested session", () => {
+    const { service, calls } = harness({
+      PATH: "/bin",
+      HOME: "/home/dev",
+      // Head Terminal launched from inside a Claude Code session.
+      CLAUDECODE: "1",
+      CLAUDE_CODE_CHILD_SESSION: "1",
+      CLAUDE_CODE_SESSION_ID: "b7cefdfb-5519-46d1-a737-7525d3da4089",
+      CLAUDE_PID: "45931",
+      AI_AGENT: "claude-code_2-1-226_agent",
+      CLAUDE_CONFIG_DIR: "/home/dev/.parent-profile",
+    });
+
+    service.spawn(1, {
+      id: "pane-1",
+      command: "claude",
+      cwd: "/workspace",
+      env: { CLAUDE_CONFIG_DIR: "/home/dev/.pane-account" },
+    });
+
+    const env = calls[0]?.options.env ?? {};
+    expect(env).toMatchObject({ PATH: "/bin", HOME: "/home/dev" });
+    expect(Object.keys(env).filter((key) => key.startsWith("CLAUDE_CODE_"))).toEqual([]);
+    expect(env.CLAUDECODE).toBeUndefined();
+    expect(env.CLAUDE_PID).toBeUndefined();
+    expect(env.AI_AGENT).toBeUndefined();
+    // The pane's own account still decides where Claude reads and writes.
+    expect(env.CLAUDE_CONFIG_DIR).toBe("/home/dev/.pane-account");
+  });
+
+  it("leaves a pane without its own account on the default Claude config", () => {
+    const { service, calls } = harness({
+      PATH: "/bin",
+      CLAUDE_CONFIG_DIR: "/home/dev/.parent-profile",
+    });
+
+    service.spawn(1, { id: "pane-1", command: "claude", cwd: "/workspace" });
+
+    expect(calls[0]?.options.env.CLAUDE_CONFIG_DIR).toBeUndefined();
+  });
+
   it("uses 80x24 defaults and forwards writes and resizes", () => {
     const { service, processes, calls } = harness();
     service.spawn(1, { id: "pane-1", command: "bash", cwd: "/tmp" });

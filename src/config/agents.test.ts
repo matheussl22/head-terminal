@@ -63,6 +63,23 @@ describe("agent profiles resume flag", () => {
     expect(profiles.claude.args.join(" ")).toContain("--resume");
   });
 
+  it("starts a fresh agent when the resume dies on startup, and only then", () => {
+    const claude = buildAgentProfiles({ resumeSessionId: SESSION_ID }).claude
+      .args.join(" ");
+
+    // Fresh fallback command, guarded by exit code and by how long the
+    // resumed agent lived — a real session that ends non-zero after a while
+    // still goes to the shell fallback instead of relaunching the agent.
+    expect(claude).toContain("__ht_resume_code=$?");
+    expect(claude).toContain("-lt 5");
+    expect(claude).toMatch(/resume-failed:%s.*claude; fi/u);
+  });
+
+  it("keeps a plain spawn free of the resume fallback plumbing", () => {
+    const profiles = buildAgentProfiles({ continueConversation: true });
+    expect(profiles.claude.args.join(" ")).not.toContain("__ht_resume_code");
+  });
+
   it("leaves antigravity and shell profiles untouched", () => {
     const profiles = buildAgentProfiles({ resumeSessionId: SESSION_ID });
     expect(profiles.antigravity.args.join(" ")).not.toContain(SESSION_ID);

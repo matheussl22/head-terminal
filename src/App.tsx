@@ -75,6 +75,7 @@ function App() {
             restored.activeSessionId,
             restored.activePaneId,
             restored.paneResumeSessionIds,
+            restored.conversationLabels,
           );
           checkpoint("js.bootstrap.workspace_ok", {
             sessionCount: restored.sessions.length,
