@@ -1,55 +1,55 @@
 # Head Terminal
 
-Terminal desktop para trabalhar com vários AI coding agents em paralelo. A aplicação usa Electron com uma UI React, um PTY nativo independente por pane e uma API restrita entre renderer e sistema operacional.
+Desktop terminal for working with several AI coding agents in parallel. The application uses Electron with a React UI, one independent native PTY per pane and a narrow API between the renderer and the operating system.
 
-## Funcionalidades
+## Features
 
-- sessões persistidas, fixação, renomeação, reordenação e troca rápida;
-- splits horizontais e verticais redimensionáveis, cada um com seu próprio PTY;
-- spawn lazy, restart por pane e preservação do scrollback;
-- nome da conversa do agent visível no header do pane, com rename manual que também vale na lista de retomada;
-- perfis Antigravity, Cursor Agent, Claude Code, Codex e shell;
-- múltiplas contas Claude e worktrees Git `agent-N` opcionais;
-- busca, zoom, links, clipboard e renderização WebGL com fallback;
-- detecção de atividade, contexto restante, quedas e shell de fallback;
-- contexto, watcher e diff Git, inclusive arquivos não rastreados;
-- status MCP para Claude e Cursor;
-- voz com gravação local e transcrição OpenAI;
-- notificações, logs, checkpoints e exportação de diagnóstico;
-- instância única e confirmação antes de fechar agents trabalhando.
+- persisted sessions, pinning, renaming, reordering and quick switching;
+- resizable horizontal and vertical splits, each with its own PTY;
+- lazy spawn, per-pane restart and scrollback preservation;
+- the agent conversation a pane is on is shown in its header, renamable by hand, and the name also applies in the resume list;
+- Antigravity, Cursor Agent, Claude Code, Codex and shell profiles;
+- multiple Claude accounts and optional `agent-N` Git worktrees;
+- search, zoom, links, clipboard and WebGL rendering with fallback;
+- activity detection, remaining context, crashes and shell fallback;
+- Git context, watcher and diff, including untracked files;
+- MCP status for Claude and Cursor;
+- voice with local recording and OpenAI transcription;
+- notifications, logs, checkpoints and diagnostic export;
+- single instance and confirmation before closing working agents.
 
-## Arquitetura
+## Architecture
 
 ```text
 React 19 + xterm.js + Zustand
               │
               ▼
-window.headTerminal (preload tipado)
-              │ IPC nomeado e validado
+window.headTerminal (typed preload)
+              │ named, validated IPC
               ▼
-Electron main ── node-pty / Git / filesystem / safeStorage / voz
+Electron main ── node-pty / Git / filesystem / safeStorage / voice
 ```
 
-O renderer não possui acesso a Node ou ao `ipcRenderer`. A janela usa `contextIsolation`, sandbox, CSP e `nodeIntegration: false`. Main e preload são empacotados pelo Vite; Electron Forge reconstrói e desempacota `node-pty` dentro do pacote.
+The renderer has no access to Node or to `ipcRenderer`. The window uses `contextIsolation`, sandbox, CSP and `nodeIntegration: false`. Main and preload are bundled by Vite; Electron Forge rebuilds and unpacks `node-pty` inside the package.
 
-| Área | Tecnologia |
+| Area | Technology |
 |---|---|
 | Desktop | Electron 41 + Electron Forge |
 | UI | React 19 + TypeScript + Vite |
 | Terminal | xterm.js + node-pty |
-| Estado | Zustand + workspace JSON versionado |
-| Testes | Vitest + smoke Electron/X11 |
+| State | Zustand + versioned JSON workspace |
+| Tests | Vitest + Electron/X11 smoke |
 
-## Pré-requisitos
+## Requirements
 
-### Todos os sistemas
+### All systems
 
-- Node.js 20 (o baseline atual é Node `20.18.3`);
+- Node.js 20 (the current baseline is Node `20.18.3`);
 - npm;
-- toolchain nativa para compilar módulos Node (`node-pty`);
-- ao menos um shell suportado instalado.
+- a native toolchain to build Node modules (`node-pty`);
+- at least one supported shell installed.
 
-Instale as dependências JavaScript com:
+Install the JavaScript dependencies with:
 
 ```bash
 npm install
@@ -61,20 +61,20 @@ npm install
 sudo apt install build-essential python3 make g++ libsecret-1-0
 ```
 
-Para gravação por voz:
+For voice recording:
 
 ```bash
 sudo apt install pulseaudio-utils
 command -v parecord
 ```
 
-O smoke e o harness visual usam `xdotool` e, preferencialmente, um display isolado:
+The smoke test and the visual harness use `xdotool` and, preferably, an isolated display:
 
 ```bash
 sudo apt install xvfb xdotool imagemagick
 ```
 
-Em Wayland, a aplicação funciona via Electron/Ozone, mas a automação visual atual usa X11/XWayland. A gravação implementada hoje depende de `parecord`; sem ele, somente voz fica indisponível.
+On Wayland the application runs through Electron/Ozone, but the current visual automation uses X11/XWayland. Recording as implemented today depends on `parecord`; without it, only voice is unavailable.
 
 ### macOS
 
@@ -82,87 +82,87 @@ Em Wayland, a aplicação funciona via Electron/Ozone, mas a automação visual 
 xcode-select --install
 ```
 
-Desenvolvimento e pacote ZIP são suportados. A distribuição pública ainda exige configurar assinatura, hardened runtime, entitlements e notarização. A captura de voz atual usa `parecord`, portanto voz no macOS ainda requer um backend nativo próprio antes de ser considerada suportada.
+Development and the ZIP package are supported. Public distribution still requires setting up signing, hardened runtime, entitlements and notarization. Voice capture currently uses `parecord`, so voice on macOS still needs a native backend of its own before it can be considered supported.
 
-## Comandos
+## Commands
 
 ```bash
-npm run dev                         # Electron + Vite com hot reload
-npm run typecheck                   # renderer, main, preload e configs
-npm test                            # testes do renderer/core
-npm run test:electron               # services e contrato IPC
-npm run package                     # app unpacked em out/
-npm run make                        # artefatos de distribuição da plataforma
+npm run dev                         # Electron + Vite with hot reload
+npm run typecheck                   # renderer, main, preload and configs
+npm test                            # renderer/core tests
+npm run test:electron               # services and IPC contract
+npm run package                     # unpacked app in out/
+npm run make                        # platform distribution artifacts
 npm run build                       # typecheck + package
-npm run smoke:electron              # package + boot real e verificação da janela
-npm run smoke:electron:existing     # smoke no pacote já existente
+npm run smoke:electron              # package + real boot and window check
+npm run smoke:electron:existing     # smoke against the existing package
 ```
 
-No Linux, `npm run make` produz o `.deb` em `out/make/deb/`. No macOS, produz ZIP. Builds devem ser feitos na plataforma de destino; módulos nativos não são portáveis entre sistemas ou versões do Electron.
+On Linux, `npm run make` produces the `.deb` in `out/make/deb/`. On macOS it produces a ZIP. Builds must be made on the target platform; native modules are not portable across systems or Electron versions.
 
-O runtime e o empacotamento são exclusivamente Electron; o backend Tauri/Rust foi removido. O leitor WebKit no processo principal existe somente para importar, uma única vez, dados de instalações antigas.
+Runtime and packaging are Electron only; the Tauri/Rust backend was removed. The WebKit reader in the main process exists solely to import, once, data from old installations.
 
-## Launchers no Linux
+## Linux launchers
 
-O instalador local cria duas entradas sem precisar de `sudo`:
+The local installer creates two entries without needing `sudo`:
 
 ```bash
-npm run install:desktop             # instala Head Terminal (Dev)
+npm run install:desktop             # installs Head Terminal (Dev)
 npm run package
-npm run install:desktop:release     # instala também Head Terminal
+npm run install:desktop:release     # also installs Head Terminal
 ```
 
-| Entrada | Destino |
+| Entry | Target |
 |---|---|
-| Head Terminal | pacote Electron em `out/Head Terminal-linux-x64/` |
-| Head Terminal (Dev) | `npm run dev`, com Vite e hot reload |
+| Head Terminal | Electron package in `out/Head Terminal-linux-x64/` |
+| Head Terminal (Dev) | `npm run dev`, with Vite and hot reload |
 
-O modo dev usa launcher, logs, classe de janela e diretório de dados próprios; não o use para sessões que não podem ser interrompidas por reload.
+Dev mode uses its own launcher, logs, window class and data directory; do not use it for sessions that cannot be interrupted by a reload.
 
-Para instalar o pacote Debian gerado:
+To install the generated Debian package:
 
 ```bash
 npm run make
 sudo apt install ./out/make/deb/x64/head-terminal_*.deb
 ```
 
-## Atalhos principais
+## Main shortcuts
 
-| Atalho | Ação |
+| Shortcut | Action |
 |---|---|
-| `Ctrl+Shift+P` | abrir paleta de comandos |
-| `Ctrl+F` | buscar no terminal ativo |
-| `Ctrl+Shift+C` / `Ctrl+Shift+V` | copiar / colar |
+| `Ctrl+Shift+P` | open the command palette |
+| `Ctrl+F` | search in the active terminal |
+| `Ctrl+Shift+C` / `Ctrl+Shift+V` | copy / paste |
 | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | zoom |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | próxima / sessão anterior |
-| `Ctrl+1..9` | selecionar sessão |
-| `Ctrl+Shift+L` | `/clear` no terminal ativo ou em todos |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | next / previous session |
+| `Ctrl+1..9` | select session |
+| `Ctrl+Shift+L` | `/clear` in the active terminal or in all of them |
 
-Os botões `Split ↓` e `Split →` dividem o pane ativo. “Run everything” envia comandos da toolbar a todos os panes da sessão.
+The `Split ↓` and `Split →` buttons split the active pane. “Run everything” sends toolbar commands to every pane in the session.
 
 ## Agents
 
-Os perfis ficam em `src/config/agents.ts`:
+Profiles live in `src/config/agents.ts`:
 
-| Perfil | Executável esperado |
+| Profile | Expected executable |
 |---|---|
 | Antigravity | `agy` |
 | Cursor Agent | `cursor` |
 | Claude Code | `claude` |
 | Codex CLI | `codex` |
-| Shell | shell configurado / `zsh` |
+| Shell | configured shell / `zsh` |
 
-O Head Terminal herda o ambiente do launcher gráfico e completa `PATH`, locale e variáveis de terminal antes de iniciar o PTY.
+Head Terminal inherits the environment from the graphical launcher and fills in `PATH`, locale and terminal variables before starting the PTY. Markers left behind by an agent session that started the app are dropped, so a pane always runs a top-level agent session.
 
-## Estrutura
+## Layout
 
 ```text
 electron/
-├── main.ts              # lifecycle e BrowserWindow
+├── main.ts              # lifecycle and BrowserWindow
 ├── preload.ts           # window.headTerminal
-├── ipc/                 # canais, validação e handlers
-├── services/            # PTY, Git, sistema, segredo, voz e persistência
-└── types/               # contrato compartilhado
+├── ipc/                 # channels, validation and handlers
+├── services/            # PTY, Git, system, secrets, voice and persistence
+└── types/               # shared contract
 src/
 ├── actions/
 ├── components/
@@ -170,19 +170,19 @@ src/
 ├── core/
 ├── hooks/
 └── types/
-tests/electron/          # services, contrato IPC e infraestrutura Electron
-scripts/                 # launchers, E2E e smoke
+tests/electron/          # services, IPC contract and Electron infrastructure
+scripts/                 # launchers, E2E and smoke
 ```
 
-## Validação e diagnóstico
+## Validation and diagnostics
 
-O smoke encerra o grupo de processos mesmo em falha e usa Xvfb quando não existe um `DISPLAY` utilizável. Para exigir display/xdotool em CI:
+The smoke test tears down the process group even on failure and uses Xvfb when there is no usable `DISPLAY`. To require a display/xdotool in CI:
 
 ```bash
 HEAD_TERMINAL_SMOKE_REQUIRE_DISPLAY=1 npm run smoke:electron
 ```
 
-O harness interativo oferece screenshot, teclado e clique num display isolado:
+The interactive harness offers screenshots, keyboard and clicks on an isolated display:
 
 ```bash
 npm run e2e -- start
@@ -191,4 +191,4 @@ npm run e2e -- key ctrl+shift+p
 npm run e2e -- stop
 ```
 
-Falhas do launcher local ficam em `~/.local/share/head-terminal/logs/`.
+Local launcher failures land in `~/.local/share/head-terminal/logs/`.
