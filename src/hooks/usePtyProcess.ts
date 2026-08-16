@@ -128,6 +128,7 @@ export function usePtyProcess({
           agentProfileId,
           claudeAccountId,
           spawnStartMs: Date.now(),
+          startsNewConversation: true,
           isDisposed: () => disposed,
         });
         return true;
@@ -233,19 +234,22 @@ export function usePtyProcess({
         activityDetector.onRunning();
         paneSupervisor.noteSpawned(paneId);
 
-        // An explicit --resume already pins this pane to a known id; only
-        // a fresh/--continue spawn needs to discover which transcript it
-        // actually landed on (see pane-resume-anchor.ts).
-        if (!resumeSessionId) {
-          void anchorPaneResumeSession({
-            paneId,
-            cwd,
-            agentProfileId,
-            claudeAccountId,
-            spawnStartMs,
-            isDisposed: () => disposed,
-          });
-        }
+        // Which transcript this spawn actually landed on is never a given —
+        // not even with an explicit --resume, since the CLI can replay the
+        // conversation into a new file rather than append to the one it was
+        // handed (see pane-resume-anchor.ts).
+        void anchorPaneResumeSession({
+          paneId,
+          cwd,
+          agentProfileId,
+          claudeAccountId,
+          spawnStartMs,
+          // A fork lands on a transcript that did not exist at spawn time,
+          // exactly like a brand new conversation does.
+          startsNewConversation: !continueConversation || Boolean(resumeSessionId),
+          resumedSessionId: resumeSessionId,
+          isDisposed: () => disposed,
+        });
       } catch (error) {
         logError("js.pty.spawn_failed", error, { paneId, sessionId });
         const message =

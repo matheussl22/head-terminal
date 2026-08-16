@@ -23,6 +23,24 @@ interface MenuPosition {
   top: number;
 }
 
+/** Exact stamp, for the tooltip and for rows a relative label can't tell
+ * apart. Seconds are in there on purpose: a batch of conversations fanned out
+ * across panes lands inside the same minute. */
+function formatExactLabel(iso: string): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "";
+  const date = new Date(ms);
+  const clock = date.toLocaleTimeString("pt-BR");
+  if (date.toDateString() === new Date().toDateString()) {
+    return clock;
+  }
+  const day = date.toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+  return `${day} ${clock}`;
+}
+
 function formatRelativeLabel(iso: string): string {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) return "";
@@ -120,6 +138,12 @@ export function ResumeSessionMenu({
       });
   };
 
+  const displayNames = new Map<string, number>();
+  for (const entry of entries ?? []) {
+    const name = conversationLabels[entry.id] ?? entry.title;
+    displayNames.set(name, (displayNames.get(name) ?? 0) + 1);
+  }
+
   const commitRename = (entryId: string) => {
     setConversationLabel(entryId, draft);
     setEditingId(null);
@@ -154,6 +178,12 @@ export function ResumeSessionMenu({
           {entries?.map((entry) => {
             const label = conversationLabels[entry.id];
             const isCurrent = entry.id === currentSessionId;
+            const name = label ?? entry.title;
+            // Two conversations can still read the same — the user gave them
+            // the same name, or they were opened with the exact same prompt
+            // and there is nothing left to tell them apart by. Those rows
+            // trade the friendly "1 d atrás" for the clock.
+            const ambiguous = displayNames.get(name)! > 1;
 
             if (editingId === entry.id) {
               return (
@@ -195,27 +225,35 @@ export function ResumeSessionMenu({
                   type="button"
                   className="resume-session-menu__item"
                   role="menuitem"
-                  title={isCurrent ? "Conversa atual deste terminal" : undefined}
+                  title={[
+                    name,
+                    formatExactLabel(entry.updatedAt),
+                    isCurrent ? "Conversa atual deste terminal" : "",
+                  ]
+                    .filter(Boolean)
+                    .join("\n")}
                   onClick={() => {
                     resumePane(paneId, entry.id);
                     close();
                   }}
                 >
                   <span className="resume-session-menu__item-title">
-                    {label ?? entry.title}
+                    {name}
                   </span>
                   <span className="resume-session-menu__item-time">
-                    {formatRelativeLabel(entry.updatedAt)}
+                    {ambiguous
+                      ? formatExactLabel(entry.updatedAt)
+                      : formatRelativeLabel(entry.updatedAt)}
                   </span>
                 </button>
                 <button
                   type="button"
                   className="resume-session-menu__rename"
                   title="Renomear conversa (vazio volta ao nome automático)"
-                  aria-label={`Renomear ${label ?? entry.title}`}
+                  aria-label={`Renomear ${name}`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    setDraft(label ?? entry.title);
+                    setDraft(name);
                     setEditingId(entry.id);
                   }}
                 >

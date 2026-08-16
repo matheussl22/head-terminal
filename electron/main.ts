@@ -70,7 +70,11 @@ if (!gotSingleInstanceLock) {
     loadRenderer(mainWindow);
   };
 
-  app.on("second-instance", focusMainWindow);
+  // ponytail: processo pode sobreviver sem janela; reabre em vez de ignorar o clique
+  app.on("second-instance", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) openMainWindow();
+    else focusMainWindow();
+  });
 
   void app.whenReady().then(async () => {
     installContentSecurityPolicy();

@@ -4,9 +4,17 @@ const listResumable = vi.fn();
 const notePaneResumeAnchor = vi.fn();
 const noteConversationTitles = vi.fn();
 
+let paneRuntime: Record<string, { status: string }> = {};
+let paneResumeAnchors: Record<string, string> = {};
+
 vi.mock("./session-manager", () => ({
   useSessionStore: {
-    getState: () => ({ notePaneResumeAnchor, noteConversationTitles }),
+    getState: () => ({
+      notePaneResumeAnchor,
+      noteConversationTitles,
+      paneRuntime,
+      paneResumeAnchors,
+    }),
   },
 }));
 
@@ -17,6 +25,8 @@ describe("anchorPaneResumeSession", () => {
     listResumable.mockReset();
     notePaneResumeAnchor.mockReset();
     noteConversationTitles.mockReset();
+    paneRuntime = { "pane-1": { status: "running" } };
+    paneResumeAnchors = {};
     vi.stubGlobal("window", {
       headTerminal: { sessions: { listResumable } },
     });
@@ -34,6 +44,7 @@ describe("anchorPaneResumeSession", () => {
       cwd: "/repo",
       agentProfileId: "shell",
       spawnStartMs: 0,
+      startsNewConversation: false,
       isDisposed: () => false,
     });
 
@@ -56,6 +67,7 @@ describe("anchorPaneResumeSession", () => {
       cwd: "/repo",
       agentProfileId: "claude",
       spawnStartMs,
+      startsNewConversation: false,
       isDisposed: () => false,
     });
 
@@ -76,6 +88,7 @@ describe("anchorPaneResumeSession", () => {
       cwd: "/repo",
       agentProfileId: "claude",
       spawnStartMs: 0,
+      startsNewConversation: false,
       isDisposed: () => true,
     });
 
@@ -86,7 +99,33 @@ describe("anchorPaneResumeSession", () => {
     expect(notePaneResumeAnchor).not.toHaveBeenCalled();
   });
 
-  it("gives up quietly after exhausting every retry with no fresh transcript", async () => {
+  it("keeps polling long after the initial retries, since the CLI only writes the transcript on the first message", async () => {
+    listResumable.mockResolvedValue([]);
+
+    const promise = anchorPaneResumeSession({
+      paneId: "pane-1",
+      cwd: "/repo",
+      agentProfileId: "claude",
+      spawnStartMs: 0,
+      startsNewConversation: false,
+      isDisposed: () => false,
+    });
+
+    // The three staggered attempts are spent by 10.5s and used to be the end
+    // of it — the pane stayed nameless no matter how long the user typed for.
+    await vi.advanceTimersByTimeAsync(10_500);
+    expect(listResumable).toHaveBeenCalledTimes(3);
+
+    listResumable.mockResolvedValue([
+      { id: "late", title: "primeira pergunta", updatedAt: new Date(60_000).toISOString() },
+    ]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await promise;
+
+    expect(notePaneResumeAnchor).toHaveBeenCalledExactlyOnceWith("pane-1", "late");
+  });
+
+  it("gives up once the pane's process is gone", async () => {
     listResumable.mockResolvedValue([]);
 
     const promise = anchorPaneResumeSession({
@@ -94,16 +133,173 @@ describe("anchorPaneResumeSession", () => {
       cwd: "/repo",
       agentProfileId: "cursor",
       spawnStartMs: 0,
+      startsNewConversation: false,
+      isDisposed: () => false,
+    });
+
+    await vi.advanceTimersByTimeAsync(10_500);
+    expect(listResumable).toHaveBeenCalledTimes(3);
+
+    paneRuntime = { "pane-1": { status: "exited" } };
+    await vi.advanceTimersByTimeAsync(60_000);
+    await promise;
+
+    expect(listResumable).toHaveBeenCalledTimes(3);
+    expect(notePaneResumeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("skips a transcript another pane already anchored on", async () => {
+    paneResumeAnchors = { "pane-2": "shared" };
+    listResumable
+      .mockResolvedValueOnce([
+        { id: "shared", title: "x", updatedAt: new Date(5_000).toISOString() },
+      ])
+      .mockResolvedValueOnce([
+        { id: "shared", title: "x", updatedAt: new Date(5_000).toISOString() },
+        { id: "mine", title: "y", updatedAt: new Date(6_000).toISOString() },
+      ]);
+
+    const promise = anchorPaneResumeSession({
+      paneId: "pane-1",
+      cwd: "/repo",
+      agentProfileId: "claude",
+      spawnStartMs: 0,
+      startsNewConversation: false,
       isDisposed: () => false,
     });
 
     await vi.advanceTimersByTimeAsync(1_500);
     await vi.advanceTimersByTimeAsync(3_000);
-    await vi.advanceTimersByTimeAsync(6_000);
     await promise;
 
-    expect(listResumable).toHaveBeenCalledTimes(3);
+    expect(notePaneResumeAnchor).toHaveBeenCalledExactlyOnceWith("pane-1", "mine");
+  });
+
+  it("never adopts a transcript that already existed when the pane spawned", async () => {
+    // Splitting a pane: the sibling is mid-answer, so its transcript is the
+    // freshest thing in the cwd and passes the mtime threshold every time.
+    const sibling = {
+      id: "sibling",
+      title: "conversa do vizinho",
+      updatedAt: new Date(50_000).toISOString(),
+    };
+    listResumable
+      // snapshot taken before the CLI finishes booting
+      .mockResolvedValueOnce([sibling])
+      .mockResolvedValueOnce([{ ...sibling, updatedAt: new Date(60_000).toISOString() }])
+      .mockResolvedValueOnce([
+        { id: "own", title: "minha pergunta", updatedAt: new Date(70_000).toISOString() },
+        { ...sibling, updatedAt: new Date(65_000).toISOString() },
+      ]);
+
+    const promise = anchorPaneResumeSession({
+      paneId: "pane-1",
+      cwd: "/repo",
+      agentProfileId: "claude",
+      spawnStartMs: 0,
+      startsNewConversation: true,
+      isDisposed: () => false,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    await vi.advanceTimersByTimeAsync(3_000);
+    await promise;
+
+    expect(notePaneResumeAnchor).toHaveBeenCalledExactlyOnceWith("pane-1", "own");
+  });
+
+  it("follows the copy a --resume forks into, once the resumed id stops being listed", async () => {
+    const spawnStartMs = 10_000;
+    const ancestor = {
+      id: "ancestor",
+      title: "auditoria",
+      updatedAt: new Date(spawnStartMs - 60_000).toISOString(),
+    };
+    listResumable
+      // snapshot: the conversation the pane asked to resume
+      .mockResolvedValueOnce([ancestor])
+      .mockResolvedValueOnce([ancestor])
+      // the CLI replayed the history into a new transcript, which supersedes
+      // the ancestor in the list
+      .mockResolvedValueOnce([
+        { id: "fork", title: "auditoria", updatedAt: new Date(spawnStartMs + 300).toISOString() },
+      ]);
+
+    const promise = anchorPaneResumeSession({
+      paneId: "pane-1",
+      cwd: "/repo",
+      agentProfileId: "claude",
+      spawnStartMs,
+      startsNewConversation: true,
+      resumedSessionId: "ancestor",
+      isDisposed: () => false,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    await vi.advanceTimersByTimeAsync(3_000);
+    await promise;
+
+    expect(notePaneResumeAnchor).toHaveBeenCalledExactlyOnceWith("pane-1", "fork");
+  });
+
+  it("keeps a resumed pane on its own id while that transcript is still the live one", async () => {
+    const spawnStartMs = 10_000;
+    const ancestor = {
+      id: "ancestor",
+      title: "auditoria",
+      updatedAt: new Date(spawnStartMs - 60_000).toISOString(),
+    };
+    // A sibling pane opens a brand new conversation in the same cwd while we
+    // watch: fresh id, fresh mtime, nobody anchored on it yet.
+    listResumable.mockResolvedValue([
+      { id: "sibling-nova", title: "outra", updatedAt: new Date(spawnStartMs + 400).toISOString() },
+      ancestor,
+    ]);
+
+    const promise = anchorPaneResumeSession({
+      paneId: "pane-1",
+      cwd: "/repo",
+      agentProfileId: "claude",
+      spawnStartMs,
+      startsNewConversation: true,
+      resumedSessionId: "ancestor",
+      isDisposed: () => false,
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(notePaneResumeAnchor).not.toHaveBeenCalled();
+
+    // ...and the watch is bounded: no copy in 90s means the CLI is appending
+    // to the resumed transcript, so the poll stops instead of running for the
+    // life of the pane.
+    await vi.advanceTimersByTimeAsync(120_000);
+    await promise;
+    const calls = listResumable.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(listResumable.mock.calls.length).toBe(calls);
+    expect(notePaneResumeAnchor).not.toHaveBeenCalled();
+  });
+
+  it("still anchors on a pre-existing transcript when the spawn is a --continue", async () => {
+    listResumable.mockResolvedValue([
+      { id: "retomada", title: "de ontem", updatedAt: new Date(50_000).toISOString() },
+    ]);
+
+    const promise = anchorPaneResumeSession({
+      paneId: "pane-1",
+      cwd: "/repo",
+      agentProfileId: "claude",
+      spawnStartMs: 0,
+      startsNewConversation: false,
+      isDisposed: () => false,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    await promise;
+
+    // No snapshot lookup: a --continue is supposed to land on an old id.
+    expect(listResumable).toHaveBeenCalledTimes(1);
+    expect(notePaneResumeAnchor).toHaveBeenCalledExactlyOnceWith("pane-1", "retomada");
   });
 
   it("never throws when the lookup itself rejects", async () => {
@@ -114,13 +310,16 @@ describe("anchorPaneResumeSession", () => {
       cwd: "/repo",
       agentProfileId: "claude",
       spawnStartMs: 0,
+      startsNewConversation: false,
       isDisposed: () => false,
     });
 
-    await vi.advanceTimersByTimeAsync(1_500);
-    await vi.advanceTimersByTimeAsync(3_000);
-    await vi.advanceTimersByTimeAsync(6_000);
-    await expect(promise).resolves.toBeUndefined();
+    await vi.advanceTimersByTimeAsync(10_500);
+    expect(listResumable).toHaveBeenCalledTimes(3);
     expect(notePaneResumeAnchor).not.toHaveBeenCalled();
+
+    paneRuntime = { "pane-1": { status: "exited" } };
+    await vi.advanceTimersByTimeAsync(10_000);
+    await expect(promise).resolves.toBeUndefined();
   });
 });
