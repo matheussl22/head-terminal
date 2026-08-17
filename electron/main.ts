@@ -1,4 +1,5 @@
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { arch, homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 
@@ -46,7 +47,50 @@ if (!app.isPackaged) {
   app.setPath("userData", `${app.getPath("userData")} Dev`);
 }
 
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
+// Windows silently drops notifications from a process whose AppUserModelId
+// does not match the shortcut that launched it. Squirrel derives that id from
+// the package and executable names, so the app has to answer to the same one.
+if (process.platform === "win32") {
+  app.setAppUserModelId(
+    app.isPackaged ? "com.squirrel.head-terminal.head-terminal" : "com.matheus.head-terminal",
+  );
+}
+
+/**
+ * Squirrel runs the freshly installed executable with a command instead of a
+ * window. Shortcuts are created here and the process exits immediately: an
+ * installer that waits on a visible window hangs.
+ */
+function handledSquirrelCommand(): boolean {
+  if (process.platform !== "win32") return false;
+  const command = process.argv[1];
+  if (typeof command !== "string" || !command.startsWith("--squirrel-")) {
+    return false;
+  }
+
+  const updateExe = path.resolve(path.dirname(process.execPath), "..", "Update.exe");
+  const executable = path.basename(process.execPath);
+  const shortcutFlag =
+    command === "--squirrel-uninstall" ? "--removeShortcut" : "--createShortcut";
+
+  if (command === "--squirrel-install" || command === "--squirrel-updated"
+    || command === "--squirrel-uninstall") {
+    try {
+      spawn(updateExe, [`${shortcutFlag}=${executable}`], { detached: true })
+        .unref();
+    } catch {
+      // A missing Update.exe means a portable copy: there is no shortcut to
+      // manage, and the process must still exit.
+    }
+  }
+
+  app.quit();
+  return true;
+}
+
+const gotSingleInstanceLock = handledSquirrelCommand()
+  ? false
+  : app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
   app.quit();

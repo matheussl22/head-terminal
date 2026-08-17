@@ -4,7 +4,7 @@ import { sendAgentCommand } from "../../actions/sendAgentCommand";
 import { PALETTE_ACTIONS } from "../../config/toolbar";
 import { exportDiagnosticBundle } from "../../core/export-diagnostic";
 import { useSessionStore } from "../../core/session-manager";
-import { toggleVoiceInput } from "../../core/voice-input";
+import { isVoiceInputSupported, toggleVoiceInput } from "../../core/voice-input";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -25,20 +25,27 @@ export function CommandPalette({
   const splitActivePane = useSessionStore((state) => state.splitActivePane);
   const activePaneId = useSessionStore((state) => state.activePaneId);
   const closePane = useSessionStore((state) => state.closePane);
+  const available = useMemo(
+    () =>
+      isVoiceInputSupported()
+        ? PALETTE_ACTIONS
+        : PALETTE_ACTIONS.filter((action) => action.command !== "__voice_input__"),
+    [],
+  );
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
 
     if (!normalized) {
-      return PALETTE_ACTIONS;
+      return available;
     }
 
-    return PALETTE_ACTIONS.filter(
+    return available.filter(
       (action) =>
         action.label.toLowerCase().includes(normalized) ||
         action.command.toLowerCase().includes(normalized) ||
         action.description?.toLowerCase().includes(normalized),
     );
-  }, [query]);
+  }, [available, query]);
 
   useEffect(() => {
     if (open) {
@@ -50,7 +57,7 @@ export function CommandPalette({
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [query]);
+  }, [available, query]);
 
   const runAction = useCallback(
     (command: string) => {

@@ -25,6 +25,15 @@ function beep(freq: number): void {
   }
 }
 
+/**
+ * Recording goes through `parecord`, which is PulseAudio and does not exist
+ * on Windows. Until the capture moves into the renderer, a button that can
+ * only fail is worse than no button at all.
+ */
+export function isVoiceInputSupported(): boolean {
+  return !/Windows/u.test(navigator.userAgent);
+}
+
 export function isVoiceInputBlocked(paneId: string): boolean {
   const { voiceRecordingPaneId, voiceTranscribingPaneId } =
     useSessionStore.getState();
@@ -44,6 +53,11 @@ export async function toggleVoiceInput(
   paneId: string,
   options?: { onError?: () => void },
 ): Promise<void> {
+  if (!isVoiceInputSupported()) {
+    logEvent("debug", "voice.unsupported_platform", { paneId });
+    return;
+  }
+
   if (isVoiceInputBlocked(paneId)) {
     logEvent("debug", "voice.toggle_blocked", { paneId });
     return;

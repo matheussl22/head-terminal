@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { VOICE_SHORTCUT } from "../../config/toolbar";
 import { useSessionStore } from "../../core/session-manager";
-import { isVoiceInputBlocked, toggleVoiceInput } from "../../core/voice-input";
+import {
+  isVoiceInputBlocked,
+  isVoiceInputSupported,
+  toggleVoiceInput,
+} from "../../core/voice-input";
 import { cancelVoiceRecording } from "../../core/voice-bridge";
 import { IconMic } from "../ui/Icons";
 
@@ -68,6 +72,10 @@ export function VoiceInputButton({ paneId }: VoiceInputButtonProps) {
         : isRecording
           ? "terminal-pane-header__mic--recording"
           : "";
+
+  if (!isVoiceInputSupported()) {
+    return null;
+  }
 
   const title = isRecording
     ? `Parar gravação e transcrever (${VOICE_SHORTCUT})`
