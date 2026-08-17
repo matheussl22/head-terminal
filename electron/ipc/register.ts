@@ -61,6 +61,7 @@ export interface IpcServices {
     checkAgentClis(): Promise<AgentCliStatus>;
     deleteClaudeProfile(path: string): Promise<void>;
     getPlatform(): Promise<PlatformInfo> | PlatformInfo;
+    selectWslDistro?(distro: string): Promise<boolean>;
   };
   secrets?: {
     has(key: AllowedSecretKey): Promise<boolean>;
@@ -249,6 +250,11 @@ export function registerIpc({
   );
   handle(IPC_CHANNELS.system.getPlatform, () =>
     services.system?.getPlatform() ?? unsupported("system.getPlatform"),
+  );
+  handle(IPC_CHANNELS.system.selectWslDistro, (_event, value) =>
+    services.system?.selectWslDistro?.(
+      asString(value, "distro", { maxLength: 128 }),
+    ) ?? false,
   );
 
   handle(IPC_CHANNELS.secrets.has, (_event, value) =>

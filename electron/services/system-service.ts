@@ -1,7 +1,8 @@
-import { execFile } from "node:child_process";
 import { lstat, realpath, rm, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+
+import { runCommand } from "./command-runner";
 
 const CLAUDE_PROFILE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,15 +28,42 @@ function validatePath(value: string): string {
   return value;
 }
 
+/**
+ * Home the panes actually live in. On Windows that is the WSL `$HOME`, never
+ * `C:\Users\...`, and it is installed at startup once the distro is known.
+ */
+let posixHome: string | null = null;
+
+export function setPosixHome(home: string | null): void {
+  posixHome = home;
+}
+
+export function getPosixHome(): string {
+  return posixHome ?? homedir();
+}
+
+/**
+ * Turns a POSIX path into one this process can hand to `fs`. It is the
+ * identity everywhere except Windows, where the files live inside the distro
+ * and are reached over UNC.
+ */
+let toNativePath: (posix: string) => string = (posix) => posix;
+
+export function setNativePathTranslator(
+  translate: (posix: string) => string,
+): void {
+  toNativePath = translate;
+}
+
 /** Matches the Tauri default (`$HOME/Documentos`) without trusting `$HOME`. */
 export async function getDefaultCwd(): Promise<string> {
-  return join(homedir(), "Documentos");
+  return posixHome ? `${posixHome}/Documentos` : join(homedir(), "Documentos");
 }
 
 /** `path_exists` historically means "is an existing directory". */
 export async function pathExists(path: string): Promise<boolean> {
   try {
-    return (await stat(validatePath(path))).isDirectory();
+    return (await stat(toNativePath(validatePath(path)))).isDirectory();
   } catch {
     return false;
   }
@@ -51,20 +79,15 @@ function runCliDiscovery(): Promise<string> {
     "command -v codex >/dev/null 2>&1 && echo codex",
   ].join("; ");
 
-  return new Promise((resolveOutput) => {
-    execFile(
-      "zsh",
-      ["-lc", command],
-      {
-        encoding: "utf8",
-        maxBuffer: 64 * 1024,
-        timeout: CLI_CHECK_TIMEOUT_MS,
-      },
-      // A missing final CLI makes the shell status non-zero; stdout from the
-      // preceding probes is still valid and must not be discarded.
-      (_error, stdout) => resolveOutput(stdout),
-    );
-  });
+  // A missing final CLI makes the shell status non-zero; stdout from the
+  // preceding probes is still valid and must not be discarded.
+  return runCommand("zsh", ["-lc", command], {
+    maxBuffer: 64 * 1024,
+    timeoutMs: CLI_CHECK_TIMEOUT_MS,
+  }).then(
+    (result) => result.stdout,
+    (error) => (error as { stdout?: string }).stdout ?? "",
+  );
 }
 
 export async function checkAgentClis(): Promise<AgentCliStatus> {
@@ -78,7 +101,7 @@ export async function checkAgentClis(): Promise<AgentCliStatus> {
 }
 
 function claudeProfilesRoot(): string {
-  return resolve(homedir(), ".head-terminal", "claude-profiles");
+  return resolve(toNativePath(`${getPosixHome()}/.head-terminal/claude-profiles`));
 }
 
 /**
@@ -87,7 +110,7 @@ function claudeProfilesRoot(): string {
  * deletion outside the managed directory.
  */
 export async function deleteClaudeProfileDir(path: string): Promise<void> {
-  const target = resolve(validatePath(path));
+  const target = resolve(toNativePath(validatePath(path)));
   const root = claudeProfilesRoot();
   const profileId = target.slice(root.length + 1);
 

@@ -1,5 +1,9 @@
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
+
+import { PANE_MARKER_ENV, withWslEnvPassthrough } from "./wsl-service";
 
 const require = createRequire(import.meta.url);
 
@@ -49,6 +53,32 @@ export interface PtySpawnRequest {
   env?: Record<string, string>;
 }
 
+/**
+ * What `PtyService` needs from `WslService`. Structural so tests can supply a
+ * two-line stub and production can pass the real thing.
+ */
+export interface WslBridge {
+  isWslMode(): boolean;
+  wrap(
+    command: string,
+    args: readonly string[],
+    cwd: string,
+  ): { file: string; args: string[] };
+  spawnCwd(posix: string, windowsFallback: string): string;
+  killPaneTree(marker: string): Promise<void>;
+}
+
+/** Pane variables that must survive the crossing into the distro. */
+const WSL_FORWARDED_ENV = [
+  "TERM",
+  "COLORTERM",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "CLAUDE_CONFIG_DIR",
+  PANE_MARKER_ENV,
+] as const;
+
 export interface PtySpawnResult {
   id: string;
   pid: number;
@@ -73,6 +103,10 @@ export interface PtyServiceOptions {
   spawn?: SpawnPty;
   /** Base environment inherited by child processes. Defaults to process.env. */
   env?: NodeJS.ProcessEnv;
+  /** Present only on Windows, where every argv is wrapped into WSL. */
+  wsl?: WslBridge;
+  /** Directory the Windows launcher itself starts in. Defaults to the home. */
+  windowsHome?: string;
 }
 
 interface PtyEntry {
@@ -80,6 +114,8 @@ interface PtyEntry {
   ownerId: number;
   process: PtyProcess;
   listeners: Disposable[];
+  /** Set in WSL mode: identifies the Linux process tree behind `wsl.exe`. */
+  wslMarker?: string;
 }
 
 interface NodePtyModule {
@@ -243,6 +279,8 @@ export class PtyService {
   private readonly emit: (event: PtyServiceEvent) => void;
   private readonly spawnPty: SpawnPty;
   private readonly baseEnv: NodeJS.ProcessEnv;
+  private readonly wsl: WslBridge | null;
+  private readonly windowsHome: string;
 
   constructor(options: PtyServiceOptions = {}) {
     this.emit = options.emit ?? (() => undefined);
@@ -251,6 +289,8 @@ export class PtyService {
       ((file, args, spawnOptions) =>
         loadNodePty().spawn(file, args, spawnOptions));
     this.baseEnv = options.env ?? process.env;
+    this.wsl = options.wsl ?? null;
+    this.windowsHome = options.windowsHome ?? homedir();
   }
 
   spawn(ownerId: number, request: PtySpawnRequest): PtySpawnResult {
@@ -270,12 +310,28 @@ export class PtyService {
     const args = normalizeArgs(request.args);
     const cols = normalizeDimension(request.cols, DEFAULT_COLS, "cols");
     const rows = normalizeDimension(request.rows, DEFAULT_ROWS, "rows");
-    const env = buildEnvironment(this.baseEnv, request.env);
-    const processPty = this.spawnPty(request.command, args, {
+    let env = buildEnvironment(this.baseEnv, request.env);
+
+    // The Windows↔WSL boundary is here and nowhere else: the argv built by
+    // the renderer crosses untouched, only wrapped.
+    const inWsl = this.wsl?.isWslMode() ?? false;
+    const marker = inWsl ? randomUUID() : undefined;
+    if (marker) {
+      env[PANE_MARKER_ENV] = marker;
+      env = withWslEnvPassthrough(env, WSL_FORWARDED_ENV);
+    }
+    const launch = inWsl
+      ? (this.wsl as WslBridge).wrap(request.command, args, request.cwd)
+      : { file: request.command, args };
+    const cwd = inWsl
+      ? (this.wsl as WslBridge).spawnCwd(request.cwd, this.windowsHome)
+      : request.cwd;
+
+    const processPty = this.spawnPty(launch.file, launch.args, {
       name: "xterm-256color",
       cols,
       rows,
-      cwd: request.cwd,
+      cwd,
       env,
     });
 
@@ -284,6 +340,7 @@ export class PtyService {
       ownerId,
       process: processPty,
       listeners: [],
+      ...(marker ? { wslMarker: marker } : {}),
     };
     this.entries.set(key, entry);
 
@@ -397,6 +454,11 @@ export class PtyService {
     }
 
     if (kill) {
+      // In WSL mode the pid belongs to `wsl.exe`; the tree that matters lives
+      // inside the distro and is killed there, by marker.
+      if (entry.wslMarker && this.wsl) {
+        void this.wsl.killPaneTree(entry.wslMarker);
+      }
       let descendantPids: number[] = [];
       // node-pty kills the foreground shell, but detached/background children
       // may survive it. On POSIX the PTY child is a session/process-group

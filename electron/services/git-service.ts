@@ -1,5 +1,6 @@
-import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
+
+import { runCommand, type CommandFailure } from "./command-runner";
 
 const GIT_TIMEOUT_MS = 10_000;
 const GIT_MAX_BUFFER = 16 * 1024 * 1024;
@@ -40,26 +41,19 @@ function validateCwd(cwd: string): string {
   return cwd;
 }
 
-function executeGit(args: readonly string[]): Promise<GitResult> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      "git",
-      [...args],
-      {
-        encoding: "utf8",
-        maxBuffer: GIT_MAX_BUFFER,
-        timeout: GIT_TIMEOUT_MS,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          const detail = stderr.trim() || error.message;
-          reject(new Error(detail));
-          return;
-        }
-        resolve({ stdout: stdout.trim(), stderr: stderr.trim() });
-      },
-    );
-  });
+async function executeGit(args: readonly string[]): Promise<GitResult> {
+  try {
+    // Paths in `args` are POSIX and stay POSIX: in WSL mode this is the git
+    // inside the distro, so nothing the user sees needs translating.
+    const { stdout, stderr } = await runCommand("git", args, {
+      maxBuffer: GIT_MAX_BUFFER,
+      timeoutMs: GIT_TIMEOUT_MS,
+    });
+    return { stdout: stdout.trim(), stderr: stderr.trim() };
+  } catch (error) {
+    const failure = error as CommandFailure;
+    throw new Error(failure.stderr?.trim() || failure.message);
+  }
 }
 
 async function tryGit(args: readonly string[]): Promise<GitResult | null> {

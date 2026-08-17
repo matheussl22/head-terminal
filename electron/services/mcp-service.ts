@@ -1,10 +1,9 @@
-import { execFile } from "node:child_process";
-
 import type {
   McpServersPayload,
   McpServerStatus,
   SupportedAgent,
 } from "../types/api";
+import { runCommand } from "./command-runner";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1_000;
@@ -50,30 +49,15 @@ export type McpCommandRunner = (
   timeoutMs: number,
 ) => Promise<CommandResult>;
 
-function runCommand(
+function runMcpList(
   binary: string,
   cwd: string,
   timeoutMs: number,
 ): Promise<CommandResult> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      binary,
-      ["mcp", "list"],
-      {
-        cwd,
-        encoding: "utf8",
-        maxBuffer: MAX_BUFFER_BYTES,
-        timeout: timeoutMs,
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          Object.assign(error, { stdout, stderr });
-          reject(error);
-          return;
-        }
-        resolve({ stdout, stderr });
-      },
-    );
+  return runCommand(binary, ["mcp", "list"], {
+    cwd,
+    maxBuffer: MAX_BUFFER_BYTES,
+    timeoutMs,
   });
 }
 
@@ -100,7 +84,7 @@ export class McpService {
     this.#timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.#cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
     this.#now = options.now ?? Date.now;
-    this.#runner = options.runner ?? runCommand;
+    this.#runner = options.runner ?? runMcpList;
   }
 
   clearCache(): void {

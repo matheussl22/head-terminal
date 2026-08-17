@@ -30,6 +30,7 @@ export const IPC_CHANNELS = {
     checkAgentClis: "system:check-agent-clis",
     deleteClaudeProfile: "system:delete-claude-profile",
     getPlatform: "system:get-platform",
+    selectWslDistro: "system:select-wsl-distro",
   },
   secrets: {
     has: "secrets:has",

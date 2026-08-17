@@ -14,7 +14,14 @@ import {
 
 import { IPC_CHANNELS } from "./ipc/channels";
 import { registerIpc, type IpcServices } from "./ipc/register";
-import { listResumableSessions } from "./services/agent-sessions-service";
+import {
+  listResumableSessions,
+  type AgentSessionRoots,
+} from "./services/agent-sessions-service";
+import {
+  createWslCommandRunner,
+  setCommandRunner,
+} from "./services/command-runner";
 import { DiagnosticService } from "./services/diagnostic-service";
 import { createGitService } from "./services/git-watch-service";
 import { McpService } from "./services/mcp-service";
@@ -28,6 +35,7 @@ import { SecretService } from "./services/secret-service";
 import * as systemService from "./services/system-service";
 import { VoiceService } from "./services/voice-service";
 import { WorkspaceService } from "./services/workspace-service";
+import { WslService } from "./services/wsl-service";
 
 const RUN_ID = randomUUID().replaceAll("-", "");
 
@@ -120,6 +128,27 @@ async function createServices(): Promise<{
   const smokeTest = process.env.HEAD_TERMINAL_SMOKE === "1";
   const diagnostics = new DiagnosticService({ channel, runId: RUN_ID });
   const workspace = new WorkspaceService({ userDataPath, channel });
+
+  // Everything below this line speaks POSIX. On Windows the distro is
+  // resolved once, here, and the boundary is crossed only inside the runner,
+  // the PTY wrapper and the session roots.
+  const wsl = new WslService({
+    settingsPath: path.join(userDataPath, "wsl.json"),
+  });
+  await wsl.initialize();
+  if (wsl.isWslMode()) {
+    setCommandRunner(createWslCommandRunner(wsl));
+    systemService.setPosixHome(wsl.home);
+    systemService.setNativePathTranslator((posix) => wsl.toWindowsPath(posix));
+  }
+  diagnostics.appendEvent(JSON.stringify({
+    ts: new Date().toISOString(),
+    event: "wsl.initialized",
+    enabled: wsl.isWslMode(),
+    distro: wsl.distro,
+    home: wsl.home,
+    available: wsl.availableDistros,
+  }));
   const migration = new MigrationService({
     userDataPath,
     workspaceService: workspace,
@@ -165,6 +194,7 @@ async function createServices(): Promise<{
   });
 
   const pty = new PtyService({
+    ...(wsl.isWslMode() ? { wsl } : {}),
     emit(event) {
       const owner = webContents.fromId(event.ownerId);
       if (!owner || owner.isDestroyed()) return;
@@ -191,8 +221,31 @@ async function createServices(): Promise<{
       getPlatform: () => ({
         platform: process.platform,
         arch: arch(),
-        homeDir: homedir(),
+        // Profile directories are built from this, and in WSL mode they must
+        // be POSIX so the agent inside the distro can find them.
+        homeDir: systemService.getPosixHome(),
+        ...(process.platform === "win32"
+          ? {
+              wsl: {
+                enabled: wsl.isWslMode(),
+                distro: wsl.distro,
+                available: [...wsl.availableDistros],
+              },
+            }
+          : {}),
       }),
+      async selectWslDistro(distro: string) {
+        const applied = await wsl.selectDistro(distro);
+        if (applied) {
+          systemService.setPosixHome(wsl.home);
+          diagnostics.appendEvent(JSON.stringify({
+            ts: new Date().toISOString(),
+            event: "wsl.distro_selected",
+            distro,
+          }));
+        }
+        return applied;
+      },
       async selectDirectory(window, defaultPath) {
         const result = await dialog.showOpenDialog(window, {
           properties: ["openDirectory", "createDirectory"],
@@ -219,7 +272,16 @@ async function createServices(): Promise<{
     mcp,
     sessions: {
       listResumable: (cwd, agent, claudeConfigDir) =>
-        listResumableSessions(cwd, agent, claudeConfigDir),
+        listResumableSessions(
+          cwd,
+          agent,
+          // The cwd stays POSIX — it is only ever encoded into a directory
+          // name — while the roots are read over UNC from Windows.
+          claudeConfigDir === undefined
+            ? undefined
+            : wsl.toWindowsPath(claudeConfigDir),
+          agentSessionRoots(wsl),
+        ),
     },
     diagnostics,
     workspace,
@@ -248,6 +310,19 @@ async function createServices(): Promise<{
       })();
       return disposePromise;
     },
+  };
+}
+
+/** Session transcripts live in the Linux home even when the app is Windows. */
+function agentSessionRoots(wsl: WslService): AgentSessionRoots {
+  const home = wsl.isWslMode() ? wsl.home : null;
+  const base = home
+    ? (posix: string) => wsl.toWindowsPath(`${home}${posix}`)
+    : (posix: string) => path.join(homedir(), posix.slice(1).replaceAll("/", path.sep));
+  return {
+    claudeProjectsRoot: base("/.claude/projects"),
+    codexRoot: base("/.codex"),
+    cursorProjectsRoot: base("/.cursor/projects"),
   };
 }
 

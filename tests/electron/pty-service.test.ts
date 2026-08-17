@@ -258,3 +258,102 @@ describe("PtyService", () => {
     expect(action).toThrow();
   });
 });
+
+describe("PtyService in WSL mode", () => {
+  const ZSH_ARGS = ["-l", "-c", "cd /home/m/repo && exec claude"];
+
+  function wslHarness() {
+    const killed: string[] = [];
+    const processes: FakePty[] = [];
+    const calls: Array<{
+      file: string;
+      args: string[];
+      options: NodePtySpawnOptions;
+    }> = [];
+    const service = new PtyService({
+      env: { PATH: "C:\\Windows" },
+      windowsHome: "C:\\Users\\m",
+      wsl: {
+        isWslMode: () => true,
+        wrap: (command, args, cwd) => ({
+          file: "wsl.exe",
+          args: ["-d", "Ubuntu", "--cd", cwd, "--", command, ...args],
+        }),
+        spawnCwd: (_posix, fallback) => fallback,
+        killPaneTree: async (marker) => {
+          killed.push(marker);
+        },
+      },
+      spawn: (file, args, options) => {
+        calls.push({ file, args, options });
+        const processPty = new FakePty();
+        processes.push(processPty);
+        return processPty;
+      },
+    });
+    return { service, calls, processes, killed };
+  }
+
+  it("wraps the argv into wsl.exe without touching the agent command", () => {
+    const { service, calls } = wslHarness();
+
+    service.spawn(7, {
+      id: "pane-1",
+      command: "/usr/bin/zsh",
+      args: ZSH_ARGS,
+      cwd: "/home/m/repo",
+    });
+
+    expect(calls[0].file).toBe("wsl.exe");
+    expect(calls[0].args).toEqual([
+      "-d", "Ubuntu", "--cd", "/home/m/repo", "--", "/usr/bin/zsh", ...ZSH_ARGS,
+    ]);
+    // CreateProcess cannot start a process in a UNC directory; `--cd` is what
+    // decides where the Linux side actually lands.
+    expect(calls[0].options.cwd).toBe("C:\\Users\\m");
+  });
+
+  it("carries the pane environment across the boundary through WSLENV", () => {
+    const { service, calls } = wslHarness();
+
+    service.spawn(7, {
+      id: "pane-1",
+      command: "/usr/bin/zsh",
+      args: ZSH_ARGS,
+      cwd: "/home/m/repo",
+      env: { CLAUDE_CONFIG_DIR: "/home/m/.head-terminal/claude-profiles/a" },
+    });
+
+    const env = calls[0].options.env;
+    const forwarded = env.WSLENV.split(":");
+    expect(forwarded).toContain("CLAUDE_CONFIG_DIR");
+    expect(forwarded).toContain("TERM");
+    expect(forwarded).toContain("HEAD_TERMINAL_PANE");
+    expect(env.CLAUDE_CONFIG_DIR).toBe("/home/m/.head-terminal/claude-profiles/a");
+    expect(env.HEAD_TERMINAL_PANE).toMatch(/^[0-9a-f-]{36}$/u);
+  });
+
+  it("kills the Linux tree by marker, since the pid is only wsl.exe", () => {
+    const { service, calls, killed } = wslHarness();
+
+    service.spawn(7, {
+      id: "pane-1",
+      command: "/usr/bin/zsh",
+      args: ZSH_ARGS,
+      cwd: "/home/m/repo",
+    });
+    expect(service.kill(7, "pane-1")).toBe(true);
+
+    expect(killed).toEqual([calls[0].options.env.HEAD_TERMINAL_PANE]);
+  });
+
+  it("gives each pane its own marker", () => {
+    const { service, calls } = wslHarness();
+
+    service.spawn(7, { id: "pane-1", command: "/usr/bin/zsh", cwd: "/home/m" });
+    service.spawn(7, { id: "pane-2", command: "/usr/bin/zsh", cwd: "/home/m" });
+
+    expect(calls[0].options.env.HEAD_TERMINAL_PANE)
+      .not.toBe(calls[1].options.env.HEAD_TERMINAL_PANE);
+  });
+});
