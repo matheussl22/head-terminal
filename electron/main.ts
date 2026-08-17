@@ -23,7 +23,10 @@ import {
   setCommandRunner,
 } from "./services/command-runner";
 import { DiagnosticService } from "./services/diagnostic-service";
-import { createGitService } from "./services/git-watch-service";
+import {
+  createGitService,
+  WSL_POLL_INTERVAL_MS,
+} from "./services/git-watch-service";
 import { McpService } from "./services/mcp-service";
 import {
   defaultLegacyDatabasePaths,
@@ -206,7 +209,11 @@ async function createServices(): Promise<{
       );
     },
   });
-  const git = createGitService();
+  // Under WSL the repository lives on ext4 and inotify never reaches Windows,
+  // so the watcher polls instead of listening.
+  const git = createGitService(
+    wsl.isWslMode() ? { pollIntervalMs: WSL_POLL_INTERVAL_MS } : {},
+  );
   const voice = new VoiceService({ secrets });
   const mcp = new McpService();
 

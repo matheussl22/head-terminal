@@ -11,6 +11,9 @@ import {
 
 const WATCH_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,128}$/u;
 const DEBOUNCE_MS = 120;
+/** Polling cadence in WSL mode. Long enough that a `wsl.exe` git call per
+ * repository stays cheap, short enough that a commit shows up quickly. */
+const DEFAULT_POLL_INTERVAL_MS = 4_000;
 
 export interface GitWatchInput {
   watchId: string;
@@ -28,6 +31,9 @@ export type GitContextChangedListener = (
 
 interface RepoWatch {
   fsWatchers: FSWatcher[];
+  pollTimer: ReturnType<typeof setInterval> | null;
+  /** Last context emitted, so polling only speaks when something changed. */
+  lastContext: string | null;
   subscribers: Set<string>;
   debounceTimer: ReturnType<typeof setTimeout> | null;
   refreshing: boolean;
@@ -114,10 +120,24 @@ async function watchDirectories(repoRoot: string): Promise<string[]> {
   return [...paths];
 }
 
+export interface GitWatchServiceOptions {
+  /**
+   * Set on Windows: inotify events do not cross the 9p/virtiofs boundary, so
+   * a `\\wsl.localhost` watch is simply silent. Polling is the honest
+   * fallback there and stays off everywhere else.
+   */
+  pollIntervalMs?: number;
+}
+
 export class GitWatchService {
   private readonly repos = new Map<string, RepoWatch>();
   private readonly watchIdRepos = new Map<string, string>();
   private readonly listeners = new Set<GitContextChangedListener>();
+  private readonly pollIntervalMs: number;
+
+  constructor(options: GitWatchServiceOptions = {}) {
+    this.pollIntervalMs = options.pollIntervalMs ?? 0;
+  }
 
   public onChanged(listener: GitContextChangedListener): () => void {
     this.listeners.add(listener);
@@ -147,6 +167,10 @@ export class GitWatchService {
       this.watchIdRepos.set(watchId, repoRoot);
     }
 
+    // The subscriber gets this context now, so the first poll has nothing new
+    // to say about it.
+    const activeWatch = this.repos.get(repoRoot);
+    if (activeWatch) activeWatch.lastContext = JSON.stringify(context);
     this.emit({ watchId, context });
   }
 
@@ -175,11 +199,22 @@ export class GitWatchService {
   private async createRepoWatch(repoRoot: string): Promise<RepoWatch> {
     const repoWatch: RepoWatch = {
       fsWatchers: [],
+      pollTimer: null,
+      lastContext: null,
       subscribers: new Set(),
       debounceTimer: null,
       refreshing: false,
       refreshAgain: false,
     };
+
+    if (this.pollIntervalMs > 0) {
+      repoWatch.pollTimer = setInterval(
+        () => void this.refresh(repoRoot, repoWatch),
+        this.pollIntervalMs,
+      );
+      repoWatch.pollTimer.unref?.();
+      return repoWatch;
+    }
 
     try {
       for (const directory of await watchDirectories(repoRoot)) {
@@ -224,6 +259,13 @@ export class GitWatchService {
       if (this.repos.get(repoRoot) !== repoWatch) {
         return;
       }
+      // Polling wakes up on a clock, not on a change: repeating an identical
+      // context would be pure noise for every subscriber.
+      const serialized = JSON.stringify(context);
+      if (this.pollIntervalMs > 0 && repoWatch.lastContext === serialized) {
+        return;
+      }
+      repoWatch.lastContext = serialized;
       for (const watchId of [...repoWatch.subscribers]) {
         if (this.watchIdRepos.get(watchId) === repoRoot) {
           this.emit({ watchId, context });
@@ -260,6 +302,10 @@ export class GitWatchService {
       clearTimeout(repoWatch.debounceTimer);
       repoWatch.debounceTimer = null;
     }
+    if (repoWatch.pollTimer !== null) {
+      clearInterval(repoWatch.pollTimer);
+      repoWatch.pollTimer = null;
+    }
     for (const watcher of repoWatch.fsWatchers) {
       watcher.close();
     }
@@ -282,7 +328,9 @@ export class GitWatchService {
  * Facade matching `IpcServices.git`. Each watch id retains only its own window
  * emitter, preventing duplicate fan-out when IPC `watch` is called repeatedly.
  */
-export function createGitService(): {
+export const WSL_POLL_INTERVAL_MS = DEFAULT_POLL_INTERVAL_MS;
+
+export function createGitService(options: GitWatchServiceOptions = {}): {
   getContext: typeof getGitContext;
   getDiff: typeof getSessionDiff;
   createWorktree: typeof createSessionWorktree;
@@ -293,7 +341,7 @@ export function createGitService(): {
   unwatch(watchId: string): Promise<void>;
   dispose(): void;
 } {
-  const watcher = new GitWatchService();
+  const watcher = new GitWatchService(options);
   const emitters = new Map<string, GitContextChangedListener>();
   watcher.onChanged((event) => emitters.get(event.watchId)?.(event));
 

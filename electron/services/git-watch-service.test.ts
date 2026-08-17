@@ -104,6 +104,31 @@ describe("GitWatchService", () => {
     expect(service.watchedRepoCount).toBe(1);
   });
 
+  it("polls instead of watching, and only speaks when the context changed", async () => {
+    const repo = await createRepo();
+    const service = new GitWatchService({ pollIntervalMs: 50 });
+    services.push(service);
+    const listener = vi.fn<(event: GitContextChangedEvent) => void>();
+    service.onChanged(listener);
+
+    await service.watch({ watchId: "pane:1", cwd: repo });
+    listener.mockClear();
+
+    // A quiet repository must not produce one event per tick.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(listener).not.toHaveBeenCalled();
+
+    await writeFile(join(repo, "new.txt"), "new");
+    git(repo, "add", "new.txt");
+
+    await vi.waitFor(
+      () => {
+        expect(listener.mock.calls.at(-1)?.[0].context.isDirty).toBe(true);
+      },
+      { timeout: 3_000 },
+    );
+  });
+
   it("rejects unsafe or unbounded watch identifiers", async () => {
     const service = new GitWatchService();
     services.push(service);
