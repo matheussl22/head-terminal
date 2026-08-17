@@ -16,6 +16,8 @@
     "test:electron": "vitest run --config tests/electron/vitest.config.mts",
     "smoke:electron": "npm run package && bash scripts/electron-smoke.sh",
     "smoke:electron:existing": "bash scripts/electron-smoke.sh",
+    "smoke:electron:win": "npm run package && node scripts/electron-smoke-win.mjs",
+    "smoke:electron:win:existing": "node scripts/electron-smoke-win.mjs",
     "e2e": "bash scripts/e2e.sh",
     "package": "cross-env NODE_ENV=production electron-forge package",
     "make": "cross-env NODE_ENV=production electron-forge make",

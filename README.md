@@ -76,6 +76,37 @@ sudo apt install xvfb xdotool imagemagick
 
 On Wayland the application runs through Electron/Ozone, but the current visual automation uses X11/XWayland. Recording as implemented today depends on `parecord`; without it, only voice is unavailable.
 
+### Windows (WSL2)
+
+On Windows the application is a native Electron app whose panes open their PTY
+**inside WSL**. The agents (`claude`, `codex`, `cursor`, `agy`), `git` and the
+repositories all live in the distribution's ext4; Windows is only the graphical
+shell. Nothing in the launch mechanism changes, because it still runs on a real
+Linux — `wsl.exe` is wrapped around the argv in the main process and nowhere
+else.
+
+Inside the distribution, install what the Linux section lists. On the Windows
+side:
+
+- WSL2 with a distribution that has `zsh` and the agent CLIs installed;
+- Node.js 20 and npm;
+- Visual Studio Build Tools with the C++ workload, plus Python 3, required to
+  rebuild `node-pty`.
+
+Check that `wsl.exe -l -q` lists the distribution and that
+`\\wsl.localhost\<distro>` is reachable from Explorer. With more than one
+distribution installed, pick which one to use under Settings → Terminal; the
+choice is stored in `wsl.json` in the app's user data.
+
+Known differences on Windows:
+
+| Area | Behaviour |
+|---|---|
+| Voice | Recording depends on `parecord`; the button is hidden until capture moves into the renderer. |
+| Git watcher | `inotify` does not cross the 9p boundary, so the Git context is polled instead of watched. |
+| Installer | `npm run make` produces a Squirrel installer. Code signing is still pending, as is macOS notarization. |
+| Repositories in `/mnt/c` | They work, and paths are translated, but Git and the watcher are noticeably slower than on ext4. |
+
 ### macOS
 
 ```bash
@@ -96,11 +127,15 @@ npm run make                        # platform distribution artifacts
 npm run build                       # typecheck + package
 npm run smoke:electron              # package + real boot and window check
 npm run smoke:electron:existing     # smoke against the existing package
+npm run smoke:electron:win          # package + boot check on Windows
 ```
 
-On Linux, `npm run make` produces the `.deb` in `out/make/deb/`. On macOS it produces a ZIP. Builds must be made on the target platform; native modules are not portable across systems or Electron versions.
+On Linux, `npm run make` produces the `.deb` in `out/make/deb/`. On macOS it produces a ZIP, and on Windows a Squirrel installer in `out/make/squirrel.windows/`. Builds must be made on the target platform; native modules are not portable across systems or Electron versions.
 
 Runtime and packaging are Electron only; the Tauri/Rust backend was removed. The WebKit reader in the main process exists solely to import, once, data from old installations.
+
+The launchers below and the X11 smoke test are Linux only. On Windows the app
+is started by the installed shortcut, or by `npm run dev` during development.
 
 ## Linux launchers
 
