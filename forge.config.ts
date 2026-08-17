@@ -2,11 +2,18 @@ import path from "node:path";
 
 import type { ForgeConfig } from "@electron-forge/shared-types";
 import { MakerDeb } from "@electron-forge/maker-deb";
+import { MakerSquirrel } from "@electron-forge/maker-squirrel";
 import { MakerZIP } from "@electron-forge/maker-zip";
 import { AutoUnpackNativesPlugin } from "@electron-forge/plugin-auto-unpack-natives";
 import { FusesPlugin } from "@electron-forge/plugin-fuses";
 import { VitePlugin } from "@electron-forge/plugin-vite";
 import { FuseV1Options, FuseVersion } from "@electron/fuses";
+
+// Squirrel requires an absolute URL, and a file:// URL to the packaged icon is
+// the only one that works without hosting the asset.
+const WINDOWS_ICON_URL = `file:///${path
+  .resolve(__dirname, "assets/icons/icon.ico")
+  .replaceAll("\\", "/")}`;
 
 const config: ForgeConfig = {
   packagerConfig: {
@@ -20,6 +27,17 @@ const config: ForgeConfig = {
   rebuildConfig: {},
   makers: [
     new MakerZIP({}, ["darwin"]),
+    new MakerSquirrel(
+      {
+        name: "head-terminal",
+        setupExe: "head-terminal-setup.exe",
+        setupIcon: "assets/icons/icon.ico",
+        iconUrl: WINDOWS_ICON_URL,
+        // Code signing is a known gap, as is macOS notarization. Squirrel
+        // still produces a working installer without it.
+      },
+      ["win32"],
+    ),
     new MakerDeb({
       options: {
         name: "head-terminal",

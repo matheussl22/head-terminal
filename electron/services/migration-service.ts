@@ -4,6 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import type { PersistedWorkspace } from "../types/api";
+import { appDataRoot } from "./platform-paths";
 import { isPersistedWorkspace, type WorkspaceService } from "./workspace-service";
 
 const WORKSPACE_KEYS = [
@@ -193,12 +194,15 @@ async function atomicWrite(path: string, value: unknown): Promise<void> {
 }
 
 export function defaultMigrationSourcePath(): string {
-  return process.platform === "linux"
-    ? join(homedir(), ".local", "share", "head-terminal", "migration-v1.json")
-    : join(homedir(), ".head-terminal", "migration-v1.json");
+  return join(appDataRoot(), "migration-v1.json");
 }
 
 export function defaultLegacyDatabasePaths(channel: "dev" | "prod" = "prod"): string[] {
+  // The Tauri build this migration reads from never shipped for Windows, so
+  // there is no legacy database to look for there.
+  if (process.platform === "win32") {
+    return [];
+  }
   const dataRoot = process.platform === "linux"
     ? join(homedir(), ".local", "share")
     : join(homedir(), "Library", "Application Support");

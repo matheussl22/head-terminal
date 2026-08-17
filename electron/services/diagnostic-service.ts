@@ -1,9 +1,9 @@
 import { appendFile, mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 import type { CheckpointInput } from "../types/api";
+import { appDataRoot } from "./platform-paths";
 
 const LOG_FILES = [
   "startup.log",
@@ -16,9 +16,7 @@ const MAX_LOG_BYTES = 5 * 1024 * 1024;
 const MAX_LINE_BYTES = 256 * 1024;
 
 export function defaultDiagnosticDirectory(): string {
-  return process.platform === "linux"
-    ? join(homedir(), ".local", "share", "head-terminal", "logs")
-    : join(homedir(), ".head-terminal", "logs");
+  return join(appDataRoot(), "logs");
 }
 
 export interface DiagnosticServiceOptions {
