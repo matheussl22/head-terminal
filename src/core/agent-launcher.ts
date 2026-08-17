@@ -6,6 +6,7 @@ import { createEmptySession } from "./session-manager";
 import { collectPaneIds } from "./session-layout";
 import type { AgentSession } from "../types/session";
 
+/** Always a POSIX shell: on Windows the pane's shell lives inside WSL. */
 function getFallbackShell(): string {
   const platform = navigator.platform;
   return /mac/i.test(platform) ? "/bin/zsh" : "/usr/bin/zsh";

@@ -315,6 +315,13 @@ export class PtyService {
     // The Windows↔WSL boundary is here and nowhere else: the argv built by
     // the renderer crosses untouched, only wrapped.
     const inWsl = this.wsl?.isWslMode() ?? false;
+    if (process.platform === "win32" && !inWsl) {
+      // A POSIX shell has nothing to run on in Windows itself. Say so, rather
+      // than letting node-pty report a missing `/usr/bin/zsh`.
+      throw new Error(
+        "Nenhuma distribuição WSL disponível. Instale o WSL2 e escolha a distribuição em Configurações.",
+      );
+    }
     const marker = inWsl ? randomUUID() : undefined;
     if (marker) {
       env[PANE_MARKER_ENV] = marker;
