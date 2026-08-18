@@ -3,6 +3,7 @@
 // and a real PTY — with the X11 half replaced by the Win32 one: there is no
 // Xvfb and no xdotool, so the window is read back through PowerShell.
 import { execFile, spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,6 +62,7 @@ async function main() {
 
   let exited = false;
   child.on("exit", () => (exited = true));
+  const childExit = once(child, "exit").catch(() => undefined);
 
   const deadline = Date.now() + TIMEOUT_MS;
   let title = "";
@@ -90,7 +92,19 @@ async function main() {
   } finally {
     if (!exited) child.kill();
     log.close();
-    if (process.exitCode !== 1) await rm(workDir, { recursive: true, force: true });
+    // Windows holds the user-data files open until the process is really gone,
+    // so cleanup waits for the exit and still retries past a lingering lock. A
+    // leftover temp directory is not a product failure and must never turn a
+    // passing smoke into a red one.
+    await childExit;
+    if (process.exitCode !== 1) {
+      await rm(workDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 250,
+      }).catch((error) => console.warn(`smoke cleanup left ${workDir}: ${error}`));
+    }
   }
 }
 

@@ -6,6 +6,7 @@ import {
   toPosixPath,
   toWindowsPath,
   wrapArgv,
+  wrapCommand,
   WslService,
 } from "./wsl-service";
 
@@ -50,9 +51,24 @@ describe("wrapArgv", () => {
     const wrapped = wrapArgv("/usr/bin/zsh", AGENT_ARGS, "/home/m/x", "Ubuntu");
     expect(wrapped.file).toBe("wsl.exe");
     expect(wrapped.args).toEqual([
-      "-d", "Ubuntu", "--cd", "/home/m/x", "--", "/usr/bin/zsh", ...AGENT_ARGS,
+      "-d", "Ubuntu", "--cd", "/home/m/x", "--exec", "/usr/bin/zsh", ...AGENT_ARGS,
     ]);
-    expect(wrapped.args.slice(wrapped.args.indexOf("--") + 2)).toEqual(AGENT_ARGS);
+    expect(wrapped.args.slice(wrapped.args.indexOf("--exec") + 2)).toEqual(AGENT_ARGS);
+  });
+
+  it("never uses the plain separator, which still goes through a shell", () => {
+    // `wsl.exe -- /bin/echo '$HOME' '"$@"'` prints `/root ""`: the login shell
+    // expands the argv before the program ever sees it, so an agent command
+    // carrying `$?` reports a literal 0 and the resume guard never fires.
+    const argv = [
+      wrapArgv("/usr/bin/zsh", AGENT_ARGS, "/home/m/x", "Ubuntu"),
+      wrapCommand("git", ["status"], "/home/m/x", "Ubuntu"),
+      wrapCommand("printenv", ["HOME"], undefined, "Ubuntu"),
+    ];
+    for (const { args } of argv) {
+      expect(args).toContain("--exec");
+      expect(args).not.toContain("--");
+    }
   });
 });
 
@@ -73,9 +89,16 @@ describe("distro listing", () => {
 });
 
 describe("WslService", () => {
-  const runner = (distros: string, home = "/home/matheus\n") =>
-    vi.fn(async (_file: string, args: string[]) =>
-      args.includes("printenv") ? home : distros);
+  const runner = (
+    distros: string,
+    home = "/home/matheus\n",
+    locales = "C\nC.utf8\nPOSIX\npt_BR.utf8\n",
+  ) =>
+    vi.fn(async (_file: string, args: string[]) => {
+      if (args.includes("printenv")) return home;
+      if (args.includes("locale")) return locales;
+      return distros;
+    });
 
   it("stays inert off Windows and passes argv through", async () => {
     const service = new WslService({ platform: "linux", runner: runner("Ubuntu") });
@@ -130,9 +153,71 @@ describe("WslService", () => {
   });
 
   it("never starts the launcher itself in a UNC directory", async () => {
-    const service = new WslService({ platform: "win32", runner: runner("Ubuntu") });
+    const service = new WslService({
+      platform: "win32",
+      runner: runner("Ubuntu"),
+      pathExists: () => true,
+    });
     await service.initialize();
     expect(service.spawnCwd("/home/m/x", "C:\\Users\\m")).toBe("C:\\Users\\m");
     expect(service.spawnCwd("/mnt/c/repo", "C:\\Users\\m")).toBe("C:\\repo");
+  });
+
+  it("keeps a pane out of a directory the distro does not have", async () => {
+    // `wsl --cd` does not fail on a missing directory: it lands in `/` and
+    // prints a relay error over whatever the agent was about to draw.
+    const missing = new WslService({
+      platform: "win32",
+      runner: runner("Ubuntu"),
+      pathExists: () => false,
+    });
+    await missing.initialize();
+    expect(missing.resolvePaneCwd("/mnt/c/Users/m/Documentos")).toBe("/home/matheus");
+
+    const present = new WslService({
+      platform: "win32",
+      runner: runner("Ubuntu"),
+      pathExists: () => true,
+    });
+    await present.initialize();
+    expect(present.resolvePaneCwd("/home/m/repo")).toBe("/home/m/repo");
+  });
+
+  it("replaces a locale the distro cannot set", async () => {
+    // A fresh Ubuntu carries only the C locales.
+    const service = new WslService({
+      platform: "win32",
+      runner: runner("Ubuntu", "/home/matheus\n", "C\nC.utf8\nPOSIX\n"),
+    });
+    await service.initialize();
+
+    const sanitized = service.sanitizeLocaleEnv({
+      LANG: "pt_BR.utf8",
+      LC_ALL: "pt_BR.utf8",
+      LC_CTYPE: "pt_BR.utf8",
+      TERM: "xterm-256color",
+    });
+    expect(sanitized.LANG).toBe("C.UTF-8");
+    expect(sanitized.LC_ALL).toBe("C.UTF-8");
+    expect(sanitized.TERM).toBe("xterm-256color");
+  });
+
+  it("keeps a locale the distro really has, however it is spelled", async () => {
+    const service = new WslService({ platform: "win32", runner: runner("Ubuntu") });
+    await service.initialize();
+    // `locale -a` prints `pt_BR.utf8`; the pane asks for `pt_BR.UTF-8`.
+    expect(service.sanitizeLocaleEnv({ LANG: "pt_BR.UTF-8" }).LANG).toBe("pt_BR.UTF-8");
+  });
+
+  it("falls back when the translated directory is not there", async () => {
+    // CreateProcess answers ERROR_DIRECTORY for a cwd that does not exist, so
+    // a stale path from a pre-WSL workspace would leave the pane unopened.
+    const service = new WslService({
+      platform: "win32",
+      runner: runner("Ubuntu"),
+      pathExists: () => false,
+    });
+    await service.initialize();
+    expect(service.spawnCwd("/mnt/c/gone", "C:\\Users\\m")).toBe("C:\\Users\\m");
   });
 });

@@ -3,6 +3,7 @@ import { logEvent } from "./logger";
 import { useSessionStore } from "./session-manager";
 import { hasOpenAiApiKey } from "./openai-credentials";
 import { startVoiceRecording, stopAndTranscribeVoice } from "./voice-bridge";
+import { isCaptureSupported } from "./voice-capture";
 
 let audioCtx: AudioContext | null = null;
 
@@ -26,12 +27,12 @@ function beep(freq: number): void {
 }
 
 /**
- * Recording goes through `parecord`, which is PulseAudio and does not exist
- * on Windows. Until the capture moves into the renderer, a button that can
- * only fail is worse than no button at all.
+ * Recording goes through `parecord`, which is PulseAudio and does not exist on
+ * Windows — there the renderer captures the microphone itself. The button is
+ * shown only where one of the two routes actually leads somewhere.
  */
 export function isVoiceInputSupported(): boolean {
-  return !/Windows/u.test(navigator.userAgent);
+  return /Windows/u.test(navigator.userAgent) ? isCaptureSupported() : true;
 }
 
 export function isVoiceInputBlocked(paneId: string): boolean {

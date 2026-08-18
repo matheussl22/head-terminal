@@ -17,12 +17,21 @@ describe("agent profiles continue flag", () => {
     expect(profiles.cursor.args.join(" ")).not.toContain("--continue");
   });
 
+  it("reaches cursor under either name it installs as", () => {
+    // The official installer publishes `cursor-agent`; older setups expose the
+    // same CLI as `cursor agent`. Hardcoding either opens the pane straight
+    // into `command not found`.
+    const script = buildAgentProfiles().cursor.args.join(" ");
+    expect(script).toContain("command -v cursor-agent");
+    expect(script).toContain('cursor-agent "$@"');
+    expect(script).toContain('cursor agent "$@"');
+  });
+
   it("appends --continue for claude and cursor when restoring", () => {
     const profiles = buildAgentProfiles({ continueConversation: true });
     expect(profiles.claude.args.join(" ")).toContain("claude --continue");
-    expect(profiles.cursor.args.join(" ")).toContain(
-      "cursor agent --continue",
-    );
+    // cursor is invoked through the shim that resolves its binary name.
+    expect(profiles.cursor.args.join(" ")).toContain("ht_cursor --continue");
   });
 
   it("leaves antigravity, codex and shell profiles untouched when restoring", () => {
@@ -50,7 +59,7 @@ describe("agent profiles resume flag", () => {
     expect(profiles.claude.args.join(" ")).toContain(`claude --resume ${SESSION_ID}`);
     expect(profiles.codex.args.join(" ")).toContain(`codex resume ${SESSION_ID}`);
     expect(profiles.cursor.args.join(" ")).toContain(
-      `cursor agent --resume ${SESSION_ID}`,
+      `ht_cursor --resume ${SESSION_ID}`,
     );
   });
 

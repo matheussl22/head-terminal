@@ -1,8 +1,7 @@
 import { createRequire } from "node:module";
-import { access } from "node:fs/promises";
-import { constants } from "node:fs";
+import { accessSync, constants } from "node:fs";
 
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   PtyService,
@@ -13,7 +12,7 @@ const require = createRequire(import.meta.url);
 const ZSH = "/usr/bin/zsh";
 const EVENT_TIMEOUT_MS = 5_000;
 
-let missingNodePtyReason: string | null = null;
+let skipReason: string | null = null;
 try {
   const loaded = require("node-pty") as { spawn?: unknown };
   if (typeof loaded.spawn !== "function") {
@@ -22,10 +21,21 @@ try {
 } catch (error) {
   const code = (error as NodeJS.ErrnoException).code;
   if (code === "MODULE_NOT_FOUND") {
-    missingNodePtyReason = "node-pty is not installed";
+    skipReason = "node-pty is not installed";
   } else {
     // ABI/load errors are product failures, not an excuse to skip integration.
     throw error;
+  }
+}
+
+// This suite drives a real POSIX shell in the host. On Windows a pane's zsh
+// lives inside the distro instead, and node-pty here would only ever spawn
+// `wsl.exe` — that boundary is covered by wsl-launch.verify.test.ts.
+if (!skipReason) {
+  try {
+    accessSync(ZSH, constants.X_OK);
+  } catch {
+    skipReason = `${ZSH} is not executable on this host`;
   }
 }
 
@@ -139,20 +149,14 @@ function spawnShell(
 
 const liveServices: PtyService[] = [];
 
-beforeAll(async () => {
-  if (!missingNodePtyReason) {
-    await access(ZSH, constants.X_OK);
-  }
-});
-
 afterEach(async () => {
   for (const service of liveServices.splice(0)) {
     service.dispose();
   }
 });
 
-describe.skipIf(Boolean(missingNodePtyReason))(
-  `real node-pty integration${missingNodePtyReason ? ` (${missingNodePtyReason})` : ""}`,
+describe.skipIf(Boolean(skipReason))(
+  `real node-pty integration${skipReason ? ` (${skipReason})` : ""}`,
   () => {
     it("preserves Unicode, OSC and ANSI bytes and supports write/resize/exit", async () => {
       const collector = new EventCollector();

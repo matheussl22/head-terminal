@@ -6,6 +6,18 @@ import { spawn as nodeSpawn } from "node:child_process";
 
 const TRANSCRIPTION_URL = "https://api.openai.com/v1/audio/transcriptions";
 const WAV_HEADER_BYTES = 44;
+/** Roughly a second of Opus; below this there is nothing to transcribe. */
+const MIN_AUDIO_BYTES = 2_048;
+/** OpenAI rejects uploads past 25 MB, and this cap is what the IPC accepts. */
+const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+/** Container names the renderer may ask for, never trusted verbatim. */
+const AUDIO_TYPES: Record<string, { mime: string; name: string }> = {
+  "audio/webm": { mime: "audio/webm", name: "audio.webm" },
+  "audio/ogg": { mime: "audio/ogg", name: "audio.ogg" },
+  "audio/mp4": { mime: "audio/mp4", name: "audio.mp4" },
+  "audio/wav": { mime: "audio/wav", name: "audio.wav" },
+  default: { mime: "audio/webm", name: "audio.webm" },
+};
 
 interface RecorderProcess {
   readonly pid?: number;
@@ -259,14 +271,47 @@ export class VoiceService {
     });
   }
 
+  /**
+   * Transcribes audio the renderer captured itself. On Windows there is no
+   * `parecord` to spawn, so the microphone is read through Chromium's own
+   * media stack and only the encoded bytes cross the IPC boundary.
+   */
+  async transcribeAudio(bytes: Uint8Array, mimeType: string): Promise<string> {
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+      throw new TypeError("Áudio vazio.");
+    }
+    if (bytes.byteLength > MAX_AUDIO_BYTES) {
+      throw new Error("Gravação longa demais para transcrever.");
+    }
+    if (bytes.byteLength < MIN_AUDIO_BYTES) {
+      throw new Error(
+        "Gravação muito curta ou sem áudio. Fale por pelo menos 1 segundo.",
+      );
+    }
+
+    const apiKey = (await this.secrets.get("openai-api-key"))?.trim() ?? "";
+    if (!apiKey) {
+      throw new Error("Configure sua chave da OpenAI nas Configurações.");
+    }
+    return this.postAudio(bytes, AUDIO_TYPES[mimeType] ?? AUDIO_TYPES.default, apiKey);
+  }
+
   private async transcribe(wavPath: string, apiKey: string): Promise<string> {
     const bytes = await readFile(wavPath);
-    const form = new FormData();
-    form.append(
-      "file",
-      new Blob([new Uint8Array(bytes)], { type: "audio/wav" }),
-      "audio.wav",
+    return this.postAudio(
+      new Uint8Array(bytes),
+      { mime: "audio/wav", name: "audio.wav" },
+      apiKey,
     );
+  }
+
+  private async postAudio(
+    bytes: Uint8Array,
+    audio: { mime: string; name: string },
+    apiKey: string,
+  ): Promise<string> {
+    const form = new FormData();
+    form.append("file", new Blob([bytes], { type: audio.mime }), audio.name);
     form.append("model", "gpt-4o-transcribe");
     form.append("language", "pt");
 

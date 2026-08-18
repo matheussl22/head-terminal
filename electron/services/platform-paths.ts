@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { posix, win32 } from "node:path";
 
 export interface PlatformPathEnvironment {
   platform: NodeJS.Platform;
@@ -20,7 +20,7 @@ export function localAppData(
   environment: PlatformPathEnvironment = currentEnvironment(),
 ): string {
   const configured = environment.env.LOCALAPPDATA?.trim();
-  return configured || join(environment.home, "AppData", "Local");
+  return configured || win32.join(environment.home, "AppData", "Local");
 }
 
 /**
@@ -30,12 +30,15 @@ export function localAppData(
 export function appDataRoot(
   environment: PlatformPathEnvironment = currentEnvironment(),
 ): string {
+  // The separator follows the *target* platform, not the host: `environment`
+  // is injected, so a Linux layout must come out POSIX even when this runs on
+  // Windows. Production only ever asks about its own platform; tests do not.
   switch (environment.platform) {
     case "linux":
-      return join(environment.home, ".local", "share", "head-terminal");
+      return posix.join(environment.home, ".local", "share", "head-terminal");
     case "win32":
-      return join(localAppData(environment), "head-terminal");
+      return win32.join(localAppData(environment), "head-terminal");
     default:
-      return join(environment.home, ".head-terminal");
+      return posix.join(environment.home, ".head-terminal");
   }
 }

@@ -69,6 +69,8 @@ const api: HeadTerminalApi = {
     stopAndTranscribe: () =>
       ipcRenderer.invoke(IPC_CHANNELS.voice.stopAndTranscribe),
     cancel: () => ipcRenderer.invoke(IPC_CHANNELS.voice.cancel),
+    transcribeAudio: (bytes, mimeType) =>
+      ipcRenderer.invoke(IPC_CHANNELS.voice.transcribeAudio, bytes, mimeType),
   },
   mcp: {
     list: (cwd, agent) => ipcRenderer.invoke(IPC_CHANNELS.mcp.list, cwd, agent),

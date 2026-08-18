@@ -37,7 +37,9 @@ async function createRepo(): Promise<string> {
     "-m",
     "initial",
   );
-  return repo;
+  // The path as git spells it, which is what the service keys and returns:
+  // forward slashes on Windows, and the resolved target of any symlink.
+  return git(repo, "rev-parse", "--show-toplevel");
 }
 
 afterEach(async () => {

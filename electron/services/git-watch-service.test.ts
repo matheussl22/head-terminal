@@ -13,8 +13,11 @@ import {
 const cleanup: string[] = [];
 const services: GitWatchService[] = [];
 
-function git(cwd: string, ...args: string[]): void {
-  execFileSync("git", ["-C", cwd, ...args], { stdio: "ignore" });
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", ["-C", cwd, ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  }).trim();
 }
 
 async function createRepo(): Promise<string> {
@@ -35,7 +38,9 @@ async function createRepo(): Promise<string> {
     "-m",
     "initial",
   );
-  return repo;
+  // The path as git spells it, which is the key the watcher stores repos
+  // under: forward slashes on Windows, symlinks resolved.
+  return git(repo, "rev-parse", "--show-toplevel");
 }
 
 afterEach(async () => {

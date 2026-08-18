@@ -207,6 +207,8 @@ export interface HeadTerminalApi {
     start(): Promise<void>;
     stopAndTranscribe(): Promise<string>;
     cancel(): Promise<void>;
+    /** Transcribes audio the renderer captured through Chromium's mic stack. */
+    transcribeAudio(bytes: Uint8Array, mimeType: string): Promise<string>;
   };
   mcp: {
     list(cwd: string, agent: SupportedAgent): Promise<McpServersPayload>;

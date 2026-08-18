@@ -225,5 +225,68 @@ describe("VoiceService", () => {
     expect(service.isRecording).toBe(false);
     expect(await exists(wavPaths[0]!)).toBe(false);
   });
+
+  describe("audio captured by the renderer", () => {
+    // On Windows there is no `parecord` to spawn, so the bytes arrive already
+    // encoded and the main process only owns the key and the upload.
+    const audio = new Uint8Array(4_096).fill(7);
+
+    it("uploads the bytes under the container the renderer named", async () => {
+      const fetchImpl = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ text: " olá mundo " }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      );
+      const service = createService({ fetch: fetchImpl });
+
+      expect(await service.transcribeAudio(audio, "audio/webm")).toBe("olá mundo");
+
+      const body = fetchImpl.mock.calls[0]![1]!.body as FormData;
+      const file = body.get("file") as File;
+      expect(file.type).toBe("audio/webm");
+      expect(file.size).toBe(audio.byteLength);
+      // No recorder was ever spawned for this path.
+      expect(recorders).toHaveLength(0);
+    });
+
+    it("falls back to webm for a container it does not know", async () => {
+      const fetchImpl = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ text: "ok" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      );
+      const service = createService({ fetch: fetchImpl });
+
+      await service.transcribeAudio(audio, "audio/aiff-c; codecs=nonsense");
+      const file = (fetchImpl.mock.calls[0]![1]!.body as FormData).get("file") as File;
+      expect(file.type).toBe("audio/webm");
+    });
+
+    it("refuses audio too short to hold speech", async () => {
+      const service = createService();
+      await expect(service.transcribeAudio(new Uint8Array(16), "audio/webm"))
+        .rejects.toThrow("muito curta");
+    });
+
+    it("refuses an empty recording", async () => {
+      const service = createService();
+      await expect(service.transcribeAudio(new Uint8Array(0), "audio/webm"))
+        .rejects.toThrow("vazio");
+    });
+
+    it("asks for the API key before uploading anything", async () => {
+      secretGet = vi.fn(async () => null);
+      const fetchImpl = vi.fn();
+      const service = createService({ fetch: fetchImpl });
+
+      await expect(service.transcribeAudio(audio, "audio/webm"))
+        .rejects.toThrow("Configure sua chave da OpenAI");
+      expect(fetchImpl).not.toHaveBeenCalled();
+    });
+  });
 });
 

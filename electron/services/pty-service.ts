@@ -65,6 +65,9 @@ export interface WslBridge {
     cwd: string,
   ): { file: string; args: string[] };
   spawnCwd(posix: string, windowsFallback: string): string;
+  toPosixPath(windows: string): string;
+  resolvePaneCwd(posix: string): string;
+  sanitizeLocaleEnv(env: Record<string, string>): Record<string, string>;
   killPaneTree(marker: string): Promise<void>;
 }
 
@@ -107,6 +110,8 @@ export interface PtyServiceOptions {
   wsl?: WslBridge;
   /** Directory the Windows launcher itself starts in. Defaults to the home. */
   windowsHome?: string;
+  /** Host platform. Injected so the POSIX spawn path is testable on Windows. */
+  platform?: NodeJS.Platform;
 }
 
 interface PtyEntry {
@@ -281,6 +286,7 @@ export class PtyService {
   private readonly baseEnv: NodeJS.ProcessEnv;
   private readonly wsl: WslBridge | null;
   private readonly windowsHome: string;
+  private readonly platform: NodeJS.Platform;
 
   constructor(options: PtyServiceOptions = {}) {
     this.emit = options.emit ?? (() => undefined);
@@ -291,6 +297,7 @@ export class PtyService {
     this.baseEnv = options.env ?? process.env;
     this.wsl = options.wsl ?? null;
     this.windowsHome = options.windowsHome ?? homedir();
+    this.platform = options.platform ?? process.platform;
   }
 
   spawn(ownerId: number, request: PtySpawnRequest): PtySpawnResult {
@@ -315,7 +322,7 @@ export class PtyService {
     // The Windows↔WSL boundary is here and nowhere else: the argv built by
     // the renderer crosses untouched, only wrapped.
     const inWsl = this.wsl?.isWslMode() ?? false;
-    if (process.platform === "win32" && !inWsl) {
+    if (this.platform === "win32" && !inWsl) {
       // A POSIX shell has nothing to run on in Windows itself. Say so, rather
       // than letting node-pty report a missing `/usr/bin/zsh`.
       throw new Error(
@@ -324,15 +331,26 @@ export class PtyService {
     }
     const marker = inWsl ? randomUUID() : undefined;
     if (marker) {
+      env = (this.wsl as WslBridge).sanitizeLocaleEnv(env);
       env[PANE_MARKER_ENV] = marker;
       env = withWslEnvPassthrough(env, WSL_FORWARDED_ENV);
     }
+    // A workspace saved before the distro existed still holds Windows paths.
+    // In WSL mode every cwd must be POSIX, and the translation is idempotent,
+    // so it runs on the way in rather than trusting whoever persisted it. The
+    // result still has to exist in the distro, or the pane opens in `/` with a
+    // relay error printed over the agent's first screen.
+    const requestCwd = inWsl
+      ? (this.wsl as WslBridge).resolvePaneCwd(
+          (this.wsl as WslBridge).toPosixPath(request.cwd),
+        )
+      : request.cwd;
     const launch = inWsl
-      ? (this.wsl as WslBridge).wrap(request.command, args, request.cwd)
+      ? (this.wsl as WslBridge).wrap(request.command, args, requestCwd)
       : { file: request.command, args };
     const cwd = inWsl
-      ? (this.wsl as WslBridge).spawnCwd(request.cwd, this.windowsHome)
-      : request.cwd;
+      ? (this.wsl as WslBridge).spawnCwd(requestCwd, this.windowsHome)
+      : requestCwd;
 
     const processPty = this.spawnPty(launch.file, launch.args, {
       name: "xterm-256color",

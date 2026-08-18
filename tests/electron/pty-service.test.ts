@@ -60,6 +60,8 @@ function harness(baseEnv: NodeJS.ProcessEnv = {}) {
   const events: PtyServiceEvent[] = [];
   const service = new PtyService({
     env: baseEnv,
+    // The POSIX spawn path, asserted regardless of the host running the suite.
+    platform: "linux",
     emit: (event) => events.push(event),
     spawn: (file, args, options) => {
       calls.push({ file, args, options });
@@ -277,9 +279,12 @@ describe("PtyService in WSL mode", () => {
         isWslMode: () => true,
         wrap: (command, args, cwd) => ({
           file: "wsl.exe",
-          args: ["-d", "Ubuntu", "--cd", cwd, "--", command, ...args],
+          args: ["-d", "Ubuntu", "--cd", cwd, "--exec", command, ...args],
         }),
         spawnCwd: (_posix, fallback) => fallback,
+        toPosixPath: (windows) => windows.replaceAll("\\", "/"),
+        resolvePaneCwd: (posix) => posix,
+        sanitizeLocaleEnv: (env) => ({ ...env }),
         killPaneTree: async (marker) => {
           killed.push(marker);
         },
@@ -306,7 +311,7 @@ describe("PtyService in WSL mode", () => {
 
     expect(calls[0].file).toBe("wsl.exe");
     expect(calls[0].args).toEqual([
-      "-d", "Ubuntu", "--cd", "/home/m/repo", "--", "/usr/bin/zsh", ...ZSH_ARGS,
+      "-d", "Ubuntu", "--cd", "/home/m/repo", "--exec", "/usr/bin/zsh", ...ZSH_ARGS,
     ]);
     // CreateProcess cannot start a process in a UNC directory; `--cd` is what
     // decides where the Linux side actually lands.

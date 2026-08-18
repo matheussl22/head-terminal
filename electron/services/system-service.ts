@@ -55,9 +55,17 @@ export function setNativePathTranslator(
   toNativePath = translate;
 }
 
-/** Matches the Tauri default (`$HOME/Documentos`) without trusting `$HOME`. */
+/**
+ * Matches the Tauri default (`$HOME/Documentos`) without trusting `$HOME`.
+ * The folder is only there on a machine set up in Portuguese, and a pane whose
+ * cwd does not exist cannot start at all, so the home is the fallback.
+ */
 export async function getDefaultCwd(): Promise<string> {
-  return posixHome ? `${posixHome}/Documentos` : join(homedir(), "Documentos");
+  const home = posixHome ?? homedir();
+  const documents = posixHome
+    ? `${posixHome}/Documentos`
+    : join(homedir(), "Documentos");
+  return (await pathExists(documents)) ? documents : home;
 }
 
 /** `path_exists` historically means "is an existing directory". */
@@ -74,7 +82,8 @@ function runCliDiscovery(): Promise<string> {
   // the login shell, which is used so user-installed CLI paths are available.
   const command = [
     "command -v agy >/dev/null 2>&1 && echo antigravity",
-    "command -v cursor >/dev/null 2>&1 && echo cursor",
+    // Either spelling counts: see CURSOR_SHIM in src/config/agents.ts.
+    "{ command -v cursor-agent || command -v cursor; } >/dev/null 2>&1 && echo cursor",
     "command -v claude >/dev/null 2>&1 && echo claude",
     "command -v codex >/dev/null 2>&1 && echo codex",
   ].join("; ");

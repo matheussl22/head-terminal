@@ -447,8 +447,26 @@ function installContentSecurityPolicy(): void {
       },
     });
   });
+  // Everything stays denied except the microphone, and only for the app's own
+  // window: voice input records through Chromium because the main process has
+  // no recorder to spawn on Windows. Video is never granted.
+  const isOwnWindow = (contents: Electron.WebContents | null): boolean =>
+    contents !== null && BrowserWindow.fromWebContents(contents) !== null;
+
   session.defaultSession.setPermissionRequestHandler(
-    (_webContents, _permission, callback) => callback(false),
+    (webContents, permission, callback, details) => {
+      if (!isOwnWindow(webContents) || permission !== "media") {
+        callback(false);
+        return;
+      }
+      const { mediaTypes } = details as Electron.MediaAccessPermissionRequest;
+      callback((mediaTypes ?? ["audio"]).every((type) => type === "audio"));
+    },
   );
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  session.defaultSession.setPermissionCheckHandler(
+    (webContents, permission, _origin, details) =>
+      isOwnWindow(webContents)
+      && permission === "media"
+      && details.mediaType === "audio",
+  );
 }

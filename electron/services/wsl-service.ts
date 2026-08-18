@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 
 /**
@@ -12,6 +13,14 @@ import { readFile, writeFile } from "node:fs/promises";
  */
 
 const WSL_LAUNCHER = "wsl.exe";
+/**
+ * `--` only ends `wsl.exe`'s own option parsing: what follows is still handed
+ * to the distro's login shell, which word-splits it and expands every `$`. An
+ * agent argv carrying `$?` or `"$@"` arrives already mangled that way, and the
+ * pane's exit code is reported as a literal 0 forever. `--exec` is the form
+ * that reaches `execvp` untouched.
+ */
+const WSL_EXEC = "--exec";
 const WSL_TIMEOUT_MS = 10_000;
 const WSL_MAX_BUFFER = 1024 * 1024;
 /** `\\wsl.localhost` on current builds; `\\wsl$` on older ones. */
@@ -100,9 +109,8 @@ export function toPosixPath(windows: string): string {
 }
 
 /**
- * Wraps a POSIX argv so it runs inside the distro. `--` is what keeps the
- * remaining words out of `wsl.exe`'s own option parsing, so an agent argv is
- * handed to Linux exactly as the renderer wrote it.
+ * Wraps a POSIX argv so it runs inside the distro, handed to Linux exactly as
+ * the renderer wrote it — see WSL_EXEC for why that is not what `--` does.
  */
 export function wrapArgv(
   command: string,
@@ -112,7 +120,7 @@ export function wrapArgv(
 ): WslArgv {
   return {
     file: WSL_LAUNCHER,
-    args: ["-d", distro, "--cd", cwd, "--", command, ...args],
+    args: ["-d", distro, "--cd", cwd, WSL_EXEC, command, ...args],
   };
 }
 
@@ -124,7 +132,7 @@ export function wrapCommand(
   distro: string,
 ): WslArgv {
   return cwd === undefined
-    ? { file: WSL_LAUNCHER, args: ["-d", distro, "--", command, ...args] }
+    ? { file: WSL_LAUNCHER, args: ["-d", distro, WSL_EXEC, command, ...args] }
     : wrapArgv(command, args, cwd, distro);
 }
 
@@ -138,6 +146,33 @@ export async function detectDistros(
   }
 }
 
+/** Locale names the distro can actually set, as `locale -a` spells them. */
+export async function resolveLocales(
+  distro: string,
+  runner: WslRunner = defaultWslRunner,
+): Promise<string[]> {
+  try {
+    const output = await runner(WSL_LAUNCHER, [
+      "-d",
+      distro,
+      WSL_EXEC,
+      "locale",
+      "-a",
+    ]);
+    return output
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+/** `pt_BR.UTF-8`, `pt_BR.utf8` and `PT_br.Utf8` all name the same locale. */
+export function normalizeLocaleName(locale: string): string {
+  return locale.toLowerCase().replace(/[-_]/gu, "").replace(/\.utf-?8$/u, ".utf8");
+}
+
 export async function resolveHome(
   distro: string,
   runner: WslRunner = defaultWslRunner,
@@ -146,7 +181,7 @@ export async function resolveHome(
     const output = await runner(WSL_LAUNCHER, [
       "-d",
       distro,
-      "--",
+      WSL_EXEC,
       "printenv",
       "HOME",
     ]);
@@ -212,6 +247,8 @@ export interface WslServiceOptions {
   preferredDistro?: string | null;
   /** JSON file holding the user's choice across restarts. */
   settingsPath?: string;
+  /** Injected so the Windows-side directory check is testable on Linux. */
+  pathExists?: (path: string) => boolean;
 }
 
 /**
@@ -223,15 +260,18 @@ export class WslService {
   readonly #runner: WslRunner;
   #preferred: string | null;
   readonly #settingsPath: string | null;
+  readonly #pathExists: (path: string) => boolean;
   #distro: string | null = null;
   #available: string[] = [];
   #home: string | null = null;
+  #locales = new Set<string>();
 
   constructor(options: WslServiceOptions = {}) {
     this.#platform = options.platform ?? process.platform;
     this.#runner = options.runner ?? defaultWslRunner;
     this.#preferred = options.preferredDistro ?? null;
     this.#settingsPath = options.settingsPath ?? null;
+    this.#pathExists = options.pathExists ?? existsSync;
   }
 
   /** True once a usable distro is known. Always false off Windows. */
@@ -260,6 +300,11 @@ export class WslService {
     this.#home = this.#distro
       ? await resolveHome(this.#distro, this.#runner)
       : null;
+    this.#locales = new Set(
+      this.#distro
+        ? (await resolveLocales(this.#distro, this.#runner)).map(normalizeLocaleName)
+        : [],
+    );
   }
 
   /** Applies a distro chosen in the settings UI. Returns false if unknown. */
@@ -293,13 +338,55 @@ export class WslService {
 
   /**
    * Directory a *Windows* process may be started in. CreateProcess refuses a
-   * UNC working directory, and the POSIX cwd is already carried by `--cd`, so
-   * the launcher itself starts wherever Windows allows.
+   * UNC working directory and fails with ERROR_DIRECTORY on one that is not
+   * there, and either way the pane's real cwd travels in `--cd` — so the
+   * launcher starts wherever Windows allows and the fallback covers the rest.
    */
   spawnCwd(posix: string, windowsFallback: string): string {
     if (!this.isWslMode()) return posix;
     const translated = toWindowsPath(posix, this.#distro as string);
-    return translated.startsWith("\\\\") ? windowsFallback : translated;
+    if (translated.startsWith("\\\\") || !this.#pathExists(translated)) {
+      return windowsFallback;
+    }
+    return translated;
+  }
+
+  /**
+   * The pane's own working directory, guaranteed to exist inside the distro.
+   * `wsl --cd` does not fail on a missing directory: it lands the pane in `/`
+   * and prints a relay error into the terminal, so a workspace carrying a
+   * stale path would greet the user with that noise on every pane.
+   */
+  resolvePaneCwd(posix: string): string {
+    if (!this.isWslMode()) return posix;
+    const translated = toWindowsPath(posix, this.#distro as string);
+    return this.#pathExists(translated) ? posix : (this.#home ?? "/");
+  }
+
+  /**
+   * Drops locale variables the distro cannot set. A fresh Ubuntu carries only
+   * `C.utf8`, so a pt_BR pane would make every shell in it open with a
+   * `setlocale` warning. Unknown locales are replaced rather than removed, so
+   * the pane still gets UTF-8.
+   */
+  sanitizeLocaleEnv(env: Record<string, string>): Record<string, string> {
+    if (!this.isWslMode() || this.#locales.size === 0) return { ...env };
+
+    const fallback = ["C.UTF-8", "C.utf8", "en_US.UTF-8"].find((candidate) =>
+      this.#locales.has(normalizeLocaleName(candidate)),
+    );
+    const sanitized = { ...env };
+    for (const key of ["LANG", "LC_ALL", "LC_CTYPE"]) {
+      const value = sanitized[key];
+      if (value === undefined) continue;
+      if (this.#locales.has(normalizeLocaleName(value))) continue;
+      if (fallback) {
+        sanitized[key] = fallback;
+      } else {
+        delete sanitized[key];
+      }
+    }
+    return sanitized;
   }
 
   /** POSIX path as the Windows side must spell it to read the same file. */
@@ -323,7 +410,7 @@ export class WslService {
       await this.#runner(WSL_LAUNCHER, [
         "-d",
         this.#distro as string,
-        "--",
+        WSL_EXEC,
         "/bin/sh",
         "-c",
         paneKillScript(marker),

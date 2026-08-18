@@ -89,9 +89,12 @@ Inside the distribution, install what the Linux section lists. On the Windows
 side:
 
 - WSL2 with a distribution that has `zsh` and the agent CLIs installed;
-- Node.js 20 and npm;
-- Visual Studio Build Tools with the C++ workload, plus Python 3, required to
-  rebuild `node-pty`.
+- Node.js 20 and npm.
+
+No C++ toolchain is needed: `node-pty` publishes N-API prebuilds for
+`win32-x64` and `win32-arm64`, and the module loads them straight from
+`prebuilds/<platform>-<arch>`, so `rebuildConfig` skips the native rebuild on
+Windows. Linux has no published prebuild and still compiles normally.
 
 Check that `wsl.exe -l -q` lists the distribution and that
 `\\wsl.localhost\<distro>` is reachable from Explorer. With more than one

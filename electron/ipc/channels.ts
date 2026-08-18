@@ -42,6 +42,8 @@ export const IPC_CHANNELS = {
     start: "voice:start",
     stopAndTranscribe: "voice:stop-and-transcribe",
     cancel: "voice:cancel",
+    /** Audio the renderer recorded itself, where the main process cannot. */
+    transcribeAudio: "voice:transcribe-audio",
   },
   mcp: { list: "mcp:list" },
   sessions: { listResumable: "sessions:list-resumable" },

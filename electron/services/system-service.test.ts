@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,19 +9,38 @@ import {
   deleteClaudeProfileDir,
   getDefaultCwd,
   pathExists,
+  setPosixHome,
 } from "./system-service";
 
 const cleanup: string[] = [];
 
 afterEach(async () => {
+  setPosixHome(null);
   await Promise.all(
     cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
 });
 
 describe("system-service", () => {
-  it("keeps the default Documentos cwd", async () => {
-    await expect(getDefaultCwd()).resolves.toMatch(/\/Documentos$/u);
+  it("keeps the default Documentos cwd when it exists", async () => {
+    // On Windows the panes live in the distro, so once its $HOME is installed
+    // the default cwd is POSIX no matter what the host's home looks like.
+    const home = await mkdtemp(join(tmpdir(), "ht-home-"));
+    cleanup.push(home);
+    await mkdir(join(home, "Documentos"));
+
+    setPosixHome(home);
+    await expect(getDefaultCwd()).resolves.toBe(`${home}/Documentos`);
+  });
+
+  it("falls back to the home when Documentos is not there", async () => {
+    // The folder only exists on a machine set up in Portuguese, and a pane
+    // whose cwd does not exist cannot start at all.
+    const home = await mkdtemp(join(tmpdir(), "ht-home-"));
+    cleanup.push(home);
+
+    setPosixHome(home);
+    await expect(getDefaultCwd()).resolves.toBe(home);
   });
 
   it("distinguishes directories from files and invalid paths", async () => {

@@ -24,7 +24,10 @@ const config: ForgeConfig = {
     executableName: "head-terminal",
     icon: "assets/icons/icon",
   },
-  rebuildConfig: {},
+  // No Windows o node-pty carrega os prebuilds N-API que ele mesmo publica em
+  // prebuilds/win32-<arch>, então recompilar exigiria MSVC sem ganho nenhum.
+  // Linux não tem prebuild publicado e continua compilando normalmente.
+  rebuildConfig: process.platform === "win32" ? { onlyModules: [] } : {},
   makers: [
     new MakerZIP({}, ["darwin"]),
     new MakerSquirrel(

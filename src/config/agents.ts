@@ -61,18 +61,27 @@ function withShellFallback(agentCmd: string): string[] {
   ];
 }
 
+/**
+ * The official installer puts the CLI on the PATH as `cursor-agent`, while
+ * older setups reach it as the `agent` subcommand of `cursor`. Neither name is
+ * safe to hardcode, so the pane picks whichever the shell can actually find —
+ * otherwise the pane opens straight into `command not found`.
+ */
+const CURSOR_SHIM =
+  'ht_cursor() { if command -v cursor-agent >/dev/null 2>&1; '
+  + 'then cursor-agent "$@"; else cursor agent "$@"; fi; }; ';
+
 function cursorWithFallbackArgs(
   continueConversation: boolean,
   resumeSessionId?: string,
 ): string[] {
   const id = sanitizeResumeSessionId(resumeSessionId);
-  return withShellFallback(
-    id
-      ? withResumeFallback(`cursor agent --resume ${id}`, "cursor agent")
-      : continueConversation
-        ? "cursor agent --continue"
-        : "cursor agent",
-  );
+  const command = id
+    ? withResumeFallback(`ht_cursor --resume ${id}`, "ht_cursor")
+    : continueConversation
+      ? "ht_cursor --continue"
+      : "ht_cursor";
+  return withShellFallback(`${CURSOR_SHIM}${command}`);
 }
 
 function claudeWithFallbackArgs(

@@ -73,6 +73,7 @@ export interface IpcServices {
     start(ownerId: number): Promise<void>;
     stopAndTranscribe(): Promise<string>;
     cancel(): Promise<void>;
+    transcribeAudio(bytes: Uint8Array, mimeType: string): Promise<string>;
     cleanup?(ownerId: number): Promise<void> | void;
   };
   mcp?: {
@@ -282,6 +283,20 @@ export function registerIpc({
   handle(IPC_CHANNELS.voice.cancel, () =>
     services.voice?.cancel() ?? unsupported("voice.cancel"),
   );
+  handle(IPC_CHANNELS.voice.transcribeAudio, (_event, bytes, mimeType) => {
+    // Structured clone hands this over as a Uint8Array; anything else is a
+    // renderer that does not speak this contract.
+    if (!(bytes instanceof Uint8Array)) {
+      throw new TypeError("Voice audio must be a Uint8Array");
+    }
+    if (typeof mimeType !== "string") {
+      throw new TypeError("Voice mime type must be a string");
+    }
+    return (
+      services.voice?.transcribeAudio(bytes, mimeType)
+      ?? unsupported("voice.transcribeAudio")
+    );
+  });
   handle(IPC_CHANNELS.mcp.list, (_event, cwd, agent) =>
     services.mcp?.list(
       asString(cwd, "cwd", { maxLength: 16_384 }),
