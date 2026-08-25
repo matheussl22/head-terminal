@@ -248,10 +248,48 @@ function firstTextBlock(content: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * Both Claude and Cursor flatten the cwd into a single directory name, and the
+ * encoders below reproduce each scheme — but only as a first guess, because on
+ * Windows the CLIs are not consistent about the drive letter's case (`C-Users-x`
+ * and `c-Users-x` sit side by side in the same root). A guess that misses is
+ * indistinguishable from "this cwd has no conversations", which is what used to
+ * leave every pane on Windows unable to anchor: no anchor persisted, and every
+ * restart opening a blank conversation instead of resuming.
+ */
+async function resolveProjectDir(
+  root: string,
+  encoded: string,
+): Promise<string | null> {
+  const exact = join(root, encoded);
+  try {
+    await stat(exact);
+    return exact;
+  } catch (error) {
+    if (!isEnoent(error)) throw error;
+  }
+
+  let entries;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch (error) {
+    if (isEnoent(error)) return null;
+    throw error;
+  }
+
+  const wanted = encoded.toLowerCase();
+  const match = entries.find(
+    (entry) => entry.isDirectory() && entry.name.toLowerCase() === wanted,
+  );
+  return match ? join(root, match.name) : null;
+}
+
 // --- Claude: ~/.claude/projects/<cwd-encoded>/<sessionId>.jsonl ---
 
+/** `C:\Users\me` -> `C--Users-me`, `/home/dev/my.app` -> `-home-dev-my-app`.
+ * The drive colon and the backslash are separators here just like `/` is. */
 function encodeClaudeProjectDir(cwd: string): string {
-  return cwd.replace(/[/.]/g, "-");
+  return cwd.replace(/[/\\.:]/g, "-");
 }
 
 interface ClaudeHead {
@@ -302,7 +340,9 @@ async function listClaudeSessions(
   // the wrong root either lists the wrong account's history or an id that
   // doesn't exist under this pane's config dir, and --resume fails.
   const root = claudeConfigDir ? join(claudeConfigDir, "projects") : claudeProjectsRoot;
-  const dir = join(root, encodeClaudeProjectDir(cwd));
+  const dir = await resolveProjectDir(root, encodeClaudeProjectDir(cwd));
+  if (!dir) return [];
+
   let files;
   try {
     files = await readdir(dir, { withFileTypes: true });
@@ -470,8 +510,16 @@ async function listCodexSessions(
 
 // --- Cursor: ~/.cursor/projects/<cwd-encoded>/agent-transcripts/<chatId>/<chatId>.jsonl ---
 
+/** `C:\Users\me` -> `C-Users-me`, `/home/dev/my.app` -> `home-dev-my-app`.
+ * Unlike Claude, Cursor drops the drive colon rather than turning it into
+ * another separator. */
 function encodeCursorProjectDir(cwd: string): string {
-  return cwd.split("/").filter(Boolean).join("-").replace(/\./g, "-");
+  return cwd
+    .split(/[/\\]/u)
+    .filter(Boolean)
+    .join("-")
+    .replaceAll(":", "")
+    .replace(/\./g, "-");
 }
 
 async function readCursorTitleSource(filePath: string): Promise<string | null> {
@@ -493,7 +541,13 @@ async function listCursorSessions(
   cwd: string,
   cursorProjectsRoot: string,
 ): Promise<DraftEntry[]> {
-  const dir = join(cursorProjectsRoot, encodeCursorProjectDir(cwd), "agent-transcripts");
+  const projectDir = await resolveProjectDir(
+    cursorProjectsRoot,
+    encodeCursorProjectDir(cwd),
+  );
+  if (!projectDir) return [];
+
+  const dir = join(projectDir, "agent-transcripts");
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });

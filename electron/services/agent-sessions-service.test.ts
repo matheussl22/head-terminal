@@ -99,6 +99,46 @@ describe("agent-sessions-service", () => {
     expect(workEntries.map((entry) => entry.id)).toEqual(["work-account-session"]);
   });
 
+  it("finds Claude sessions for a Windows cwd, where the drive colon and backslashes are separators too", async () => {
+    const roots = await makeRoots();
+    const cwd = String.raw`C:\Users\mathe`;
+    // What the CLI itself writes on Windows. Encoding only `/` and `.` left
+    // this path untouched, so the lookup went to a literal `...\C:\Users\mathe`
+    // and every pane on Windows read as having no conversation to resume.
+    const dir = join(roots.claudeProjectsRoot, "C--Users-mathe");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "windows-session.jsonl"),
+      JSON.stringify({ type: "user", message: { content: "roda os testes" } }),
+    );
+
+    const entries = await listResumableSessions(cwd, "claude", undefined, roots);
+    expect(entries.map((entry) => entry.id)).toEqual(["windows-session"]);
+  });
+
+  it("finds a project dir whose drive letter case differs from the encoded guess", async () => {
+    const roots = await makeRoots();
+    const cwd = String.raw`C:\Users\mathe\head-terminal`;
+    // Cursor is not consistent about the drive letter's case: `C-Users-mathe`
+    // and `c-Users-mathe-head-terminal` sit in the same root on a real machine.
+    const dir = join(
+      roots.cursorProjectsRoot,
+      "c-Users-mathe-head-terminal",
+      "agent-transcripts",
+      "chat-win",
+    );
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "chat-win.jsonl"),
+      JSON.stringify({
+        message: { content: [{ type: "text", text: "arruma o resume" }] },
+      }),
+    );
+
+    const entries = await listResumableSessions(cwd, "cursor", undefined, roots);
+    expect(entries.map((entry) => entry.id)).toEqual(["chat-win"]);
+  });
+
   it("lists Codex sessions filtered by cwd, using the thread_name index for the title", async () => {
     const roots = await makeRoots();
     const cwd = "/home/dev/my-project";
