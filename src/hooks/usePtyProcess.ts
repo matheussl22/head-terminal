@@ -7,6 +7,10 @@ import {
 } from "../config/agents";
 import { ActivityDetector } from "../core/activity-detector";
 import { ContextMeter } from "../core/context-meter";
+import {
+  CLAUDE_FOLDER_TRUST_CONFIRM_KEY,
+  ClaudeFolderTrustAutoAccept,
+} from "../core/claude-folder-trust";
 import { resolveClaudeConfigDir } from "../core/claude-accounts";
 import { anchorPaneResumeSession } from "../core/pane-resume-anchor";
 import { checkpoint, logError, logEvent } from "../core/logger";
@@ -82,6 +86,8 @@ export function usePtyProcess({
     const activityDetector = new ActivityDetector((activity) => {
       updatePaneActivity(paneId, activity);
     });
+    const folderTrust =
+      agentProfileId === "claude" ? new ClaudeFolderTrustAutoAccept() : null;
     const workspaceDetector = new WorkspaceDetector(onWorkspacePath);
     const contextMeter = new ContextMeter((percent) => {
       updatePaneContext(paneId, percent);
@@ -204,6 +210,16 @@ export function usePtyProcess({
               notifyUiReady();
             }
             writePtyData(data);
+            folderTrust?.onData(data, () => {
+              if (disposed) {
+                return;
+              }
+              logEvent("info", "claude.folder_trust_auto_accepted", {
+                paneId,
+                sessionId,
+              });
+              bridge?.write(CLAUDE_FOLDER_TRUST_CONFIRM_KEY);
+            });
           }),
           attachPtyExitListener(bridge.pty, (exitCode) => {
             terminal.writeln("");
@@ -275,6 +291,7 @@ export function usePtyProcess({
       oscHandler.dispose();
       resumeFallbackHandler.dispose();
       activityDetector.dispose();
+      folderTrust?.dispose();
       listeners.forEach((listener) => listener.dispose());
       unregisterPtyWriter(paneId);
       instance.writeToPty.current = null;
