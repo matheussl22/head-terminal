@@ -43,6 +43,7 @@ import {
 } from "./services/agent-cli-install-service";
 import { VoiceService } from "./services/voice-service";
 import { WorkspaceService } from "./services/workspace-service";
+import { bindWindowsTaskbarLaunch } from "./services/windows-launcher";
 import { WslService } from "./services/wsl-service";
 
 const RUN_ID = randomUUID().replaceAll("-", "");
@@ -417,6 +418,8 @@ function createMainWindow(): BrowserWindow {
       webSecurity: true,
     },
   });
+
+  bindWindowsTaskbarLaunch(window);
 
   window.once("ready-to-show", () => window.show());
   window.webContents.once("did-finish-load", () => {
