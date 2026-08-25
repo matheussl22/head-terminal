@@ -37,6 +37,10 @@ import {
 import { PtyService } from "./services/pty-service";
 import { SecretService } from "./services/secret-service";
 import * as systemService from "./services/system-service";
+import {
+  configureAgentCliInstaller,
+  ensureAgentClis,
+} from "./services/agent-cli-install-service";
 import { VoiceService } from "./services/voice-service";
 import { WorkspaceService } from "./services/workspace-service";
 import { WslService } from "./services/wsl-service";
@@ -196,6 +200,7 @@ async function createServices(): Promise<{
     home: wsl.home,
     available: wsl.availableDistros,
   }));
+  configureAgentCliInstaller({ wslMode: wsl.isWslMode() });
   const migration = new MigrationService({
     userDataPath,
     workspaceService: workspace,
@@ -268,6 +273,7 @@ async function createServices(): Promise<{
       getDefaultCwd: systemService.getDefaultCwd,
       pathExists: systemService.pathExists,
       checkAgentClis: systemService.checkAgentClis,
+      ensureAgentClis,
       deleteClaudeProfile: systemService.deleteClaudeProfile,
       getPlatform: () => ({
         platform: process.platform,
@@ -340,6 +346,24 @@ async function createServices(): Promise<{
       loadPreferences: () => migration.loadMigratedPreferences(),
     },
   };
+
+  void ensureAgentClis()
+    .then((result) => {
+      diagnostics.appendEvent(JSON.stringify({
+        ts: new Date().toISOString(),
+        event: "agent-cli.ensure",
+        installed: result.installed,
+        failed: result.failed,
+        status: result.status,
+      }));
+    })
+    .catch((error) => {
+      diagnostics.appendEvent(JSON.stringify({
+        ts: new Date().toISOString(),
+        event: "agent-cli.ensure_failed",
+        reason: error instanceof Error ? error.message : String(error),
+      }));
+    });
 
   let disposed = false;
   let disposePromise: Promise<void> | null = null;

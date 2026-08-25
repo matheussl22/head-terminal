@@ -69,7 +69,12 @@ function withShellFallback(agentCmd: string): string[] {
  */
 const CURSOR_SHIM =
   'ht_cursor() { if command -v cursor-agent >/dev/null 2>&1; '
-  + 'then cursor-agent "$@"; else cursor agent "$@"; fi; }; ';
+  + 'then cursor-agent "$@"; '
+  + 'elif command -v cursor-agent.cmd >/dev/null 2>&1; '
+  + 'then cursor-agent.cmd "$@"; '
+  + 'elif command -v cursor-agent.exe >/dev/null 2>&1; '
+  + 'then cursor-agent.exe "$@"; '
+  + 'else cursor agent "$@"; fi; }; ';
 
 function cursorWithFallbackArgs(
   continueConversation: boolean,

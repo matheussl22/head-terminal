@@ -8,7 +8,9 @@ import type { AgentSession } from "../types/session";
 
 /** Always a POSIX shell: on Windows the pane's shell lives inside WSL. */
 function getFallbackShell(): string {
-  const platform = navigator.platform;
+  const platform = typeof navigator === "undefined"
+    ? process.platform
+    : navigator.platform;
   return /mac/i.test(platform) ? "/bin/zsh" : "/usr/bin/zsh";
 }
 

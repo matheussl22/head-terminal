@@ -362,3 +362,45 @@ describe("PtyService in WSL mode", () => {
       .not.toBe(calls[1].options.env.HEAD_TERMINAL_PANE);
   });
 });
+
+describe("PtyService on Windows without WSL", () => {
+  const GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe";
+
+  it("spawns Git Bash instead of requiring WSL", () => {
+    const calls: Array<{ file: string; args: string[] }> = [];
+    const service = new PtyService({
+      platform: "win32",
+      windowsShell: GIT_BASH,
+      spawn: (file, args) => {
+        calls.push({ file, args });
+        return new FakePty();
+      },
+    });
+
+    service.spawn(7, {
+      id: "pane-1",
+      command: "/usr/bin/zsh",
+      args: ["-l", "-c", "claude; exec zsh -l"],
+      cwd: "C:\\Users\\m\\repo",
+    });
+
+    expect(calls[0].file).toBe(GIT_BASH);
+    expect(calls[0].args).toEqual(["-l", "-c", "claude; exec bash -l"]);
+  });
+
+  it("still errors when neither WSL nor a Windows shell is available", () => {
+    const service = new PtyService({
+      platform: "win32",
+      windowsShell: "",
+      spawn: () => new FakePty(),
+    });
+
+    expect(() =>
+      service.spawn(7, {
+        id: "pane-1",
+        command: "/usr/bin/zsh",
+        cwd: "C:\\Users\\m",
+      }),
+    ).toThrow(/WSL2/);
+  });
+});

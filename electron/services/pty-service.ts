@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 
@@ -112,6 +112,11 @@ export interface PtyServiceOptions {
   windowsHome?: string;
   /** Host platform. Injected so the POSIX spawn path is testable on Windows. */
   platform?: NodeJS.Platform;
+  /**
+   * POSIX-compatible shell used on Windows when WSL is unavailable.
+   * Defaults to Git Bash. Injected so tests do not need a real Git install.
+   */
+  windowsShell?: string;
 }
 
 interface PtyEntry {
@@ -125,6 +130,31 @@ interface PtyEntry {
 
 interface NodePtyModule {
   spawn: SpawnPty;
+}
+
+const GIT_BASH_CANDIDATES = [
+  "C:\\Program Files\\Git\\bin\\bash.exe",
+  "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
+];
+
+function resolveGitBash(): string | null {
+  const fromEnv = process.env.ProgramFiles
+    ? [
+        `${process.env.ProgramFiles}\\Git\\bin\\bash.exe`,
+        `${process.env.ProgramFiles}\\Git\\usr\\bin\\bash.exe`,
+      ]
+    : [];
+  for (const candidate of [...fromEnv, ...GIT_BASH_CANDIDATES]) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/** Login-shell scripts from the renderer still say `exec zsh -l`. */
+function adaptZshArgsForGitBash(args: string[]): string[] {
+  return args.map((arg) => arg.replaceAll("exec zsh -l", "exec bash -l"));
 }
 
 function loadNodePty(): NodePtyModule {
@@ -287,6 +317,7 @@ export class PtyService {
   private readonly wsl: WslBridge | null;
   private readonly windowsHome: string;
   private readonly platform: NodeJS.Platform;
+  private readonly windowsShell: string | null;
 
   constructor(options: PtyServiceOptions = {}) {
     this.emit = options.emit ?? (() => undefined);
@@ -298,6 +329,9 @@ export class PtyService {
     this.wsl = options.wsl ?? null;
     this.windowsHome = options.windowsHome ?? homedir();
     this.platform = options.platform ?? process.platform;
+    this.windowsShell = options.windowsShell ?? (
+      this.platform === "win32" ? resolveGitBash() : null
+    );
   }
 
   spawn(ownerId: number, request: PtySpawnRequest): PtySpawnResult {
@@ -322,7 +356,10 @@ export class PtyService {
     // The Windows↔WSL boundary is here and nowhere else: the argv built by
     // the renderer crosses untouched, only wrapped.
     const inWsl = this.wsl?.isWslMode() ?? false;
-    if (this.platform === "win32" && !inWsl) {
+    const nativeWindowsShell = this.platform === "win32" && !inWsl
+      ? this.windowsShell
+      : null;
+    if (this.platform === "win32" && !inWsl && !nativeWindowsShell) {
       // A POSIX shell has nothing to run on in Windows itself. Say so, rather
       // than letting node-pty report a missing `/usr/bin/zsh`.
       throw new Error(
@@ -347,7 +384,9 @@ export class PtyService {
       : request.cwd;
     const launch = inWsl
       ? (this.wsl as WslBridge).wrap(request.command, args, requestCwd)
-      : { file: request.command, args };
+      : nativeWindowsShell
+        ? { file: nativeWindowsShell, args: adaptZshArgsForGitBash(args) }
+        : { file: request.command, args };
     const cwd = inWsl
       ? (this.wsl as WslBridge).spawnCwd(requestCwd, this.windowsHome)
       : requestCwd;

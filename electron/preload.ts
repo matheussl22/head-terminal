@@ -51,6 +51,7 @@ const api: HeadTerminalApi = {
       ipcRenderer.invoke(IPC_CHANNELS.system.selectDirectory, defaultPath),
     confirm: (input) => ipcRenderer.invoke(IPC_CHANNELS.system.confirm, input),
     checkAgentClis: () => ipcRenderer.invoke(IPC_CHANNELS.system.checkAgentClis),
+    ensureAgentClis: () => ipcRenderer.invoke(IPC_CHANNELS.system.ensureAgentClis),
     deleteClaudeProfile: (path) =>
       ipcRenderer.invoke(IPC_CHANNELS.system.deleteClaudeProfile, path),
     getPlatform: () => ipcRenderer.invoke(IPC_CHANNELS.system.getPlatform),

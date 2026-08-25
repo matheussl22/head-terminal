@@ -69,6 +69,7 @@ export function CreateSessionDialog({
   const [cwdError, setCwdError] = useState<string | null>(null);
   const [recentCwds, setRecentCwds] = useState<string[]>([]);
   const [cliStatus, setCliStatus] = useState<AgentCliStatus | null>(null);
+  const [ensuringClis, setEnsuringClis] = useState(false);
   const [isGitRepo, setIsGitRepo] = useState(false);
   const [useWorktree, setUseWorktree] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -124,27 +125,33 @@ export function CreateSessionDialog({
       setRecentCwds(loadRecentCwds());
       if (cliStatusCache) {
         setCliStatus(cliStatusCache);
-      } else {
-        void window.headTerminal.system.checkAgentClis()
-          .then((status) => {
+      }
+      setEnsuringClis(true);
+      void window.headTerminal.system.ensureAgentClis()
+        .then((result) => {
+          cliStatusCache = result.status;
+          setCliStatus(result.status);
+          if (
+            lastAgent !== "shell" &&
+            !result.status[lastAgent as keyof AgentCliStatus]
+          ) {
+            setAgentProfileId(result.status.cursor ? "cursor" : "shell");
+          }
+        })
+        .catch(() =>
+          window.headTerminal.system.checkAgentClis().then((status) => {
             cliStatusCache = status;
             setCliStatus(status);
-            if (
-              lastAgent !== "shell" &&
-              !status[lastAgent as keyof AgentCliStatus]
-            ) {
-              setAgentProfileId(status.cursor ? "cursor" : "shell");
-            }
-          })
-          .catch(() =>
+          }).catch(() =>
             setCliStatus({
               antigravity: true,
               cursor: true,
               claude: true,
               codex: true,
             }),
-          );
-      }
+          ),
+        )
+        .finally(() => setEnsuringClis(false));
     }
   }, [defaultCwd, open]);
 
@@ -304,6 +311,10 @@ export function CreateSessionDialog({
           <div className="create-session-dialog__agents">
             {profiles.map((profile) => {
               const available = isAgentAvailable(profile.id);
+              const installing = ensuringClis
+                && profile.id !== "shell"
+                && profile.id !== "antigravity"
+                && !available;
               return (
                 <button
                   key={profile.id}
@@ -319,7 +330,8 @@ export function CreateSessionDialog({
                 >
                   <AgentIcon id={profile.id} />
                   <span>{profile.label}</span>
-                  {!available && <small>Não instalado</small>}
+                  {installing && <small>Instalando…</small>}
+                  {!available && !installing && <small>Não instalado</small>}
                 </button>
               );
             })}

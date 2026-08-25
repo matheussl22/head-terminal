@@ -5,6 +5,10 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  resetCommandRunner,
+  setCommandRunner,
+} from "./command-runner";
+import {
   checkAgentClis,
   deleteClaudeProfileDir,
   getDefaultCwd,
@@ -16,6 +20,7 @@ const cleanup: string[] = [];
 
 afterEach(async () => {
   setPosixHome(null);
+  resetCommandRunner();
   await Promise.all(
     cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })),
   );
@@ -72,5 +77,39 @@ describe("system-service", () => {
       claude: expect.any(Boolean),
       codex: expect.any(Boolean),
     });
+  });
+
+  it("discovers native Windows CLIs with where.exe when zsh is missing", async () => {
+    const previous = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "win32" });
+    setCommandRunner(async (command, args) => {
+      if (command === "zsh") {
+        throw Object.assign(new Error("spawn zsh ENOENT"), {
+          stdout: "",
+          code: "ENOENT",
+        });
+      }
+      if (command === "where.exe") {
+        const name = String(args[0]);
+        if (name === "claude" || name === "cursor-agent" || name === "codex") {
+          return { stdout: `C:\\bin\\${name}.exe\r\n`, stderr: "" };
+        }
+        throw Object.assign(new Error("not found"), { stdout: "" });
+      }
+      return { stdout: "", stderr: "" };
+    });
+
+    try {
+      await expect(checkAgentClis()).resolves.toEqual({
+        antigravity: false,
+        cursor: true,
+        claude: true,
+        codex: true,
+      });
+    } finally {
+      if (previous) {
+        Object.defineProperty(process, "platform", previous);
+      }
+    }
   });
 });

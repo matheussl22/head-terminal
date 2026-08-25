@@ -84,6 +84,14 @@ export interface AgentCliStatus {
   codex: boolean;
 }
 
+export type InstallableAgentId = "cursor" | "claude" | "codex";
+
+export interface AgentCliInstallResult {
+  status: AgentCliStatus;
+  installed: InstallableAgentId[];
+  failed: Array<{ id: InstallableAgentId; error: string }>;
+}
+
 /** Windows only. Absent elsewhere, where there is no boundary to describe. */
 export interface WslInfo {
   enabled: boolean;
@@ -192,6 +200,7 @@ export interface HeadTerminalApi {
     selectDirectory(defaultPath?: string): Promise<string | null>;
     confirm(input: ConfirmInput): Promise<boolean>;
     checkAgentClis(): Promise<AgentCliStatus>;
+    ensureAgentClis(): Promise<AgentCliInstallResult>;
     deleteClaudeProfile(path: string): Promise<void>;
     getPlatform(): Promise<PlatformInfo>;
     /** Windows only; false when the distro is unknown. */

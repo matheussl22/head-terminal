@@ -9,6 +9,7 @@ import {
 } from "electron";
 
 import type {
+  AgentCliInstallResult,
   AgentCliStatus,
   AllowedSecretKey,
   CheckpointInput,
@@ -59,6 +60,7 @@ export interface IpcServices {
     selectDirectory(window: BrowserWindow, defaultPath?: string): Promise<string | null>;
     confirm(window: BrowserWindow, input: ConfirmInput): Promise<boolean>;
     checkAgentClis(): Promise<AgentCliStatus>;
+    ensureAgentClis(): Promise<AgentCliInstallResult>;
     deleteClaudeProfile(path: string): Promise<void>;
     getPlatform(): Promise<PlatformInfo> | PlatformInfo;
     selectWslDistro?(distro: string): Promise<boolean>;
@@ -243,6 +245,9 @@ export function registerIpc({
   );
   handle(IPC_CHANNELS.system.checkAgentClis, () =>
     services.system?.checkAgentClis() ?? unsupported("system.checkAgentClis"),
+  );
+  handle(IPC_CHANNELS.system.ensureAgentClis, () =>
+    services.system?.ensureAgentClis() ?? unsupported("system.ensureAgentClis"),
   );
   handle(IPC_CHANNELS.system.deleteClaudeProfile, (_event, value) =>
     services.system?.deleteClaudeProfile(

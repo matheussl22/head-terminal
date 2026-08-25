@@ -77,7 +77,7 @@ export async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-function runCliDiscovery(): Promise<string> {
+async function runZshCliDiscovery(): Promise<{ stdout: string; ran: boolean }> {
   // The command is constant. No renderer-controlled value is interpolated into
   // the login shell, which is used so user-installed CLI paths are available.
   const command = [
@@ -88,15 +88,61 @@ function runCliDiscovery(): Promise<string> {
     "command -v codex >/dev/null 2>&1 && echo codex",
   ].join("; ");
 
-  // A missing final CLI makes the shell status non-zero; stdout from the
-  // preceding probes is still valid and must not be discarded.
-  return runCommand("zsh", ["-lc", command], {
+  try {
+    const result = await runCommand("zsh", ["-lc", command], {
+      maxBuffer: 64 * 1024,
+      timeoutMs: CLI_CHECK_TIMEOUT_MS,
+    });
+    return { stdout: result.stdout, ran: true };
+  } catch (error) {
+    const failure = error as NodeJS.ErrnoException & { stdout?: string };
+    // zsh missing (typical Windows without WSL) is not "none of the CLIs
+    // exist". A shell that started and exited non-zero still produced a
+    // valid probe — the last missing CLI just makes the status non-zero.
+    if (failure.code === "ENOENT") {
+      return { stdout: "", ran: false };
+    }
+    return { stdout: failure.stdout ?? "", ran: true };
+  }
+}
+
+function windowsHasCommand(name: string): Promise<boolean> {
+  return runCommand("where.exe", [name], {
     maxBuffer: 64 * 1024,
     timeoutMs: CLI_CHECK_TIMEOUT_MS,
   }).then(
-    (result) => result.stdout,
-    (error) => (error as { stdout?: string }).stdout ?? "",
+    (result) => result.stdout.trim().length > 0,
+    () => false,
   );
+}
+
+async function runWindowsCliDiscovery(): Promise<string> {
+  const probes: Array<[string, readonly string[]]> = [
+    ["antigravity", ["agy"]],
+    ["cursor", ["cursor-agent", "cursor"]],
+    ["claude", ["claude"]],
+    ["codex", ["codex"]],
+  ];
+  const found: string[] = [];
+  for (const [id, names] of probes) {
+    for (const name of names) {
+      if (await windowsHasCommand(name)) {
+        found.push(id);
+        break;
+      }
+    }
+  }
+  return found.join("\n");
+}
+
+async function runCliDiscovery(): Promise<string> {
+  const posix = await runZshCliDiscovery();
+  if (posix.ran || process.platform !== "win32") {
+    return posix.stdout;
+  }
+  // zsh itself is missing: look at native Windows PATH instead of treating
+  // every agent as uninstalled.
+  return runWindowsCliDiscovery();
 }
 
 export async function checkAgentClis(): Promise<AgentCliStatus> {

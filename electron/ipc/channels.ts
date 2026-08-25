@@ -28,6 +28,7 @@ export const IPC_CHANNELS = {
     selectDirectory: "system:select-directory",
     confirm: "system:confirm",
     checkAgentClis: "system:check-agent-clis",
+    ensureAgentClis: "system:ensure-agent-clis",
     deleteClaudeProfile: "system:delete-claude-profile",
     getPlatform: "system:get-platform",
     selectWslDistro: "system:select-wsl-distro",
