@@ -608,13 +608,14 @@ async function listCodexSessions(
       .sort((a, b) => b.effectiveMs - a.effectiveMs)
       .slice(0, MAX_ENTRIES)
       .map(async (match) => {
+        // A `/name` from the index already is the title; otherwise scan for
+        // the first real prompt. Either one must set titleSource so
+        // fromTranscript stays true (timestamp fallbacks stay unnamed).
         const titleSource = match.threadName
-          ? undefined
-          : await readCodexTitleSource(match.path).catch(() => undefined);
+          ?? await readCodexTitleSource(match.path).catch(() => undefined);
         return {
           id: match.id,
-          title:
-            match.threadName
+          title: match.threadName
             ?? (titleSource
               ? summarizeTitle(titleSource)
               : formatFallbackTitle(match.effectiveMs)),

@@ -129,6 +129,8 @@ async function runWindowsCliDiscovery(): Promise<string> {
     ["cursor", ["cursor-agent", "cursor"]],
     ["claude", ["claude"]],
     ["codex", ["codex"]],
+    ["ollama", ["ollama"]],
+    ["ornith", ["llama-cli"]],
   ];
   const found: string[] = [];
   for (const [id, names] of probes) {

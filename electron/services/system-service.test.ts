@@ -84,6 +84,8 @@ describe("system-service", () => {
       cursor: false,
       claude: false,
       codex: false,
+      ollama: false,
+      ornith: false,
     });
     expect(script).toContain("ht_unix_cmd cursor-agent");
     expect(script).toContain("/mnt/[a-z]/*");
@@ -115,7 +117,12 @@ describe("system-service", () => {
       }
       if (command === "where.exe") {
         const name = String(args[0]);
-        if (name === "claude" || name === "cursor-agent" || name === "codex") {
+        if (
+          name === "claude"
+          || name === "cursor-agent"
+          || name === "codex"
+          || name === "ollama"
+        ) {
           return { stdout: `C:\\bin\\${name}.exe\r\n`, stderr: "" };
         }
         throw Object.assign(new Error("not found"), { stdout: "" });
@@ -129,6 +136,8 @@ describe("system-service", () => {
         cursor: true,
         claude: true,
         codex: true,
+        ollama: true,
+        ornith: false,
       });
     } finally {
       if (previous) {

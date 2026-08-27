@@ -279,17 +279,18 @@ export function CreateSessionDialog({
             ) {
               setAgentProfileId(status.cursor ? "cursor" : "shell");
             }
-          })
-          .catch(() =>
-            setCliStatus({
-              antigravity: true,
-              cursor: true,
-              claude: true,
-              codex: true,
-              ollama: true,
-              ornith: true,
-            }),
-          ),
+          }).catch(() => {
+            const none: AgentCliStatus = {
+              antigravity: false,
+              cursor: false,
+              claude: false,
+              codex: false,
+              ollama: false,
+              ornith: false,
+            };
+            setCliStatus(none);
+            setAgentProfileId("shell");
+          }),
         )
         .finally(() => setEnsuringClis(false));
     }
