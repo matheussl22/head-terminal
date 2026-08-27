@@ -398,6 +398,31 @@
   margin-top: 7px;
 }
 
+.create-session-dialog__fieldset .create-session-dialog__worktree {
+  margin: 10px 0 0;
+}
+
+.create-session-dialog__hw {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgba(248, 28, 229, 0.22);
+  border-radius: var(--radius-sm);
+  background: rgba(248, 28, 229, 0.07);
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  line-height: 1.45;
+}
+
+.create-session-dialog__hw strong {
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
 /* Command palette */
 
 .command-palette {

@@ -286,6 +286,7 @@ async function createServices(): Promise<{
       pathExists: systemService.pathExists,
       checkAgentClis: systemService.checkAgentClis,
       ensureAgentClis,
+      listOllamaModels: systemService.listOllamaModels,
       deleteClaudeProfile: systemService.deleteClaudeProfile,
       getPlatform: () => ({
         platform: process.platform,
@@ -318,6 +319,17 @@ async function createServices(): Promise<{
       async selectDirectory(window, defaultPath) {
         const result = await dialog.showOpenDialog(window, {
           properties: ["openDirectory", "createDirectory"],
+          ...(defaultPath ? { defaultPath } : {}),
+        });
+        return result.canceled ? null : (result.filePaths[0] ?? null);
+      },
+      async selectFile(window, defaultPath) {
+        const result = await dialog.showOpenDialog(window, {
+          properties: ["openFile"],
+          filters: [
+            { name: "GGUF", extensions: ["gguf"] },
+            { name: "Todos", extensions: ["*"] },
+          ],
           ...(defaultPath ? { defaultPath } : {}),
         });
         return result.canceled ? null : (result.filePaths[0] ?? null);

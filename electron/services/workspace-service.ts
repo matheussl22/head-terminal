@@ -54,6 +54,12 @@ export function isPersistedWorkspace(value: unknown): value is PersistedWorkspac
     && isBoundedString(session.agentProfileId, 128)
     && (session.claudeAccountId === undefined
       || isBoundedString(session.claudeAccountId, 256))
+    && (session.ollamaModel === undefined
+      || isBoundedString(session.ollamaModel, 128))
+    && (session.ollamaThinkOff === undefined
+      || typeof session.ollamaThinkOff === "boolean")
+    && (session.ggufPath === undefined
+      || isBoundedString(session.ggufPath, 4_096))
     && (session.pinned === undefined || typeof session.pinned === "boolean")
     && isLayoutNode(session.layout));
 }

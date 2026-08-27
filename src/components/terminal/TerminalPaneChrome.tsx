@@ -24,6 +24,9 @@ import {
   IconActivity,
   IconAgentClaude,
   IconAgentCodex,
+  IconAgentOllama,
+  IconAgentOrnith,
+  IconAgentQwen,
   IconAgentCursor,
   IconAgentShell,
   IconClose,
@@ -38,6 +41,9 @@ const AGENT_ICON: Record<string, ComponentType<{ size?: number }>> = {
   cursor: IconAgentCursor,
   claude: IconAgentClaude,
   codex: IconAgentCodex,
+  ollama: IconAgentOllama,
+  ornith: IconAgentOrnith,
+  qwen27: IconAgentQwen,
   shell: IconAgentShell,
 };
 
@@ -46,6 +52,9 @@ const AGENT_LABEL: Record<string, string> = {
   cursor: "cx",
   claude: "cc",
   codex: "cdx",
+  ollama: "olm",
+  ornith: "orn",
+  qwen27: "qw",
   shell: "sh",
 };
 

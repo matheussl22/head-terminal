@@ -3,7 +3,10 @@ import {
   Activity,
   ChevronDown,
   Command,
+  Bird,
+  Bot,
   Check,
+  Cpu,
   GitBranch,
   LockKeyhole,
   Mic,
@@ -148,4 +151,18 @@ export function IconAgentCodex(props: IconProps) {
 
 export function IconAgentShell({ className, size = 16 }: IconProps) {
   return <Terminal className={className} size={size} aria-hidden />;
+}
+
+// Ollama ships no CC0/MIT mark, so the local-model agent gets a generic
+// "runs on this machine" glyph instead of a borrowed logo.
+export function IconAgentOllama({ className, size = 16 }: IconProps) {
+  return <Cpu className={className} size={size} aria-hidden />;
+}
+
+export function IconAgentOrnith({ className, size = 16 }: IconProps) {
+  return <Bird className={className} size={size} aria-hidden />;
+}
+
+export function IconAgentQwen({ className, size = 16 }: IconProps) {
+  return <Bot className={className} size={size} aria-hidden />;
 }

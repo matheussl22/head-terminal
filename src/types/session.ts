@@ -18,6 +18,12 @@ export interface AgentSession {
   cwd: string;
   agentProfileId: string;
   claudeAccountId?: string;
+  /** Local model this session runs, for the `ollama` profile only. */
+  ollamaModel?: string;
+  /** When true, the ollama pane starts with `--think=false`. */
+  ollamaThinkOff?: boolean;
+  /** GGUF on this machine for llama.cpp profiles (Ornith / Qwen). */
+  ggufPath?: string;
   layout: LayoutNode;
   pinned?: boolean;
 }

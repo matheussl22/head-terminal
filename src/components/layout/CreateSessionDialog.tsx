@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 
-import { buildAgentProfiles } from "../../config/agents";
+import {
+  LLAMA_HARDWARE_PROFILE,
+  ORNITH_DEFAULT_GGUF,
+  ORNITH_HF_FILE,
+  ORNITH_HF_REPO,
+  QWEN27_DEFAULT_GGUF,
+  QWEN27_HF_FILE,
+  buildAgentProfiles,
+  sanitizeGgufPath,
+} from "../../config/agents";
 import {
   DEFAULT_CLAUDE_ACCOUNT_ID,
   loadClaudeAccountProfiles,
@@ -9,16 +18,26 @@ import {
 import {
   loadLastAgent,
   loadLastClaudeAccount,
+  loadLastGgufPath,
+  loadLastOllamaModel,
+  loadLastOllamaThinkOff,
   loadRecentCwds,
   noteRecentCwd,
   saveLastAgent,
   saveLastClaudeAccount,
+  saveLastGgufPath,
+  saveLastOllamaModel,
+  saveLastOllamaThinkOff,
+  type LlamaAgentId,
 } from "../../core/ui-preferences";
 import {
   IconActivity,
   IconAgentClaude,
   IconAgentCodex,
   IconAgentCursor,
+  IconAgentOllama,
+  IconAgentOrnith,
+  IconAgentQwen,
   IconAgentShell,
   IconClose,
   IconPlus,
@@ -31,7 +50,12 @@ interface CreateSessionDialogProps {
   onCreate: (
     cwd: string,
     agentProfileId: string,
-    claudeAccountId?: string,
+    extras?: {
+      claudeAccountId?: string;
+      ollamaModel?: string;
+      ollamaThinkOff?: boolean;
+      ggufPath?: string;
+    },
   ) => void;
 }
 
@@ -40,9 +64,25 @@ interface AgentCliStatus {
   cursor: boolean;
   claude: boolean;
   codex: boolean;
+  ollama: boolean;
+  ornith: boolean;
 }
 
 let cliStatusCache: AgentCliStatus | null = null;
+// `ollama list` starts the daemon on a cold machine, so the answer is kept
+// for the app's lifetime like the CLI probe above.
+let ollamaModelsCache: string[] | null = null;
+
+function cliAvailable(status: AgentCliStatus, id: string): boolean {
+  if (id === "shell") {
+    return true;
+  }
+  // Same llama-cli binary as Ornith; not a separate probe.
+  if (id === "qwen27") {
+    return status.ornith;
+  }
+  return status[id as keyof AgentCliStatus] ?? true;
+}
 
 function folderChipLabel(path: string): string {
   const segments = path.split(/[/\\]/).filter(Boolean);
@@ -53,8 +93,71 @@ function AgentIcon({ id }: { id: string }) {
   if (id === "antigravity") return <IconActivity size={18} />;
   if (id === "claude") return <IconAgentClaude size={18} />;
   if (id === "codex") return <IconAgentCodex size={18} />;
+  if (id === "ollama") return <IconAgentOllama size={18} />;
+  if (id === "ornith") return <IconAgentOrnith size={18} />;
+  if (id === "qwen27") return <IconAgentQwen size={18} />;
   if (id === "shell") return <IconAgentShell size={18} />;
   return <IconAgentCursor size={18} />;
+}
+
+function isLlamaAgent(id: string): id is LlamaAgentId {
+  return id === "ornith" || id === "qwen27";
+}
+
+function LlamaGgufFields({
+  agentId,
+  ggufPath,
+  onGgufPath,
+  hardwareDetail,
+  downloadHint,
+}: {
+  agentId: LlamaAgentId;
+  ggufPath: string;
+  onGgufPath: (path: string) => void;
+  hardwareDetail: string;
+  downloadHint: string;
+}) {
+  const placeholder =
+    agentId === "ornith" ? ORNITH_DEFAULT_GGUF : QWEN27_DEFAULT_GGUF;
+
+  const browseGguf = async () => {
+    const selected = await window.headTerminal.system.selectFile(
+      ggufPath.trim() || undefined,
+    );
+    if (typeof selected === "string") {
+      onGgufPath(selected);
+    }
+  };
+
+  return (
+    <fieldset className="create-session-dialog__fieldset">
+      <legend>Modelo nesta máquina</legend>
+      <label className="create-session-dialog__field">
+        <span>Arquivo GGUF</span>
+        <div className="create-session-dialog__cwd-row">
+          <input
+            type="text"
+            value={ggufPath}
+            onChange={(event) => onGgufPath(event.target.value)}
+            placeholder={placeholder}
+            spellCheck={false}
+          />
+          <button
+            type="button"
+            className="agent-toolbar__button--ghost"
+            onClick={() => void browseGguf()}
+          >
+            Procurar…
+          </button>
+        </div>
+      </label>
+      <div className="create-session-dialog__hw">
+        <strong>{LLAMA_HARDWARE_PROFILE}</strong>
+        <span>{hardwareDetail}</span>
+      </div>
+      <span className="create-session-dialog__hint">{downloadHint}</span>
+    </fieldset>
+  );
 }
 
 export function CreateSessionDialog({
@@ -75,6 +178,10 @@ export function CreateSessionDialog({
   const [recentCwds, setRecentCwds] = useState<string[]>([]);
   const [cliStatus, setCliStatus] = useState<AgentCliStatus | null>(null);
   const [ensuringClis, setEnsuringClis] = useState(false);
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [ollamaModel, setOllamaModel] = useState("");
+  const [ollamaThinkOff, setOllamaThinkOff] = useState(false);
+  const [ggufPath, setGgufPath] = useState("");
   const [isGitRepo, setIsGitRepo] = useState(false);
   const [useWorktree, setUseWorktree] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -126,7 +233,7 @@ export function CreateSessionDialog({
       setCreating(false);
       setClaudeAccounts(accounts);
       setAgentProfileId(
-        ["antigravity", "cursor", "claude", "codex", "shell"].includes(
+        ["antigravity", "cursor", "claude", "codex", "ollama", "ornith", "qwen27", "shell"].includes(
           lastAgent,
         )
           ? lastAgent
@@ -136,6 +243,15 @@ export function CreateSessionDialog({
         accounts.some((account) => account.id === lastAccount)
           ? lastAccount
           : DEFAULT_CLAUDE_ACCOUNT_ID,
+      );
+      setOllamaModel(loadLastOllamaModel());
+      setOllamaThinkOff(loadLastOllamaThinkOff());
+      setGgufPath(
+        isLlamaAgent(lastAgent)
+          ? loadLastGgufPath(lastAgent) || (
+            lastAgent === "ornith" ? ORNITH_DEFAULT_GGUF : QWEN27_DEFAULT_GGUF
+          )
+          : "",
       );
       setRecentCwds(loadRecentCwds());
       if (cliStatusCache) {
@@ -148,7 +264,7 @@ export function CreateSessionDialog({
           setCliStatus(result.status);
           if (
             lastAgent !== "shell" &&
-            !result.status[lastAgent as keyof AgentCliStatus]
+            !cliAvailable(result.status, lastAgent)
           ) {
             setAgentProfileId(result.status.cursor ? "cursor" : "shell");
           }
@@ -159,24 +275,57 @@ export function CreateSessionDialog({
             setCliStatus(status);
             if (
               lastAgent !== "shell" &&
-              !status[lastAgent as keyof AgentCliStatus]
+              !cliAvailable(status, lastAgent)
             ) {
               setAgentProfileId(status.cursor ? "cursor" : "shell");
             }
-          }).catch(() => {
-            const none: AgentCliStatus = {
-              antigravity: false,
-              cursor: false,
-              claude: false,
-              codex: false,
-            };
-            setCliStatus(none);
-            setAgentProfileId("shell");
-          }),
+          })
+          .catch(() =>
+            setCliStatus({
+              antigravity: true,
+              cursor: true,
+              claude: true,
+              codex: true,
+              ollama: true,
+              ornith: true,
+            }),
+          ),
         )
         .finally(() => setEnsuringClis(false));
     }
   }, [defaultCwd, open]);
+
+  // Only asked for once the user actually wants a local model: the call
+  // wakes the ollama daemon, which is not something opening the dialog
+  // should do on its own.
+  useEffect(() => {
+    if (!open || agentProfileId !== "ollama") {
+      return;
+    }
+    let cancelled = false;
+    const apply = (models: string[]) => {
+      if (cancelled) {
+        return;
+      }
+      setOllamaModels(models);
+      setOllamaModel((current) =>
+        current || models[0] || "",
+      );
+    };
+    if (ollamaModelsCache) {
+      apply(ollamaModelsCache);
+      return;
+    }
+    void window.headTerminal.system.listOllamaModels()
+      .then((models) => {
+        ollamaModelsCache = models;
+        apply(models);
+      })
+      .catch(() => apply([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [agentProfileId, open]);
 
   if (!open) {
     return null;
@@ -191,7 +340,7 @@ export function CreateSessionDialog({
     if (!cliStatus) {
       return false;
     }
-    return cliStatus[id as keyof AgentCliStatus] ?? false;
+    return cliAvailable(cliStatus, id);
   };
 
   const validateAndCreate = async () => {
@@ -230,11 +379,24 @@ export function CreateSessionDialog({
     if (agentProfileId === "claude") {
       saveLastClaudeAccount(claudeAccountId);
     }
-    onCreate(
-      sessionCwd,
-      agentProfileId,
-      agentProfileId === "claude" ? claudeAccountId : undefined,
-    );
+    if (agentProfileId === "ollama") {
+      saveLastOllamaModel(ollamaModel);
+      saveLastOllamaThinkOff(ollamaThinkOff);
+    }
+    if (isLlamaAgent(agentProfileId)) {
+      saveLastGgufPath(agentProfileId, ggufPath);
+    }
+    onCreate(sessionCwd, agentProfileId, {
+      claudeAccountId:
+        agentProfileId === "claude" ? claudeAccountId : undefined,
+      ollamaModel:
+        agentProfileId === "ollama" ? ollamaModel.trim() : undefined,
+      ollamaThinkOff:
+        agentProfileId === "ollama" ? ollamaThinkOff : undefined,
+      ggufPath: isLlamaAgent(agentProfileId)
+        ? sanitizeGgufPath(ggufPath)
+        : undefined,
+    });
     onClose();
   };
 
@@ -353,7 +515,17 @@ export function CreateSessionDialog({
                   }
                   disabled={!available}
                   aria-pressed={profile.id === agentProfileId}
-                  onClick={() => setAgentProfileId(profile.id)}
+                  onClick={() => {
+                    setAgentProfileId(profile.id);
+                    if (isLlamaAgent(profile.id)) {
+                      setGgufPath(
+                        loadLastGgufPath(profile.id)
+                          || (profile.id === "ornith"
+                            ? ORNITH_DEFAULT_GGUF
+                            : QWEN27_DEFAULT_GGUF),
+                      );
+                    }
+                  }}
                 >
                   <AgentIcon id={profile.id} />
                   <span>{profile.label}</span>
@@ -364,6 +536,77 @@ export function CreateSessionDialog({
             })}
           </div>
         </fieldset>
+
+        {agentProfileId === "ollama" && (
+          <fieldset className="create-session-dialog__fieldset">
+            <legend>Modelo local</legend>
+            {ollamaModels.length > 0 && (
+              <div className="create-session-dialog__profiles">
+                {ollamaModels.map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className={
+                      model === ollamaModel.trim()
+                        ? "create-session-dialog__profile create-session-dialog__profile--active"
+                        : "create-session-dialog__profile"
+                    }
+                    aria-pressed={model === ollamaModel.trim()}
+                    onClick={() => setOllamaModel(model)}
+                  >
+                    <span>{model}</span>
+                    <small>ollama run</small>
+                  </button>
+                ))}
+              </div>
+            )}
+            <label className="create-session-dialog__field">
+              <span>Outro modelo</span>
+              <input
+                type="text"
+                value={ollamaModel}
+                onChange={(event) => setOllamaModel(event.target.value)}
+                placeholder="qwen38-27b-uncensored:latest"
+              />
+            </label>
+            <label className="create-session-dialog__worktree">
+              <input
+                type="checkbox"
+                checked={ollamaThinkOff}
+                onChange={(event) => setOllamaThinkOff(event.target.checked)}
+              />
+              <span>
+                <strong>Thinking desligado</strong>
+                Inicia com --think=false para o modelo responder em vez de raciocinar até estourar o contexto.
+              </span>
+            </label>
+            <span className="create-session-dialog__hint">
+              {ollamaModels.length > 0
+                ? "O modelo fica lembrado para a próxima sessão."
+                : "Nenhum modelo listado — confira se o serviço do ollama está no ar ou digite o nome."}
+            </span>
+          </fieldset>
+        )}
+
+        {agentProfileId === "ornith" && (
+          <LlamaGgufFields
+            agentId="ornith"
+            ggufPath={ggufPath}
+            onGgufPath={setGgufPath}
+            hardwareDetail="MoE: experts na RAM (--cpu-moe), contexto 16k. O tweet (--n-cpu-moe 24, 170k) estoura VRAM nesta placa. Não copie estes flags para outra GPU."
+            downloadHint={`O GGUF não vai no git — só o caminho nesta máquina. Arquivo típico: ${ORNITH_HF_FILE} (${ORNITH_HF_REPO}).`}
+          />
+        )}
+
+        {agentProfileId === "qwen27" && (
+          <LlamaGgufFields
+            agentId="qwen27"
+            ggufPath={ggufPath}
+            onGgufPath={setGgufPath}
+            hardwareDetail="27B denso: a placa já está cheia (~6,3 GB). ~4 tok/s com metade das camadas na CPU. Thinking off, mlock. Não use este fit em outra quantidade de VRAM."
+            downloadHint={`O GGUF não vai no git — só o caminho nesta máquina. Arquivo típico: ${QWEN27_HF_FILE}.`}
+          />
+        )}
 
         {agentProfileId === "claude" && (
           <fieldset className="create-session-dialog__fieldset">
@@ -408,6 +651,8 @@ export function CreateSessionDialog({
               creating
               || !isAgentAvailable(agentProfileId)
               || (agentProfileId === "claude" && !claudeAccountId)
+              || (agentProfileId === "ollama" && !ollamaModel.trim())
+              || (isLlamaAgent(agentProfileId) && !sanitizeGgufPath(ggufPath))
             }
             onClick={() => void validateAndCreate()}
           >

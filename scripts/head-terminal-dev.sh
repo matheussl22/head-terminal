@@ -33,6 +33,8 @@ LOG_DIR="$(ensure_log_dir)"
 LOG_FILE="$LOG_DIR/dev.log"
 export HEAD_TERMINAL_CHANNEL="dev"
 
-echo "----- $(date -Is) electron:dev DISPLAY=${DISPLAY:-wayland} -----" >>"$LOG_FILE"
+mapfile -t KEYRING_ARGS < <(keyring_fallback_args)
+
+echo "----- $(date -Is) electron:dev DISPLAY=${DISPLAY:-wayland} keyring=${KEYRING_ARGS[*]:-ok} -----" >>"$LOG_FILE"
 cd "$PROJECT_DIR"
-exec npm run dev -- --class=head-terminal-dev >>"$LOG_FILE" 2>&1
+exec npm run dev -- --class=head-terminal-dev "${KEYRING_ARGS[@]}" >>"$LOG_FILE" 2>&1

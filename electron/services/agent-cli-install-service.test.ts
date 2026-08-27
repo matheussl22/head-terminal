@@ -20,6 +20,8 @@ describe("ensureAgentClis", () => {
         cursor: false,
         claude: true,
         codex: false,
+        ollama: false,
+        ornith: false,
       }),
       installers: {
         cursor: async () => {
@@ -48,6 +50,8 @@ describe("ensureAgentClis", () => {
         cursor: true,
         claude: true,
         codex: true,
+        ollama: false,
+        ornith: false,
       }),
       installers: {
         cursor: async () => {
@@ -74,6 +78,8 @@ describe("ensureAgentClis", () => {
         cursor: false,
         claude: false,
         codex: false,
+        ollama: false,
+        ornith: false,
       }),
       installers: {
         cursor: async () => {
@@ -97,6 +103,8 @@ describe("ensureAgentClis", () => {
         cursor: false,
         claude: false,
         codex: false,
+        ollama: false,
+        ornith: false,
       }),
       installers: {
         cursor: async () => {

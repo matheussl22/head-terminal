@@ -181,6 +181,39 @@ describe("agent-sessions-service", () => {
     ]);
   });
 
+  it("names an unnamed Codex session after the first prompt the user typed, not the CLI's own preamble", async () => {
+    const roots = await makeRoots();
+    const cwd = "/home/dev/my-project";
+    const dayDir = join(roots.codexRoot, "sessions", "2026", "07", "23");
+    await mkdir(dayDir, { recursive: true });
+
+    await writeFile(
+      join(dayDir, "rollout-unnamed.jsonl"),
+      [
+        JSON.stringify({ type: "session_meta", payload: { id: "unnamed", cwd } }),
+        JSON.stringify({
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "<environment_context><cwd>/home/dev</cwd></environment_context>" }],
+          },
+        }),
+        JSON.stringify({
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "me ajuda a arrumar o parser de holerite" }],
+          },
+        }),
+      ].join("\n"),
+    );
+
+    const entries = await listResumableSessions(cwd, "codex", undefined, roots);
+    expect(entries[0].title).toBe("arrumar o parser de holerite");
+  });
+
   it("sorts Codex sessions by the same timestamp it displays, even when file mtime and the index disagree", async () => {
     const roots = await makeRoots();
     const cwd = "/home/dev/my-project";
