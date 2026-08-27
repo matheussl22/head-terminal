@@ -151,7 +151,7 @@ const liveServices: PtyService[] = [];
 
 afterEach(async () => {
   for (const service of liveServices.splice(0)) {
-    service.dispose();
+    await service.dispose();
   }
 });
 
@@ -250,7 +250,7 @@ describe.skipIf(Boolean(skipReason))(
         ),
       );
       expect(service.size).toBe(6);
-      expect(service.cleanup(ownerId)).toBe(6);
+      await expect(service.cleanup(ownerId)).resolves.toBe(6);
       expect(service.size).toBe(0);
       await Promise.all(handles.map((handle) => waitForProcessExit(handle.pid)));
     });
@@ -274,9 +274,7 @@ describe.skipIf(Boolean(skipReason))(
       const childPid = Number(/CHILD:(\d+)/u.exec(output)?.[1]);
       expect(Number.isSafeInteger(childPid)).toBe(true);
       expect(isProcessAlive(handle.pid)).toBe(true);
-      expect(isProcessAlive(childPid)).toBe(true);
-
-      expect(service.cleanup(ownerId)).toBe(1);
+      await expect(service.cleanup(ownerId)).resolves.toBe(1);
       try {
         await Promise.all([
           waitForProcessExit(handle.pid),

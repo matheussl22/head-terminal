@@ -69,6 +69,28 @@ describe("system-service", () => {
       .rejects.toThrow("Caminho de perfil inválido");
   });
 
+  it("does not treat a Windows cursor-agent.cmd as an installed Linux CLI", async () => {
+    let script = "";
+    setCommandRunner(async (command, args) => {
+      if (command === "zsh") {
+        script = String(args.at(-1) ?? "");
+        return { stdout: "", stderr: "" };
+      }
+      return { stdout: "", stderr: "" };
+    });
+
+    await expect(checkAgentClis()).resolves.toEqual({
+      antigravity: false,
+      cursor: false,
+      claude: false,
+      codex: false,
+    });
+    expect(script).toContain("ht_unix_cmd cursor-agent");
+    expect(script).toContain("/mnt/[a-z]/*");
+    expect(script).toContain("$HOME/.local/bin");
+    expect(script).not.toMatch(/command -v cursor-agent \|\| command -v cursor/u);
+  });
+
   it("returns a complete boolean CLI status", async () => {
     const status = await checkAgentClis();
     expect(status).toEqual({

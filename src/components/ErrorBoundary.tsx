@@ -3,6 +3,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 interface ErrorBoundaryProps {
   children: ReactNode;
   onError?: (error: Error, info: ErrorInfo) => void;
+  onRetry?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -47,6 +48,28 @@ export class ErrorBoundary extends Component<
         <h1 style={{ color: "#fff", fontSize: "16px", marginBottom: "12px" }}>
           Head Terminal — erro de renderização
         </h1>
+        <button
+          type="button"
+          onClick={() => {
+            if (this.props.onRetry) {
+              this.props.onRetry();
+              return;
+            }
+            window.location.reload();
+          }}
+          style={{
+            marginBottom: "16px",
+            padding: "8px 14px",
+            background: "#1a1a1a",
+            color: "#fff",
+            border: "1px solid #333",
+            cursor: "pointer",
+            font: "13px/1.5 monospace",
+          }}
+        >
+          Tentar novamente
+        </button>
+        {"\n"}
         <strong>{error.message}</strong>
         {"\n\n"}
         {error.stack}

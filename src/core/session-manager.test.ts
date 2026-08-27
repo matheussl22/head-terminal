@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type AgentSession } from "../types/session";
+import { EMPTY_GIT_CONTEXT } from "../types/git-context";
 import { collectPaneIds } from "./session-layout";
 import { createEmptySession, useSessionStore } from "./session-manager";
 
@@ -383,5 +384,62 @@ describe("useSessionStore conversation labels", () => {
     expect(useSessionStore.getState().conversationLabels["abc-123"]).toBe(
       "Faturamento",
     );
+  });
+});
+
+describe("useSessionStore git context merge", () => {
+  beforeEach(() => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
+  });
+
+  it("does not replace pane git context when only lastTouchedAt or source change", () => {
+    const first = session("first");
+    const paneId = collectPaneIds(first.layout)[0];
+    useSessionStore.getState().addSession(first);
+    useSessionStore.getState().mergePaneGitContext(paneId, {
+      ...EMPTY_GIT_CONTEXT,
+      repoRoot: "/repo",
+      branch: "main",
+      lastTouchedPath: "src/a.ts",
+      lastTouchedAt: 10,
+      source: "initial",
+    });
+    const before = useSessionStore.getState().paneGitContext[paneId];
+
+    useSessionStore.getState().mergePaneGitContext(paneId, {
+      ...before,
+      lastTouchedAt: 99,
+      source: "poll",
+    });
+
+    expect(useSessionStore.getState().paneGitContext[paneId]).toBe(before);
+  });
+
+  it("updates lastTouchedPath without a git IPC payload", () => {
+    const first = session("first");
+    const paneId = collectPaneIds(first.layout)[0];
+    useSessionStore.getState().addSession(first);
+    useSessionStore.getState().mergePaneGitContext(paneId, {
+      ...EMPTY_GIT_CONTEXT,
+      repoRoot: "/repo",
+      branch: "main",
+    });
+
+    useSessionStore.getState().mergePaneGitContext(paneId, {
+      lastTouchedPath: "src/b.ts",
+      lastTouchedAt: 50,
+    });
+
+    expect(useSessionStore.getState().paneGitContext[paneId]).toMatchObject({
+      repoRoot: "/repo",
+      branch: "main",
+      lastTouchedPath: "src/b.ts",
+    });
   });
 });

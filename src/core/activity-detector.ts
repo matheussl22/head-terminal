@@ -37,7 +37,7 @@ const WAITING_PATTERNS = [
 
 const IDLE_AFTER_MS = 1500;
 const WAITING_AFTER_MS = 3000;
-const RECENT_TEXT_LIMIT = 2000;
+const FRAME_OVERLAP_CHARS = 400;
 
 export class ActivityDetector {
   private lastOutputAt = 0;
@@ -65,7 +65,7 @@ export class ActivityDetector {
     const text = decodePtyData(data);
 
     this.lastOutputAt = Date.now();
-    this.recentText = (this.recentText + text).slice(-RECENT_TEXT_LIMIT);
+    this.recentText = this.recentText.slice(-FRAME_OVERLAP_CHARS) + text;
 
     // Once the agent died and the fallback shell took over, the state stays
     // "agent_fallback" (regex heuristics would just flip it to waiting/idle)

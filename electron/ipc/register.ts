@@ -38,20 +38,24 @@ import { IPC_CHANNELS } from "./channels";
 import { unsupported } from "./errors";
 import { asBoolean, asRecord, asString, assertTrustedSender } from "./validate";
 import { isPersistedWorkspace } from "../services/workspace-service";
+import { ClipboardPasteService } from "../services/clipboard-paste-service";
 
 export interface IpcServices {
   terminal?: {
     spawn(ownerId: number, input: SpawnPtyInput): Promise<PtyHandle> | PtyHandle;
     write(ownerId: number, id: string, data: string): void;
     resize(ownerId: number, id: string, cols: number, rows: number): void;
-    kill(ownerId: number, id: string): Promise<void> | void | boolean;
-    cleanup?(ownerId: number): void;
+    kill(ownerId: number, id: string): Promise<void> | void | boolean | Promise<boolean>;
+    cleanup?(ownerId: number): Promise<number> | number | Promise<void> | void;
   };
   git?: {
     getContext(cwd: string): Promise<GitContextPayload>;
     getDiff(cwd: string): Promise<string>;
     createWorktree(cwd: string): Promise<string>;
-    watch(input: GitWatchInput, emit: (event: GitChangedEvent) => void): Promise<void>;
+    watch(
+      input: GitWatchInput,
+      emit: (event: GitChangedEvent) => void,
+    ): Promise<void> | Promise<{ polling: boolean }>;
     unwatch(watchId: string): Promise<void>;
   };
   system?: {
@@ -100,6 +104,11 @@ export interface IpcServices {
   migration?: {
     loadPreferences(): Promise<MigratedPreferences>;
   };
+  clipboardPaste?: {
+    readForTerminal(): Promise<string | null>;
+    importPaths(paths: unknown): Promise<string | null>;
+  };
+  toAgentPath?: (windowsPath: string) => string;
 }
 
 export interface RegisterIpcOptions {
@@ -214,8 +223,9 @@ export function registerIpc({
       services.git?.watch(input, (payload) => send(IPC_CHANNELS.git.changed, payload)) ??
       unsupported("git.watch")
     );
-    return Promise.resolve(result).then(() => {
+    return Promise.resolve(result).then((value) => {
       ownedGitWatches.add(input.watchId);
+      return value;
     });
   });
   handle(IPC_CHANNELS.git.unwatch, (_event, value) => {
@@ -320,6 +330,14 @@ export function registerIpc({
   handle(IPC_CHANNELS.clipboard.writeText, (_event, value) => {
     clipboard.writeText(asString(value, "text", { allowEmpty: true }));
   });
+  const pasteService = services.clipboardPaste ?? new ClipboardPasteService({
+    clipboard,
+    ...(services.toAgentPath ? { toAgentPath: services.toAgentPath } : {}),
+  });
+  handle(IPC_CHANNELS.clipboard.readForTerminal, () => pasteService.readForTerminal());
+  handle(IPC_CHANNELS.clipboard.importPaths, (_event, paths) =>
+    pasteService.importPaths(paths),
+  );
   handle(IPC_CHANNELS.notifications.show, (_event, value) => {
     const input = validateNotificationInput(value);
     if (!Notification.isSupported()) return;
@@ -367,7 +385,7 @@ export function registerIpc({
   const cleanupOwner = () => {
     if (cleanupStarted) return;
     cleanupStarted = true;
-    services.terminal?.cleanup?.(ownerId);
+    void services.terminal?.cleanup?.(ownerId);
     void services.voice?.cleanup?.(ownerId);
     for (const watchId of ownedGitWatches) {
       void services.git?.unwatch(watchId);
@@ -377,10 +395,14 @@ export function registerIpc({
   const resetOwnerCleanup = () => {
     cleanupStarted = false;
   };
+  const onRendererReload = () => {
+    cleanupOwner();
+    resetOwnerCleanup();
+  };
   window.on("close", onWindowClose);
   window.webContents.on("destroyed", cleanupOwner);
   window.webContents.on("render-process-gone", cleanupOwner);
-  window.webContents.on("did-start-loading", resetOwnerCleanup);
+  window.webContents.on("did-start-loading", onRendererReload);
 
   const remove = () => {
     registeredHandles.forEach((channel) => ipcMain.removeHandler(channel));
@@ -391,7 +413,7 @@ export function registerIpc({
     if (!window.webContents.isDestroyed()) {
       window.webContents.removeListener("destroyed", cleanupOwner);
       window.webContents.removeListener("render-process-gone", cleanupOwner);
-      window.webContents.removeListener("did-start-loading", resetOwnerCleanup);
+      window.webContents.removeListener("did-start-loading", onRendererReload);
     }
   };
   removeCurrentHandlers = remove;

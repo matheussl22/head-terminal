@@ -74,6 +74,30 @@ async function resolveRepoRoot(cwd: string): Promise<string | null> {
   return result?.stdout || null;
 }
 
+function parseStatusShort(stdout: string): {
+  branch: string | null;
+  isDirty: boolean;
+} {
+  const lines = stdout.split(/\r?\n/u).filter((line) => line.length > 0);
+  const header = lines[0] ?? "";
+  const isDirty = lines.some((_, index) => index > 0);
+
+  if (
+    /^## HEAD(?:\s|$)/u.test(header) ||
+    /^## \(HEAD detached\b/u.test(header)
+  ) {
+    return { branch: null, isDirty };
+  }
+
+  const noCommits = /^## No commits yet on (.+)$/u.exec(header);
+  if (noCommits) {
+    return { branch: noCommits[1] ?? null, isDirty };
+  }
+
+  const match = /^## ([^\s.]+)/u.exec(header);
+  return { branch: match?.[1] ?? null, isDirty };
+}
+
 export async function getGitContext(cwd: string): Promise<GitContextPayload> {
   let repoRoot: string | null;
   try {
@@ -85,24 +109,21 @@ export async function getGitContext(cwd: string): Promise<GitContextPayload> {
     return emptyContext();
   }
 
-  const [branchResult, headResult, headRefResult, statusResult] =
-    await Promise.all([
-      tryGit(["-C", repoRoot, "symbolic-ref", "--short", "HEAD"]),
-      tryGit(["-C", repoRoot, "rev-parse", "--short", "HEAD"]),
-      tryGit(["-C", repoRoot, "symbolic-ref", "HEAD"]),
-      tryGit(["-C", repoRoot, "status", "--porcelain"]),
-    ]);
+  const [statusResult, headResult] = await Promise.all([
+    tryGit(["-C", repoRoot, "status", "--porcelain=v1", "-b"]),
+    tryGit(["-C", repoRoot, "rev-parse", "--short", "HEAD"]),
+  ]);
 
-  const branch = branchResult?.stdout || null;
+  const { branch, isDirty } = parseStatusShort(statusResult?.stdout ?? "");
   const headShort = headResult?.stdout || null;
-  const headRef = headRefResult?.stdout || headShort || "";
+  const headRef = branch ? `refs/heads/${branch}` : headShort || "";
 
   return {
     repoRoot,
     branch,
     headShort,
     headRef,
-    isDirty: Boolean(statusResult?.stdout),
+    isDirty,
   };
 }
 

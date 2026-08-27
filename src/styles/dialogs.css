@@ -123,6 +123,8 @@
 
 .session-diff__body {
   max-height: 60vh;
+  min-height: 0;
+  margin: 16px 20px 0;
   overflow: auto;
   background: rgba(0, 0, 0, 0.5);
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -276,12 +278,16 @@
 }
 
 .create-session-dialog__chip {
+  max-width: 160px;
+  overflow: hidden;
   padding: 4px 8px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
   font-size: var(--font-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -395,7 +401,7 @@
 /* Command palette */
 
 .command-palette {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .command-palette__input {
@@ -416,6 +422,12 @@
   padding: 6px;
   max-height: 320px;
   overflow-y: auto;
+}
+
+.command-palette__empty {
+  padding: 12px 10px;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
 }
 
 .command-palette__item {

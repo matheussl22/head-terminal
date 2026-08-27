@@ -1,4 +1,5 @@
 import { debounce } from "./debounce";
+import { logError } from "./logger";
 import type { AgentSession, LayoutNode } from "../types/session";
 import { collectPaneIds } from "./session-layout";
 
@@ -167,7 +168,9 @@ export async function loadPersistedWorkspace(): Promise<PersistedWorkspace | nul
 
   const legacy = loadLegacyWorkspace();
   if (legacy && typeof window !== "undefined" && window.headTerminal) {
-    void window.headTerminal.workspace.save(legacy).catch(() => undefined);
+    void window.headTerminal.workspace.save(legacy).catch((error: unknown) => {
+      logError("workspace.legacy_migration_save_failed", error);
+    });
   }
   return legacy;
 }
@@ -185,7 +188,9 @@ export async function savePersistedWorkspace(
 }
 
 const debouncedSave = debounce((workspace: PersistedWorkspace) => {
-  void savePersistedWorkspace(workspace).catch(() => undefined);
+  void savePersistedWorkspace(workspace).catch((error: unknown) => {
+    logError("workspace.save_failed", error);
+  });
 }, 400);
 
 export function schedulePersistedWorkspace(workspace: PersistedWorkspace): void {

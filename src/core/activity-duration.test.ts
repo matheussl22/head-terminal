@@ -23,7 +23,7 @@ describe("formatSessionStatusLine", () => {
 
   it("omits duration for idle", () => {
     expect(formatSessionStatusLine("idle", Date.now(), Date.now())).toBe(
-      "Ativo",
+      "Pronto",
     );
   });
 });

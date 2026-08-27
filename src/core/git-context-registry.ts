@@ -20,6 +20,7 @@ interface Entry {
   subscribers: Set<Subscriber>;
   timer: ReturnType<typeof setInterval> | null;
   lastContext: GitContext | null;
+  mainPolling: boolean;
 }
 
 const entries = new Map<string, Entry>();
@@ -49,6 +50,10 @@ function schedulePoll(entry: Entry): void {
   if (entry.timer !== null) {
     clearInterval(entry.timer);
     entry.timer = null;
+  }
+
+  if (entry.mainPolling) {
+    return;
   }
 
   if (typeof document !== "undefined" && document.hidden) {
@@ -119,6 +124,7 @@ export function acquireGitContext(
       subscribers: new Set(),
       timer: null,
       lastContext: null,
+      mainPolling: false,
     };
     entry = created;
     entries.set(normalized, created);
@@ -132,7 +138,21 @@ export function acquireGitContext(
       })
       .catch(() => undefined);
 
-    void startGitWatch(created.watchId, normalized).catch(() => undefined);
+    void startGitWatch(created.watchId, normalized)
+      .then((result) => {
+        if (entries.get(normalized) !== created) {
+          return;
+        }
+        if (!result?.polling) {
+          return;
+        }
+        created.mainPolling = true;
+        if (created.timer !== null) {
+          clearInterval(created.timer);
+          created.timer = null;
+        }
+      })
+      .catch(() => undefined);
     schedulePoll(created);
   } else if (entry.lastContext) {
     subscriber(entry.lastContext);

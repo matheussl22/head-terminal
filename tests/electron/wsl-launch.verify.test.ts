@@ -96,7 +96,7 @@ async function launchPane(
     cwd: CWD,
     env: paneEnv,
   });
-  service.dispose();
+  await service.dispose();
 
   expect(seen).toHaveLength(1);
   return seen[0];
@@ -136,9 +136,15 @@ describe("Windows pane launch, per agent", () => {
     expect(launch.args).toHaveLength(9);
 
     const script = launch.args[8];
+    // Official Linux CLIs live in ~/.local/bin; login zsh often omits it.
+    expect(script.startsWith('export PATH="$HOME/.local/bin:$PATH"; ')).toBe(
+      true,
+    );
+    const agentCmd = script
+      .replace(/^export PATH="\$HOME\/\.local\/bin:\$PATH"; /u, "")
+      .replace(/^(?:ht_\w+\(\) \{[\s\S]*?\}; )+/u, "");
     // The agent is the first thing the shell runs, shim definitions aside.
-    expect(script.replace(/^ht_cursor\(\) \{.*?\}; /u, "").startsWith(`${cli};`))
-      .toBe(true);
+    expect(agentCmd.startsWith(`${cli};`)).toBe(true);
     // Agent dies -> OSC 7770 -> bare login shell, still inside the distro.
     expect(script).toContain(EXIT_OSC);
     expect(script.endsWith("exec zsh -l")).toBe(true);
@@ -177,7 +183,8 @@ describe("Windows pane launch, per agent", () => {
       await launchPane("claude", { resumeSessionId: "abc; rm -rf ~" })
     ).args[8];
     expect(script).not.toContain("rm -rf");
-    expect(script.startsWith("claude;")).toBe(true);
+    expect(script.startsWith('export PATH="$HOME/.local/bin:$PATH"; claude;'))
+      .toBe(true);
   });
 
   it("converts a cwd left behind by a pre-WSL run", async () => {
@@ -203,7 +210,7 @@ describe("Windows pane launch, per agent", () => {
       cwd: "C:\\ht-missing-dir\\repo",
       env: {},
     });
-    service.dispose();
+    await service.dispose();
 
     // --cd carries a POSIX path, never the Windows spelling it was saved as.
     expect(seen[0].args[3]).toBe("/mnt/c/ht-missing-dir/repo");

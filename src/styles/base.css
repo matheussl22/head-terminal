@@ -50,7 +50,7 @@ button {
   font: inherit;
 }
 
-:where(button, input, select):focus-visible {
+:where(button, input, select, [role="button"], [role="menuitem"]):focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
@@ -203,6 +203,12 @@ button {
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 10px currentColor;
 }
 
+.status-dot--exited {
+  background-color: transparent;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55);
+  border: 1.5px solid currentColor;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -267,14 +273,27 @@ button {
   border: 1px solid var(--border-default);
   color: var(--text-secondary);
   font-size: var(--font-xs);
-  white-space: nowrap;
+  max-width: 240px;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--transition-fast);
   z-index: var(--z-tooltip);
 }
 
+.tooltip--below::after {
+  top: calc(100% + 6px);
+  bottom: auto;
+}
+
 .tooltip:hover::after {
+  opacity: 1;
+  transition-delay: 400ms;
+}
+
+.tooltip:has(:focus-visible)::after {
   opacity: 1;
 }
 

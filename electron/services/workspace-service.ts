@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, rename } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -83,8 +83,68 @@ function isConversationLabels(value: unknown): boolean {
   );
 }
 
+async function fsyncPath(path: string): Promise<void> {
+  const handle = await open(path, "r+");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+async function fsyncDirectory(directory: string): Promise<void> {
+  try {
+    const handle = await open(directory, "r");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    // Directory fsync is not practical on Windows and some filesystems.
+  }
+}
+
+async function writeDurableFile(path: string, contents: string): Promise<void> {
+  const handle = await open(path, "w", 0o600);
+  try {
+    await handle.writeFile(contents, "utf8");
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+type WorkspaceRead =
+  | { status: "ok"; workspace: PersistedWorkspace }
+  | { status: "missing" }
+  | { status: "corrupt" };
+
+async function readValidWorkspace(path: string): Promise<WorkspaceRead> {
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return { status: "missing" };
+    }
+    throw error;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isPersistedWorkspace(parsed)) {
+      return { status: "corrupt" };
+    }
+    return { status: "ok", workspace: parsed };
+  } catch {
+    return { status: "corrupt" };
+  }
+}
+
 export class WorkspaceService {
   readonly workspacePath: string;
+  readonly bakPath: string;
   readonly #now: () => Date;
   #saveQueue: Promise<void> = Promise.resolve();
 
@@ -93,35 +153,27 @@ export class WorkspaceService {
       options.userDataPath,
       options.channel === "dev" ? "workspace.v1.dev.json" : "workspace.v1.json",
     );
+    this.bakPath = `${this.workspacePath}.bak`;
     this.#now = options.now ?? (() => new Date());
   }
 
   async load(): Promise<PersistedWorkspace | null> {
-    let raw: string;
-    try {
-      raw = await readFile(this.workspacePath, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return null;
-      }
-      throw error;
+    const primary = await readValidWorkspace(this.workspacePath);
+    if (primary.status === "ok") {
+      return primary.workspace;
+    }
+    if (primary.status === "corrupt") {
+      await this.#quarantine(this.workspacePath);
     }
 
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (!isPersistedWorkspace(parsed)) {
-        throw new Error("Schema de workspace inválido");
-      }
-      return parsed;
-    } catch {
-      const timestamp = this.#now().toISOString().replaceAll(/[:.]/gu, "-");
-      const corruptPath = join(
-        dirname(this.workspacePath),
-        `${basename(this.workspacePath)}.corrupt-${timestamp}`,
-      );
-      await rename(this.workspacePath, corruptPath);
-      return null;
+    const backup = await readValidWorkspace(this.bakPath);
+    if (backup.status === "ok") {
+      return backup.workspace;
     }
+    if (backup.status === "corrupt") {
+      await this.#quarantine(this.bakPath);
+    }
+    return null;
   }
 
   async save(workspace: PersistedWorkspace): Promise<void> {
@@ -134,8 +186,22 @@ export class WorkspaceService {
       await mkdir(directory, { recursive: true });
       const temporaryPath = join(directory, `.${basename(this.workspacePath)}.${randomUUID()}.tmp`);
       try {
-        await writeFile(temporaryPath, snapshot, { encoding: "utf8", mode: 0o600 });
+        await writeDurableFile(temporaryPath, snapshot);
+        try {
+          await copyFile(this.workspacePath, this.bakPath);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            throw error;
+          }
+        }
         await rename(temporaryPath, this.workspacePath);
+        try {
+          await copyFile(this.workspacePath, this.bakPath);
+          await fsyncPath(this.bakPath);
+        } catch {
+          // The renamed file is already durable; bak is the previous good copy.
+        }
+        await fsyncDirectory(directory);
       } catch (error) {
         // A leftover temporary file is harmless and never considered on load.
         throw error;
@@ -143,6 +209,15 @@ export class WorkspaceService {
     });
     this.#saveQueue = operation.catch(() => undefined);
     await operation;
+  }
+
+  async #quarantine(path: string): Promise<void> {
+    const timestamp = this.#now().toISOString().replaceAll(/[:.]/gu, "-");
+    const corruptPath = join(
+      dirname(path),
+      `${basename(path)}.corrupt-${timestamp}`,
+    );
+    await rename(path, corruptPath);
   }
 
   async flush(): Promise<void> {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { EMPTY_GIT_CONTEXT } from "../types/git-context";
-import { pickGitContextForSession } from "./git-context-utils";
+import { gitContextsEqual, pickGitContextForSession } from "./git-context-utils";
 
 describe("pickGitContextForSession", () => {
   const sessionId = "session-1";
@@ -60,5 +60,36 @@ describe("pickGitContextForSession", () => {
     );
 
     expect(context?.branch).toBe("feature/auth");
+  });
+});
+
+describe("gitContextsEqual", () => {
+  const identity = {
+    ...EMPTY_GIT_CONTEXT,
+    repoRoot: "/repo",
+    branch: "main",
+    headShort: "abc1234",
+    headRef: "refs/heads/main",
+    isDirty: false,
+    lastTouchedPath: "src/a.ts",
+  };
+
+  it("treats lastTouchedAt and source as irrelevant to identity", () => {
+    expect(
+      gitContextsEqual(identity, {
+        ...identity,
+        lastTouchedAt: 99,
+        source: "poll",
+      }),
+    ).toBe(true);
+  });
+
+  it("treats a lastTouchedPath change as a real update", () => {
+    expect(
+      gitContextsEqual(identity, {
+        ...identity,
+        lastTouchedPath: "src/b.ts",
+      }),
+    ).toBe(false);
   });
 });

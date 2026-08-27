@@ -17,6 +17,7 @@ import {
   CONVERSATION_LABEL_MAX_LENGTH,
   useSessionStore,
 } from "../../core/session-manager";
+import { NEW_CONVERSATION_LABEL } from "../../core/conversation-display";
 import { usePaneConversation } from "../../hooks/usePaneConversation";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import {
@@ -29,7 +30,6 @@ import {
   IconPencil,
   IconRefresh,
 } from "../ui/Icons";
-import { StatusDot } from "../ui/StatusDot";
 import { ResumeSessionMenu } from "./ResumeSessionMenu";
 import { VoiceInputButton } from "./VoiceInputButton";
 
@@ -145,28 +145,21 @@ export function TerminalPaneOverlay({ paneId }: TerminalPaneOverlayProps) {
               ? "O terminal encontrou um erro"
               : "Processo encerrado"}
         </span>
-        <button
-          type="button"
-          className="terminal-overlay__action"
-          onClick={() => paneSupervisor.restartNow(paneId)}
-        >
-          Reiniciar
-        </button>
+        <div className="terminal-overlay__actions">
+          <button
+            type="button"
+            className="terminal-overlay__action"
+            onClick={() => paneSupervisor.restartNow(paneId)}
+          >
+            Reiniciar
+          </button>
+        </div>
       </div>
     );
   }
 
-  if (activity === "starting" && status === "starting") {
-    return (
-      <div className="terminal-overlay terminal-overlay--starting">
-        <span className="terminal-overlay__spinner" aria-hidden />
-        <span>Conectando ao agent…</span>
-      </div>
-    );
-  }
-
-  // Only block the pane when the PTY actually died. Text that looks like an
-  // error while the process is still running must not cover the terminal.
+  // Starting uses the header status chip spinner — never cover the PTY.
+  // Only show a bar when the PTY actually died so crash output stays visible.
   if (status === "exited") {
     return (
       <div className="terminal-overlay terminal-overlay--error">
@@ -175,13 +168,15 @@ export function TerminalPaneOverlay({ paneId }: TerminalPaneOverlayProps) {
             ? "O terminal encontrou um erro"
             : "Processo encerrado"}
         </span>
-        <button
-          type="button"
-          className="terminal-overlay__action"
-          onClick={() => paneSupervisor.restartNow(paneId)}
-        >
-          Reiniciar
-        </button>
+        <div className="terminal-overlay__actions">
+          <button
+            type="button"
+            className="terminal-overlay__action"
+            onClick={() => paneSupervisor.restartNow(paneId)}
+          >
+            Reiniciar
+          </button>
+        </div>
       </div>
     );
   }
@@ -228,7 +223,7 @@ function PaneConversationName({
     return null;
   }
 
-  const displayName = conversation.name ?? "nova conversa";
+  const displayName = conversation.name ?? NEW_CONVERSATION_LABEL;
   const modifier = conversation.isCustom
     ? " terminal-pane-header__conversation--named"
     : conversation.name
@@ -343,7 +338,6 @@ export function TerminalPaneHeader({
           <AgentIcon agentProfileId={agentProfileId} size={13} />
         </span>
         <span className="terminal-pane-header__name">{shortLabel}</span>
-        <StatusDot activity={activity} />
         {branchLabel && (
           <span className="terminal-pane-header__branch" title={branchLabel}>
             <GitBranchBadge
@@ -381,6 +375,11 @@ export function TerminalPaneHeader({
         )}
         <span
           className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}
+          title={
+            activity === "agent_fallback"
+              ? "Agent caiu — shell ativo"
+              : ACTIVITY_LABEL[activity]
+          }
         >
           {ACTIVITY_LABEL[activity]}
         </span>
@@ -388,7 +387,7 @@ export function TerminalPaneHeader({
           <button
             type="button"
             className="terminal-pane-header__restart-agent"
-            title="Nova conversa. Segure Shift para continuar a anterior."
+            title="Agent caiu — shell ativo. Nova conversa. Segure Shift para continuar a anterior."
             onClick={(event) => {
               event.stopPropagation();
               restartPane(paneId, {

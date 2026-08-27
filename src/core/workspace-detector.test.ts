@@ -29,4 +29,23 @@ describe("WorkspaceDetector", () => {
 
     expect(paths).toEqual(["main"]);
   });
+
+  it("matches relative file paths without a greedy slash class", () => {
+    const paths: string[] = [];
+    const detector = new WorkspaceDetector((path) => paths.push(path));
+
+    detector.onData("wrote src/core/workspace-detector.ts\n");
+
+    expect(paths).toEqual(["src/core/workspace-detector.ts"]);
+  });
+
+  it("matches a path that straddles the overlap window", () => {
+    const paths: string[] = [];
+    const detector = new WorkspaceDetector((path) => paths.push(path));
+
+    detector.onData("touch src/core/sess");
+    detector.onData("ion-manager.ts\n");
+
+    expect(paths).toEqual(["src/core/session-manager.ts"]);
+  });
 });

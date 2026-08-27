@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 
-import { dirname } from "../core/git-context-utils";
 import { acquireGitContext } from "../core/git-context-registry";
-import { fetchGitContextForPath } from "../core/git-watch-bridge";
 import { fitPanes } from "../core/pane-fit-registry";
 import { useSessionStore } from "../core/session-manager";
 import { usePtyProcess } from "./usePtyProcess";
@@ -42,7 +40,6 @@ export function useAgentSession({
     (state) => state.paneResumeSessionIds[paneId],
   );
 
-  const pathDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchedRepoRef = useRef<string | null>(null);
   const releaseGitWatchRef = useRef<(() => void) | null>(null);
 
@@ -77,25 +74,12 @@ export function useAgentSession({
 
   const onWorkspacePath = useCallback(
     (path: string) => {
-      if (pathDebounceRef.current) {
-        clearTimeout(pathDebounceRef.current);
-      }
-
-      pathDebounceRef.current = setTimeout(() => {
-        const lookupPath = path.startsWith("/") ? dirname(path) : cwd;
-        const touchedPath = path.startsWith("/") ? path : undefined;
-        const current = useSessionStore.getState().paneGitContext[paneId];
-        void fetchGitContextForPath(lookupPath, current).then((context) => {
-          mergePaneGitContext(paneId, {
-            ...context,
-            lastTouchedPath: touchedPath ?? context.lastTouchedPath,
-            lastTouchedAt: Date.now(),
-          });
-          syncPaneGitWatch(context.repoRoot ?? lookupPath);
-        });
-      }, 400);
+      mergePaneGitContext(paneId, {
+        lastTouchedPath: path,
+        lastTouchedAt: Date.now(),
+      });
     },
-    [cwd, mergePaneGitContext, paneId, syncPaneGitWatch],
+    [mergePaneGitContext, paneId],
   );
 
   // Git context for the pane's cwd, shared via registry.
@@ -107,17 +91,18 @@ export function useAgentSession({
     syncPaneGitWatch(cwd);
 
     return () => {
-      if (pathDebounceRef.current) {
-        clearTimeout(pathDebounceRef.current);
-        pathDebounceRef.current = null;
-      }
       watchedRepoRef.current = null;
       releaseGitWatchRef.current?.();
       releaseGitWatchRef.current = null;
     };
   }, [cwd, shouldSpawn, syncPaneGitWatch]);
 
-  const instance = useTerminalInstance(containerRef, paneId, shouldSpawn);
+  const instance = useTerminalInstance(
+    containerRef,
+    paneId,
+    shouldSpawn,
+    isVisible,
+  );
 
   usePtyProcess({
     instance,
@@ -129,6 +114,7 @@ export function useAgentSession({
     restartKey,
     continueConversation,
     resumeSessionId,
+    isVisible,
     onWorkspacePath,
   });
 

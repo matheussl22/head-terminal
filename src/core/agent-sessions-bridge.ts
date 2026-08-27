@@ -4,6 +4,7 @@ export interface ResumableSessionEntry {
   id: string;
   title: string;
   updatedAt: string;
+  fromTranscript?: boolean;
 }
 
 const RESUMABLE_AGENTS = new Set(["claude", "codex", "cursor"]);

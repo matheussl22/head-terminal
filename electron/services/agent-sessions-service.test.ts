@@ -1,10 +1,16 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { listResumableSessions, type AgentSessionRoots } from "./agent-sessions-service";
+import {
+  listResumableSessions,
+  resolveAgentSessionRoots,
+  type AgentSessionRoots,
+} from "./agent-sessions-service";
+import { toWindowsPath } from "./wsl-service";
 
 const cleanup: string[] = [];
 
@@ -166,7 +172,12 @@ describe("agent-sessions-service", () => {
 
     const entries = await listResumableSessions(cwd, "codex", undefined, roots);
     expect(entries).toEqual([
-      { id: "match-id", title: "fix-pty-reconnect", updatedAt: "2026-07-23T00:00:00.000Z" },
+      {
+        id: "match-id",
+        title: "fix-pty-reconnect",
+        updatedAt: "2026-07-23T00:00:00.000Z",
+        fromTranscript: true,
+      },
     ]);
   });
 
@@ -223,7 +234,12 @@ describe("agent-sessions-service", () => {
 
     const entries = await listResumableSessions(cwd, "cursor", undefined, roots);
     expect(entries).toEqual([
-      { id: chatId, title: "Explore the repo", updatedAt: expect.any(String) },
+      {
+        id: chatId,
+        title: "Explore the repo",
+        updatedAt: expect.any(String),
+        fromTranscript: true,
+      },
     ]);
   });
 
@@ -382,7 +398,13 @@ describe("agent-sessions-service", () => {
     );
 
     const entries = await listResumableSessions(cwd, "claude", undefined, roots);
-    expect(Object.keys(entries[0]).sort()).toEqual(["id", "title", "updatedAt"]);
+    expect(Object.keys(entries[0]).sort()).toEqual([
+      "fromTranscript",
+      "id",
+      "title",
+      "updatedAt",
+    ]);
+    expect(entries[0].fromTranscript).toBe(true);
   });
 
   it("falls back to a formatted timestamp when no usable title text is found", async () => {
@@ -398,5 +420,153 @@ describe("agent-sessions-service", () => {
     const entries = await listResumableSessions(cwd, "claude", undefined, roots);
     expect(entries).toHaveLength(1);
     expect(entries[0].title).toMatch(/^Sessão de /u);
+    expect(entries[0].fromTranscript).toBe(false);
+  });
+
+  it("promotes a timestamp fallback to the first user message once it is written", async () => {
+    const roots = await makeRoots();
+    const cwd = "/home/dev/live-title";
+    const dir = join(roots.claudeProjectsRoot, "-home-dev-live-title");
+    await mkdir(dir, { recursive: true });
+    const file = join(dir, "live.jsonl");
+    await writeFile(
+      file,
+      JSON.stringify({ type: "system", subtype: "init" }) + "\n",
+    );
+
+    const before = await listResumableSessions(cwd, "claude", undefined, roots);
+    expect(before[0].fromTranscript).toBe(false);
+    expect(before[0].title).toMatch(/^Sessão de /u);
+
+    await writeFile(
+      file,
+      [
+        JSON.stringify({ type: "system", subtype: "init" }),
+        JSON.stringify({
+          type: "user",
+          message: { content: "como o head-terminal salva a conversa" },
+        }),
+      ].join("\n"),
+    );
+
+    const after = await listResumableSessions(cwd, "claude", undefined, roots);
+    expect(after[0].fromTranscript).toBe(true);
+    expect(after[0].title).toBe("como o head-terminal salva a conversa");
+  });
+
+  it("finds Claude transcripts when the session cwd is a Windows path for a WSL folder", async () => {
+    const roots = await makeRoots();
+    const dir = join(roots.claudeProjectsRoot, "-mnt-c-Users-mathe-proj");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "win.jsonl"),
+      JSON.stringify({
+        type: "user",
+        message: { content: "titulo a partir do cwd windows" },
+      }),
+    );
+
+    const entries = await listResumableSessions(
+      "C:\\Users\\mathe\\proj",
+      "claude",
+      undefined,
+      roots,
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0].title).toBe("titulo a partir do cwd windows");
+    expect(entries[0].fromTranscript).toBe(true);
+  });
+
+  it("finds Cursor transcripts when WSL encoded the Windows cwd as mnt-c-…", async () => {
+    const roots = await makeRoots();
+    const dir = join(
+      roots.cursorProjectsRoot,
+      "mnt-c-Users-mathe",
+      "agent-transcripts",
+      "chat-wsl",
+    );
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      join(dir, "chat-wsl.jsonl"),
+      JSON.stringify({
+        message: {
+          content: [
+            {
+              type: "text",
+              text: "<timestamp>Wednesday, Aug 26, 2026, 9:28 AM (UTC-3)</timestamp>\n<user_query>\noi\n</user_query>",
+            },
+          ],
+        },
+      }),
+    );
+
+    const entries = await listResumableSessions(
+      String.raw`C:\Users\mathe`,
+      "cursor",
+      undefined,
+      roots,
+    );
+    expect(entries).toEqual([
+      expect.objectContaining({
+        id: "chat-wsl",
+        title: "oi",
+        fromTranscript: true,
+      }),
+    ]);
+  });
+
+  it("points WSL session roots at the Linux home over UNC, not C:\\Users", () => {
+    const roots = resolveAgentSessionRoots({
+      posixHome: "/root",
+      toWindowsPath: (posix) => toWindowsPath(posix, "Ubuntu"),
+    });
+    expect(roots.claudeProjectsRoot).toBe(
+      String.raw`\\wsl.localhost\Ubuntu\root\.claude\projects`,
+    );
+    expect(roots.cursorProjectsRoot).toBe(
+      String.raw`\\wsl.localhost\Ubuntu\root\.cursor\projects`,
+    );
+  });
+});
+
+const LIVE_CLAUDE_ROOT =
+  String.raw`\\wsl.localhost\Ubuntu\root\.claude\projects`;
+const LIVE_CURSOR_ROOT =
+  String.raw`\\wsl.localhost\Ubuntu\root\.cursor\projects`;
+
+describe.skipIf(!existsSync(LIVE_CLAUDE_ROOT))("live WSL transcripts", () => {
+  it("titles a Windows-cwd Claude chat from the first typed message", async () => {
+    const entries = await listResumableSessions(
+      String.raw`C:\Users\mathe`,
+      "claude",
+      undefined,
+      {
+        claudeProjectsRoot: LIVE_CLAUDE_ROOT,
+        codexRoot: join(tmpdir(), "ht-no-codex"),
+        cursorProjectsRoot: LIVE_CURSOR_ROOT,
+      },
+    );
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0].fromTranscript).toBe(true);
+    expect(entries[0].title).not.toMatch(/^Sessão de /u);
+  });
+
+  it("titles a Windows-cwd Cursor chat from the first typed message", async () => {
+    if (!existsSync(LIVE_CURSOR_ROOT)) {
+      return;
+    }
+    const entries = await listResumableSessions(
+      String.raw`C:\Users\mathe`,
+      "cursor",
+      undefined,
+      {
+        claudeProjectsRoot: LIVE_CLAUDE_ROOT,
+        codexRoot: join(tmpdir(), "ht-no-codex"),
+        cursorProjectsRoot: LIVE_CURSOR_ROOT,
+      },
+    );
+    expect(entries.length).toBeGreaterThan(0);
+    expect(entries[0].fromTranscript).toBe(true);
+    expect(entries[0].title).not.toMatch(/^Sessão de /u);
   });
 });

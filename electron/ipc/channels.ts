@@ -51,6 +51,8 @@ export const IPC_CHANNELS = {
   clipboard: {
     readText: "clipboard:read-text",
     writeText: "clipboard:write-text",
+    readForTerminal: "clipboard:read-for-terminal",
+    importPaths: "clipboard:import-paths",
   },
   notifications: {
     show: "notifications:show",

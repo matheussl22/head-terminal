@@ -12,6 +12,11 @@ const DEFAULT_ROWS = 24;
 const MAX_DIMENSION = 1_000;
 const PANE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+/** Batch node-pty onData into fewer IPC messages (one per pane). */
+const COALESCE_INTERVAL_MS = 12;
+const COALESCE_MAX_CHARS = 128 * 1024;
+/** Upper bound on WSL tree reaping so before-quit cannot hang. */
+const WSL_REAP_TIMEOUT_MS = 5_000;
 
 export interface Disposable {
   dispose(): void;
@@ -124,6 +129,8 @@ interface PtyEntry {
   ownerId: number;
   process: PtyProcess;
   listeners: Disposable[];
+  pendingData: string;
+  flushTimer: ReturnType<typeof setTimeout> | null;
   /** Set in WSL mode: identifies the Linux process tree behind `wsl.exe`. */
   wslMarker?: string;
 }
@@ -404,6 +411,8 @@ export class PtyService {
       ownerId,
       process: processPty,
       listeners: [],
+      pendingData: "",
+      flushTimer: null,
       ...(marker ? { wslMarker: marker } : {}),
     };
     this.entries.set(key, entry);
@@ -414,17 +423,16 @@ export class PtyService {
           if (this.entries.get(key) !== entry) return;
           // Deliberately preserve node-pty's string byte-for-byte. xterm needs
           // escape/OSC sequences and must be the component that parses them.
-          this.emit({
-            channel: "pty:data",
-            ownerId,
-            payload: { id: request.id, data },
-          });
+          this.queueData(entry, data);
         }),
       );
       entry.listeners.push(
         processPty.onExit(({ exitCode, signal }) => {
           if (this.entries.get(key) !== entry) return;
-          this.detachEntry(key, entry, false);
+          this.flushPendingData(entry);
+          // Natural exit still reaps the Linux tree; do not block the exit
+          // event on WSL — kill/dispose are the paths that await it.
+          void this.detachEntry(key, entry, false);
           this.emit({
             channel: "pty:exit",
             ownerId,
@@ -433,7 +441,7 @@ export class PtyService {
         }),
       );
     } catch (error) {
-      this.detachEntry(key, entry, true);
+      void this.detachEntry(key, entry, true);
       throw error;
     }
 
@@ -457,32 +465,32 @@ export class PtyService {
   }
 
   /** Kills one owned PTY. Returns false when it was already gone. */
-  kill(ownerId: number, id: string): boolean {
+  async kill(ownerId: number, id: string): Promise<boolean> {
     assertOwnerId(ownerId);
     assertPaneId(id);
     const key = registryKey(ownerId, id);
     const entry = this.entries.get(key);
     if (!entry) return false;
-    this.detachEntry(key, entry, true);
+    await this.detachEntry(key, entry, true);
     return true;
   }
 
   /** Kills all PTYs for one renderer. Safe to call repeatedly. */
-  cleanup(ownerId: number): number {
+  async cleanup(ownerId: number): Promise<number> {
     assertOwnerId(ownerId);
-    let killed = 0;
-    for (const [key, entry] of [...this.entries]) {
-      if (entry.ownerId !== ownerId) continue;
-      this.detachEntry(key, entry, true);
-      killed += 1;
-    }
-    return killed;
+    const matching = [...this.entries].filter(([, entry]) => entry.ownerId === ownerId);
+    await Promise.all(
+      matching.map(([key, entry]) => this.detachEntry(key, entry, true)),
+    );
+    return matching.length;
   }
 
   /** Kills every PTY. Safe to call on every shutdown path. */
-  dispose(): number {
+  async dispose(): Promise<number> {
     const entries = [...this.entries];
-    for (const [key, entry] of entries) this.detachEntry(key, entry, true);
+    await Promise.all(
+      entries.map(([key, entry]) => this.detachEntry(key, entry, true)),
+    );
     return entries.length;
   }
 
@@ -504,9 +512,43 @@ export class PtyService {
     return entry;
   }
 
-  private detachEntry(key: string, entry: PtyEntry, kill: boolean): void {
+  private queueData(entry: PtyEntry, data: string): void {
+    entry.pendingData += data;
+    if (entry.pendingData.length >= COALESCE_MAX_CHARS) {
+      this.flushPendingData(entry);
+      return;
+    }
+    if (entry.flushTimer !== null) {
+      return;
+    }
+    entry.flushTimer = setTimeout(() => {
+      entry.flushTimer = null;
+      this.flushPendingData(entry);
+    }, COALESCE_INTERVAL_MS);
+    entry.flushTimer.unref?.();
+  }
+
+  private flushPendingData(entry: PtyEntry): void {
+    if (entry.flushTimer !== null) {
+      clearTimeout(entry.flushTimer);
+      entry.flushTimer = null;
+    }
+    const data = entry.pendingData;
+    if (!data) {
+      return;
+    }
+    entry.pendingData = "";
+    this.emit({
+      channel: "pty:data",
+      ownerId: entry.ownerId,
+      payload: { id: entry.id, data },
+    });
+  }
+
+  private detachEntry(key: string, entry: PtyEntry, kill: boolean): Promise<void> {
     // Delete first: node-pty can synchronously deliver onExit from kill().
-    if (this.entries.get(key) !== entry) return;
+    if (this.entries.get(key) !== entry) return Promise.resolve();
+    this.flushPendingData(entry);
     this.entries.delete(key);
 
     for (const listener of entry.listeners.splice(0)) {
@@ -517,12 +559,12 @@ export class PtyService {
       }
     }
 
+    // In WSL mode the pid belongs to `wsl.exe`; the tree that matters lives
+    // inside the distro and is killed there, by marker — including when the
+    // Windows process already exited on its own.
+    const reap = this.reapWslTree(entry);
+
     if (kill) {
-      // In WSL mode the pid belongs to `wsl.exe`; the tree that matters lives
-      // inside the distro and is killed there, by marker.
-      if (entry.wslMarker && this.wsl) {
-        void this.wsl.killPaneTree(entry.wslMarker);
-      }
       let descendantPids: number[] = [];
       // node-pty kills the foreground shell, but detached/background children
       // may survive it. On POSIX the PTY child is a session/process-group
@@ -559,6 +601,34 @@ export class PtyService {
           // Already exited after SIGTERM.
         }
       }
+      return reap;
     }
+
+    void reap;
+    return Promise.resolve();
   }
+
+  private reapWslTree(entry: PtyEntry): Promise<void> {
+    if (!entry.wslMarker || !this.wsl) {
+      return Promise.resolve();
+    }
+    return withTimeout(this.wsl.killPaneTree(entry.wslMarker), WSL_REAP_TIMEOUT_MS);
+  }
+}
+
+function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref?.();
+    promise.then(
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+    );
+  });
 }

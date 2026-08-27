@@ -18,7 +18,7 @@ vi.mock("./session-manager", () => ({
   },
 }));
 
-import { anchorPaneResumeSession } from "./pane-resume-anchor";
+import { anchorPaneResumeSession, hasTranscriptTitle } from "./pane-resume-anchor";
 
 describe("anchorPaneResumeSession", () => {
   beforeEach(() => {
@@ -321,5 +321,90 @@ describe("anchorPaneResumeSession", () => {
     paneRuntime = { "pane-1": { status: "exited" } };
     await vi.advanceTimersByTimeAsync(10_000);
     await expect(promise).resolves.toBeUndefined();
+  });
+
+  it("anchors a transcript that appeared after the pre-spawn snapshot, then upgrades a fallback title", async () => {
+    listResumable
+      .mockResolvedValueOnce([
+        {
+          id: "boot",
+          title: "Sessão de 26/08/2026, 09:00:00",
+          fromTranscript: false,
+          updatedAt: new Date(5_000).toISOString(),
+        },
+      ])
+      .mockResolvedValue([
+        {
+          id: "boot",
+          title: "como salvar a conversa",
+          fromTranscript: true,
+          updatedAt: new Date(8_000).toISOString(),
+        },
+      ]);
+
+    const promise = anchorPaneResumeSession({
+      paneId: "pane-1",
+      cwd: "/repo",
+      agentProfileId: "claude",
+      spawnStartMs: 4_000,
+      startsNewConversation: true,
+      existingSessionIds: [],
+      isDisposed: () => false,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(notePaneResumeAnchor).toHaveBeenCalledExactlyOnceWith("pane-1", "boot");
+
+    await vi.advanceTimersByTimeAsync(2_500);
+    await promise;
+
+    const lastTitles = noteConversationTitles.mock.calls.at(-1)?.[0] as Array<{
+      title: string;
+    }>;
+    expect(lastTitles[0].title).toBe("como salvar a conversa");
+  });
+
+  it("does not steal a sibling that was already on disk before spawn", async () => {
+    listResumable.mockResolvedValue([
+      {
+        id: "sibling",
+        title: "outra conversa",
+        updatedAt: new Date(6_000).toISOString(),
+      },
+    ]);
+
+    const promise = anchorPaneResumeSession({
+      paneId: "pane-1",
+      cwd: "/repo",
+      agentProfileId: "claude",
+      spawnStartMs: 5_000,
+      startsNewConversation: true,
+      existingSessionIds: ["sibling"],
+      isDisposed: () => false,
+    });
+
+    await vi.advanceTimersByTimeAsync(10_500);
+    expect(notePaneResumeAnchor).not.toHaveBeenCalled();
+
+    paneRuntime = { "pane-1": { status: "exited" } };
+    await vi.advanceTimersByTimeAsync(10_000);
+    await promise;
+  });
+});
+
+describe("hasTranscriptTitle", () => {
+  it("rejects timestamp fallbacks so the header keeps refreshing", () => {
+    expect(
+      hasTranscriptTitle({
+        title: "Sessão de 26/08/2026, 09:28:00",
+        fromTranscript: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("accepts the first user message once it is on disk", () => {
+    expect(
+      hasTranscriptTitle({ title: "test", fromTranscript: true }),
+    ).toBe(true);
   });
 });

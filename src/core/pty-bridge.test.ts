@@ -108,7 +108,7 @@ describe("pty-bridge", () => {
     resolveSpawn?.({ id: input.id, pid: 99 });
     const bridge = await pending;
     expect(bridge.pty.pid).toBe(99);
-    bridge.dispose();
+    await bridge.dispose();
     expect(terminal.kill).toHaveBeenCalledWith(input.id);
   });
 
@@ -177,9 +177,8 @@ describe("pty-bridge", () => {
       cols: 80,
       rows: 24,
     });
-    bridge.dispose();
-    bridge.dispose();
-    await Promise.resolve();
+    await bridge.dispose();
+    await bridge.dispose();
     expect(terminal.kill).toHaveBeenCalledOnce();
   });
 
@@ -192,7 +191,7 @@ describe("pty-bridge", () => {
       rows: 24,
     });
     bridge.write("pending");
-    bridge.dispose();
+    await bridge.dispose();
     await vi.advanceTimersByTimeAsync(10);
     expect(terminal.write).not.toHaveBeenCalled();
   });

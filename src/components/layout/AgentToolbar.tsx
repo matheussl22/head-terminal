@@ -70,7 +70,7 @@ export function AgentToolbar({
       </div>
 
       <div className="agent-toolbar__actions">
-        <Tooltip content="Dividir verticalmente (Ctrl+\\)">
+        <Tooltip content="Dividir verticalmente (Ctrl+\\)" below>
           <button
             type="button"
             className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
@@ -81,7 +81,7 @@ export function AgentToolbar({
           </button>
         </Tooltip>
 
-        <Tooltip content="Dividir horizontalmente (Ctrl+Shift+\\)">
+        <Tooltip content="Dividir horizontalmente (Ctrl+Shift+\\)" below>
           <button
             type="button"
             className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
@@ -92,7 +92,7 @@ export function AgentToolbar({
           </button>
         </Tooltip>
 
-        <Tooltip content={`Paleta de comandos (${COMMAND_PALETTE_SHORTCUT})`}>
+        <Tooltip content={`Paleta de comandos (${COMMAND_PALETTE_SHORTCUT})`} below>
           <button
             type="button"
             className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
@@ -103,7 +103,7 @@ export function AgentToolbar({
           </button>
         </Tooltip>
 
-        <Tooltip content="Configurações">
+        <Tooltip content="Configurações" below>
           <button
             type="button"
             className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"

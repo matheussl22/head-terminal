@@ -55,6 +55,35 @@ describe("workspace-service", () => {
     expect(await readdir(directory)).toContain("workspace.v1.json.corrupt-2026-07-19T12-00-00-000Z");
   });
 
+  it("keeps a bak after a successful save and recovers it when the main file is corrupt", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ht-workspace-"));
+    cleanup.push(directory);
+    const service = new WorkspaceService({
+      userDataPath: directory,
+      now: () => new Date("2026-08-26T18:00:00Z"),
+    });
+    await service.save(workspace);
+    expect(await readdir(directory)).toContain("workspace.v1.json.bak");
+    expect(JSON.parse(await readFile(service.bakPath, "utf8"))).toEqual(workspace);
+
+    await writeFile(service.workspacePath, "{broken");
+    await expect(service.load()).resolves.toEqual(workspace);
+    expect(await readdir(directory)).toContain("workspace.v1.json.corrupt-2026-08-26T18-00-00-000Z");
+  });
+
+  it("does not recover a bak that fails schema validation", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ht-workspace-"));
+    cleanup.push(directory);
+    const service = new WorkspaceService({
+      userDataPath: directory,
+      now: () => new Date("2026-08-26T18:00:00Z"),
+    });
+    await service.save(workspace);
+    await writeFile(service.workspacePath, "{broken");
+    await writeFile(service.bakPath, JSON.stringify({ version: 2, sessions: [] }));
+    await expect(service.load()).resolves.toBeNull();
+  });
+
   it("round-trips conversation names and rejects malformed ones", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ht-workspace-"));
     cleanup.push(directory);

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import {
   AGENT_FALLBACK_OSC,
@@ -12,7 +12,8 @@ import {
   ClaudeFolderTrustAutoAccept,
 } from "../core/claude-folder-trust";
 import { resolveClaudeConfigDir } from "../core/claude-accounts";
-import { anchorPaneResumeSession } from "../core/pane-resume-anchor";
+import { anchorPaneResumeSession, snapshotExistingSessionIds } from "../core/pane-resume-anchor";
+import { isResumableAgent } from "../core/agent-sessions-bridge";
 import { checkpoint, logError, logEvent } from "../core/logger";
 import { notifyUiReady } from "../core/startup-watchdog";
 import { fitPanes } from "../core/pane-fit-registry";
@@ -39,6 +40,7 @@ interface UsePtyProcessOptions {
   restartKey: number;
   continueConversation: boolean;
   resumeSessionId?: string;
+  isVisible: boolean;
   onWorkspacePath: (path: string) => void;
 }
 
@@ -57,6 +59,7 @@ export function usePtyProcess({
   restartKey,
   continueConversation,
   resumeSessionId,
+  isVisible,
   onWorkspacePath,
 }: UsePtyProcessOptions): void {
   const registerPtyWriter = useSessionStore((state) => state.registerPtyWriter);
@@ -70,7 +73,9 @@ export function usePtyProcess({
   const updatePaneContext = useSessionStore(
     (state) => state.updatePaneContext,
   );
-  const notePaneOutput = useSessionStore((state) => state.notePaneOutput);
+  const isVisibleRef = useRef(isVisible);
+  isVisibleRef.current = isVisible;
+  const previousDisposeRef = useRef(Promise.resolve<void>(undefined));
 
   useEffect(() => {
     if (!instance) {
@@ -142,11 +147,10 @@ export function usePtyProcess({
     );
 
     const bootstrap = async () => {
+      await previousDisposeRef.current;
       if (disposed) {
         return;
       }
-
-      const spawnStartMs = Date.now();
 
       checkpoint("js.pty.spawn_begin", {
         paneId,
@@ -164,6 +168,21 @@ export function usePtyProcess({
         const claudeConfigDir = claudeAccountId
           ? resolveClaudeConfigDir(claudeAccountId)
           : undefined;
+        const startsNewConversation =
+          !continueConversation || Boolean(resumeSessionId);
+        const existingSessionIds =
+          isResumableAgent(agentProfileId) && startsNewConversation
+            ? await snapshotExistingSessionIds(
+                cwd,
+                agentProfileId,
+                claudeAccountId,
+              )
+            : undefined;
+        if (disposed) {
+          return;
+        }
+
+        const spawnStartMs = Date.now();
         const nextBridge = await createPtyBridge({
           profile,
           cwd,
@@ -175,7 +194,7 @@ export function usePtyProcess({
         });
 
         if (disposed) {
-          nextBridge.dispose();
+          await nextBridge.dispose();
           return;
         }
         bridge = nextBridge;
@@ -195,8 +214,18 @@ export function usePtyProcess({
             activityDetector.onData(frameText);
             workspaceDetector.onData(frameText);
             contextMeter.onData(frameText);
-            notePaneOutput(paneId);
+            folderTrust?.onData(frameText, () => {
+              if (disposed) {
+                return;
+              }
+              logEvent("info", "claude.folder_trust_auto_accepted", {
+                paneId,
+                sessionId,
+              });
+              bridge?.write(CLAUDE_FOLDER_TRUST_CONFIRM_KEY);
+            });
           },
+          () => !isVisibleRef.current,
         );
 
         listeners.push(
@@ -210,16 +239,6 @@ export function usePtyProcess({
               notifyUiReady();
             }
             writePtyData(data);
-            folderTrust?.onData(data, () => {
-              if (disposed) {
-                return;
-              }
-              logEvent("info", "claude.folder_trust_auto_accepted", {
-                paneId,
-                sessionId,
-              });
-              bridge?.write(CLAUDE_FOLDER_TRUST_CONFIRM_KEY);
-            });
           }),
           attachPtyExitListener(bridge.pty, (exitCode) => {
             terminal.writeln("");
@@ -260,10 +279,9 @@ export function usePtyProcess({
           agentProfileId,
           claudeAccountId,
           spawnStartMs,
-          // A fork lands on a transcript that did not exist at spawn time,
-          // exactly like a brand new conversation does.
-          startsNewConversation: !continueConversation || Boolean(resumeSessionId),
+          startsNewConversation,
           resumedSessionId: resumeSessionId,
+          existingSessionIds,
           isDisposed: () => disposed,
         });
       } catch (error) {
@@ -296,7 +314,9 @@ export function usePtyProcess({
       unregisterPtyWriter(paneId);
       instance.writeToPty.current = null;
       instance.resizePty.current = null;
-      bridge?.dispose();
+      previousDisposeRef.current = Promise.resolve(bridge?.dispose()).catch(
+        () => undefined,
+      );
     };
   }, [
     agentProfileId,
@@ -305,8 +325,7 @@ export function usePtyProcess({
     resumeSessionId,
     cwd,
     instance,
-      notePaneOutput,
-    onWorkspacePath,
+      onWorkspacePath,
       paneId,
     registerPtyWriter,
     restartKey,

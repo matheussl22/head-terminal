@@ -89,8 +89,6 @@ export function gitContextsEqual(
     a.headShort === b.headShort &&
     a.headRef === b.headRef &&
     a.isDirty === b.isDirty &&
-    a.lastTouchedPath === b.lastTouchedPath &&
-    a.lastTouchedAt === b.lastTouchedAt &&
-    a.source === b.source
+    a.lastTouchedPath === b.lastTouchedPath
   );
 }

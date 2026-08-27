@@ -19,6 +19,8 @@
     "smoke:electron:win": "npm run package && node scripts/electron-smoke-win.mjs",
     "smoke:electron:win:existing": "node scripts/electron-smoke-win.mjs",
     "e2e": "bash scripts/e2e.sh",
+    "e2e:win": "node --experimental-websocket scripts/e2e-win.mjs",
+    "e2e:clipboard:win": "node --experimental-websocket scripts/e2e-clipboard-paste-win.mjs",
     "package": "cross-env NODE_ENV=production electron-forge package",
     "make": "cross-env NODE_ENV=production electron-forge make",
     "preview:renderer": "vite preview",

@@ -16,6 +16,10 @@ const STEADY_DELAY_MS = 10_000;
 // A --resume either forks its transcript while the CLI boots or never will,
 // so that watch is bounded — unlike the open-ended poll a fresh pane needs.
 const RESUME_FORK_WATCH_MS = 90_000;
+// After the file exists, the opening user message can land a few seconds
+// later. Keep reading the title until it is real text, not "Sessão de …".
+const TITLE_REFRESH_MS = 90_000;
+const TITLE_REFRESH_DELAY_MS = 2_500;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -28,17 +32,10 @@ function* retryDelays(): Generator<number> {
   }
 }
 
-/** A pane whose process is gone will never write a transcript, so polling for
- * one is pure waste. Anything else — running, starting, idling at an empty
- * prompt — is still a conversation waiting to happen. */
 function isPaneDead(paneId: string): boolean {
   return useSessionStore.getState().paneRuntime[paneId]?.status === "exited";
 }
 
-/** Ids already spoken for by another pane. Two panes sharing a cwd poll the
- * same list, and without this the second one would latch onto the first one's
- * conversation — same name in both headers, and one --resume stealing the
- * other's transcript on the next app start. */
 function anchoredElsewhere(paneId: string): Set<string> {
   const anchors = useSessionStore.getState().paneResumeAnchors;
   const taken = new Set<string>();
@@ -48,6 +45,37 @@ function anchoredElsewhere(paneId: string): Set<string> {
     }
   }
   return taken;
+}
+
+/** Timestamp fallbacks are not a conversation name. Mocks that omit
+ * `fromTranscript` still count as named, so existing tests resolve as soon
+ * as they anchor. */
+export function hasTranscriptTitle(entry: {
+  title: string;
+  fromTranscript?: boolean;
+}): boolean {
+  if (entry.fromTranscript === false) return false;
+  if (entry.fromTranscript === true) return true;
+  return !/^Sessão de /u.test(entry.title);
+}
+
+/** Taken *before* the PTY starts so a jsonl the CLI creates while booting is
+ * not snapshotted as "already there" and then ignored forever — that is what
+ * left the header on "nova conversa" after the user had already typed. */
+export async function snapshotExistingSessionIds(
+  cwd: string,
+  agentProfileId: string,
+  claudeAccountId?: string,
+): Promise<string[]> {
+  if (!isResumableAgent(agentProfileId)) {
+    return [];
+  }
+  const entries = await fetchResumableSessions(
+    cwd,
+    agentProfileId,
+    claudeAccountId,
+  ).catch(() => []);
+  return entries.map((entry) => entry.id);
 }
 
 export interface AnchorPaneResumeSessionOptions {
@@ -67,6 +95,10 @@ export interface AnchorPaneResumeSessionOptions {
    * resuming the ancestor forever (one more copy per restart) while the live
    * conversation goes untracked. */
   resumedSessionId?: string;
+  /** Ids already on disk *before* this spawn. Prefer taking this before the
+   * PTY starts; if omitted, a snapshot is taken at the beginning of the watch
+   * (after spawn), which can miss a file the CLI created while booting. */
+  existingSessionIds?: readonly string[];
   isDisposed: () => boolean;
 }
 
@@ -92,6 +124,7 @@ export async function anchorPaneResumeSession(
     spawnStartMs,
     startsNewConversation,
     resumedSessionId,
+    existingSessionIds,
     isDisposed,
   } = options;
 
@@ -102,16 +135,8 @@ export async function anchorPaneResumeSession(
   // Small slack for clock/mtime granularity differences across filesystems.
   const threshold = spawnStartMs - 500;
 
-  // A conversation that starts here cannot be one that already had a
-  // transcript when the pane spawned. Splitting a pane used to land exactly
-  // there: the sibling is mid-answer, so its transcript is the freshest thing
-  // in the cwd and the new pane adopted its id — same name in both headers,
-  // and one --resume stealing the other on the next app start. An mtime
-  // threshold can't tell those apart; the id simply not existing yet can.
-  // Taken before the CLI has finished booting, so it never hides the
-  // transcript this spawn is about to create.
-  const preExisting = new Set<string>();
-  if (startsNewConversation) {
+  const preExisting = new Set<string>(existingSessionIds ?? []);
+  if (startsNewConversation && existingSessionIds === undefined) {
     const before = await fetchResumableSessions(
       cwd,
       agentProfileId,
@@ -125,6 +150,37 @@ export async function anchorPaneResumeSession(
   const watchUntilMs = resumedSessionId
     ? Date.now() + RESUME_FORK_WATCH_MS
     : null;
+
+  const publishTitles = (
+    entries: Awaited<ReturnType<typeof fetchResumableSessions>>,
+  ) => {
+    if (entries.length > 0) {
+      useSessionStore.getState().noteConversationTitles(entries);
+    }
+  };
+
+  const refreshTitleUntilNamed = async (sessionId: string): Promise<void> => {
+    const until = Date.now() + TITLE_REFRESH_MS;
+    while (Date.now() < until) {
+      await sleep(TITLE_REFRESH_DELAY_MS);
+      if (isDisposed() || isPaneDead(paneId)) {
+        return;
+      }
+      const latest = await fetchResumableSessions(
+        cwd,
+        agentProfileId,
+        claudeAccountId,
+      ).catch(() => []);
+      if (isDisposed()) {
+        return;
+      }
+      publishTitles(latest);
+      const mine = latest.find((entry) => entry.id === sessionId);
+      if (mine && hasTranscriptTitle(mine)) {
+        return;
+      }
+    }
+  };
 
   for (const delay of retryDelays()) {
     await sleep(delay);
@@ -145,11 +201,7 @@ export async function anchorPaneResumeSession(
     if (isDisposed()) {
       return;
     }
-    // The pane header names the conversation from this same list, so hand the
-    // titles over instead of making it read the transcripts again.
-    if (entries.length > 0) {
-      useSessionStore.getState().noteConversationTitles(entries);
-    }
+    publishTitles(entries);
 
     // As long as the resumed id is still listed, it is still this
     // conversation's live transcript. Dropping off the list is what a fork
@@ -170,6 +222,9 @@ export async function anchorPaneResumeSession(
     );
     if (fresh) {
       useSessionStore.getState().notePaneResumeAnchor(paneId, fresh.id);
+      if (!hasTranscriptTitle(fresh)) {
+        await refreshTitleUntilNamed(fresh.id);
+      }
       return;
     }
   }

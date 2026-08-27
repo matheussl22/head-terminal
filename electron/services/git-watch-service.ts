@@ -192,6 +192,10 @@ export class GitWatchService {
     return this.repos.size;
   }
 
+  public isPolling(): boolean {
+    return this.pollIntervalMs > 0;
+  }
+
   public subscriberCount(repoRoot: string): number {
     return this.repos.get(repoRoot)?.subscribers.size ?? 0;
   }
@@ -337,7 +341,7 @@ export function createGitService(options: GitWatchServiceOptions = {}): {
   watch(
     input: GitWatchInput,
     emit: GitContextChangedListener,
-  ): Promise<void>;
+  ): Promise<{ polling: boolean }>;
   unwatch(watchId: string): Promise<void>;
   dispose(): void;
 } {
@@ -358,6 +362,7 @@ export function createGitService(options: GitWatchServiceOptions = {}): {
         emitters.delete(input.watchId);
         throw error;
       }
+      return { polling: watcher.isPolling() };
     },
     async unwatch(watchId) {
       emitters.delete(watchId);

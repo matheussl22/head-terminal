@@ -42,7 +42,7 @@ export interface ResizePtyInput {
 
 export interface PtyDataEvent {
   id: string;
-  data: string;
+  data: string | Uint8Array;
 }
 
 export interface PtyExitEvent {
@@ -131,6 +131,8 @@ export interface ResumableSessionEntry {
   id: string;
   title: string;
   updatedAt: string;
+  /** True when `title` came from the opening user message, not a timestamp. */
+  fromTranscript: boolean;
 }
 
 export interface NotificationInput {
@@ -190,7 +192,7 @@ export interface HeadTerminalApi {
     getContext(cwd: string): Promise<GitContextPayload>;
     getDiff(cwd: string): Promise<string>;
     createWorktree(cwd: string): Promise<string>;
-    watch(input: GitWatchInput): Promise<void>;
+    watch(input: GitWatchInput): Promise<{ polling?: boolean } | void>;
     unwatch(watchId: string): Promise<void>;
     onChanged(callback: (event: GitChangedEvent) => void): Unsubscribe;
   };
@@ -232,6 +234,14 @@ export interface HeadTerminalApi {
   clipboard: {
     readText(): Promise<string>;
     writeText(text: string): Promise<void>;
+    /**
+     * Text, copied-file paths, or a screenshot saved to disk — already in the
+     * form the agent PTY can read (POSIX under WSL).
+     */
+    readForTerminal(): Promise<string | null>;
+    importPaths(paths: string[]): Promise<string | null>;
+    /** Resolves an Electron drop/paste File to a host path in the preload. */
+    pathForFile(file: unknown): string;
   };
   notifications: {
     show(input: NotificationInput): Promise<void>;

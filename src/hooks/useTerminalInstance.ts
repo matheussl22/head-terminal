@@ -10,6 +10,7 @@ import {
 } from "../core/pane-fit-registry";
 import {
   createConfiguredTerminal,
+  createWebglController,
   fitTerminal,
 } from "../core/terminal-factory";
 import {
@@ -17,6 +18,7 @@ import {
   unregisterTerminal,
 } from "../core/terminal-registry";
 import { attachOrphanCompositionEndGuard } from "../core/terminal-composition-guard";
+import { attachTerminalPasteSurface } from "../core/terminal-clipboard";
 import { isBareMouseHoverReport, isFocusReport } from "../core/pty-text";
 
 /**
@@ -37,6 +39,7 @@ export function useTerminalInstance(
   containerRef: React.RefObject<HTMLDivElement | null>,
   paneId: string,
   active: boolean,
+  isVisible = true,
 ): TerminalInstance | null {
   const [instance, setInstance] = useState<TerminalInstance | null>(null);
 
@@ -121,6 +124,7 @@ export function useTerminalInstance(
         created.writeToPty.current?.(data);
       },
     );
+    const pasteCleanup = attachTerminalPasteSurface(container, terminal);
     const focusTerminal = () => {
       terminal.focus();
     };
@@ -132,6 +136,7 @@ export function useTerminalInstance(
       setInstance(null);
       container.removeEventListener("mousedown", focusTerminal);
       compositionCleanup();
+      pasteCleanup();
       dataListener.dispose();
       resizeListener.dispose();
       unregisterPaneFitter(paneId);
@@ -139,6 +144,17 @@ export function useTerminalInstance(
       terminal.dispose();
     };
   }, [active, containerRef, paneId]);
+
+  useEffect(() => {
+    if (!instance) {
+      return;
+    }
+    const webgl = createWebglController(instance.terminal);
+    webgl.setVisible(isVisible);
+    return () => {
+      webgl.dispose();
+    };
+  }, [instance, isVisible]);
 
   return instance;
 }

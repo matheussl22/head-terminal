@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { runCommand } from "./command-runner";
+import { HT_UNIX_CMD_FN, UNIX_USER_BIN_PATH_EXPORT } from "../../src/core/unix-cli-probe";
 
 const CLAUDE_PROFILE_ID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -81,9 +82,11 @@ async function runZshCliDiscovery(): Promise<{ stdout: string; ran: boolean }> {
   // The command is constant. No renderer-controlled value is interpolated into
   // the login shell, which is used so user-installed CLI paths are available.
   const command = [
+    UNIX_USER_BIN_PATH_EXPORT,
     "command -v agy >/dev/null 2>&1 && echo antigravity",
-    // Either spelling counts: see CURSOR_SHIM in src/config/agents.ts.
-    "{ command -v cursor-agent || command -v cursor; } >/dev/null 2>&1 && echo cursor",
+    // Same Unix-native filter as CURSOR_SHIM: a Windows .cmd on /mnt/c is not
+    // a working pane CLI, so discovery must not hide a missing Linux install.
+    `${HT_UNIX_CMD_FN}{ ht_unix_cmd cursor-agent || ht_unix_cmd cursor; } >/dev/null 2>&1 && echo cursor`,
     "command -v claude >/dev/null 2>&1 && echo claude",
     "command -v codex >/dev/null 2>&1 && echo codex",
   ].join("; ");

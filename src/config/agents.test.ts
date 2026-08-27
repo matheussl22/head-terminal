@@ -17,14 +17,18 @@ describe("agent profiles continue flag", () => {
     expect(profiles.cursor.args.join(" ")).not.toContain("--continue");
   });
 
-  it("reaches cursor under either name it installs as", () => {
+  it("reaches a Unix-native cursor-agent and never a Windows .cmd", () => {
     // The official installer publishes `cursor-agent`; older setups expose the
     // same CLI as `cursor agent`. Hardcoding either opens the pane straight
-    // into `command not found`.
+    // into `command not found`. WSL interop also finds cursor-agent.cmd on
+    // /mnt/c, which a Unix shell cannot execute.
     const script = buildAgentProfiles().cursor.args.join(" ");
-    expect(script).toContain("command -v cursor-agent");
+    expect(script).toContain("ht_unix_cmd cursor-agent");
     expect(script).toContain('cursor-agent "$@"');
     expect(script).toContain('cursor agent "$@"');
+    expect(script).not.toContain("cursor-agent.cmd");
+    expect(script).toContain("/mnt/[a-z]/*");
+    expect(script).toContain("$HOME/.local/bin");
   });
 
   it("appends --continue for claude and cursor when restoring", () => {
@@ -80,7 +84,7 @@ describe("agent profiles resume flag", () => {
     // resumed agent lived — a real session that ends non-zero after a while
     // still goes to the shell fallback instead of relaunching the agent.
     expect(claude).toContain("__ht_resume_code=$?");
-    expect(claude).toContain("-lt 5");
+    expect(claude).toContain("-lt 30");
     expect(claude).toMatch(/resume-failed:%s.*claude; fi/u);
   });
 

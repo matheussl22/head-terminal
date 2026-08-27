@@ -4,6 +4,7 @@ import type {
   SupportedAgent,
 } from "../types/api";
 import { runCommand } from "./command-runner";
+import { UNIX_USER_BIN_PATH_EXPORT } from "../../src/core/unix-cli-probe";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1_000;
@@ -54,7 +55,9 @@ function runMcpList(
   cwd: string,
   timeoutMs: number,
 ): Promise<CommandResult> {
-  return runCommand(binary, ["mcp", "list"], {
+  // --exec <binary> skips login rc, so ~/.local/bin (official Linux installs)
+  // is invisible. bash -lc plus the same PATH prefix the panes use.
+  return runCommand("bash", ["-lc", `${UNIX_USER_BIN_PATH_EXPORT}; exec ${binary} mcp list`], {
     cwd,
     maxBuffer: MAX_BUFFER_BYTES,
     timeoutMs,

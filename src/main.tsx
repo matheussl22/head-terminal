@@ -54,6 +54,7 @@ async function bootstrapFrontend(): Promise<void> {
           componentStack: info.componentStack,
         });
       }}
+      onRetry={() => window.location.reload()}
     >
       <App />
     </ErrorBoundary>,

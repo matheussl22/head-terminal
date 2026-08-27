@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { IconClose } from "../ui/Icons";
+
 interface SessionDiffPanelProps {
   cwd: string;
   onClose: () => void;
@@ -46,13 +48,31 @@ export function SessionDiffPanel({ cwd, onClose }: SessionDiffPanelProps) {
       <div
         className="create-session-dialog session-diff"
         role="dialog"
-        aria-label="Diff da sessão"
+        aria-modal="true"
+        aria-labelledby="session-diff-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <h2 className="create-session-dialog__title">Mudanças da sessão</h2>
+        <header className="create-session-dialog__header">
+          <div>
+            <h2 id="session-diff-title" className="create-session-dialog__title">
+              Mudanças da sessão
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="create-session-dialog__close"
+            aria-label="Fechar"
+            onClick={onClose}
+          >
+            <IconClose size={16} />
+          </button>
+        </header>
 
         <div className="session-diff__body">
           {error && <span className="create-session-dialog__error">{error}</span>}
+          {diff === null && !error && (
+            <span className="create-session-dialog__hint">Carregando diff…</span>
+          )}
           {diff === "" && <span>Nenhuma mudança em relação ao HEAD.</span>}
           {diff && (
             <pre>

@@ -4,6 +4,7 @@ import {
   fetchResumableSessions,
   isResumableAgent,
 } from "../core/agent-sessions-bridge";
+import { resolvePaneConversationView } from "../core/conversation-display";
 import { useSessionStore } from "../core/session-manager";
 
 /** Panes that share a cwd would otherwise each scan the same transcripts on
@@ -95,15 +96,16 @@ export function usePaneConversation(options: {
   }, [needsTitle, cwd, agentProfileId, claudeAccountId, noteConversationTitles]);
 
   const custom = cliSessionId ? label : pendingLabel;
-  // An anchored conversation whose transcript isn't in the recent list (too
-  // old, or already trimmed) still deserves an identity of its own instead of
-  // reading like a pane that never started one.
-  const fallback = cliSessionId ? `conversa ${cliSessionId.slice(0, 8)}` : null;
+  const view = resolvePaneConversationView({
+    cliSessionId,
+    title,
+    customLabel: custom,
+  });
 
   return {
     cliSessionId,
-    name: custom ?? (cliSessionId ? (title ?? fallback) : null),
-    isCustom: Boolean(custom),
+    name: view.name,
+    isCustom: view.isCustom,
     supported,
   };
 }

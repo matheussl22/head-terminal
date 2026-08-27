@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 import { IPC_CHANNELS } from "./ipc/channels";
 import type {
@@ -88,6 +88,17 @@ const api: HeadTerminalApi = {
   clipboard: {
     readText: () => ipcRenderer.invoke(IPC_CHANNELS.clipboard.readText),
     writeText: (text) => ipcRenderer.invoke(IPC_CHANNELS.clipboard.writeText, text),
+    readForTerminal: () => ipcRenderer.invoke(IPC_CHANNELS.clipboard.readForTerminal),
+    importPaths: (paths) =>
+      ipcRenderer.invoke(IPC_CHANNELS.clipboard.importPaths, paths),
+    pathForFile: (file) => {
+      try {
+        return webUtils.getPathForFile(file as File);
+      } catch {
+        const legacy = (file as { path?: unknown } | null)?.path;
+        return typeof legacy === "string" ? legacy : "";
+      }
+    },
   },
   notifications: {
     show: (input) => ipcRenderer.invoke(IPC_CHANNELS.notifications.show, input),

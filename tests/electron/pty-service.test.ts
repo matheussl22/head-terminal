@@ -166,17 +166,84 @@ describe("PtyService", () => {
   });
 
   it("forwards terminal output unchanged, including OSC and escape sequences", () => {
-    const { service, processes, events } = harness();
-    service.spawn(4, { id: "pane-osc", command: "bash", cwd: "/tmp" });
-    const raw = "\u001b]7;file://host/worktree\u0007\u001b[31mred\u001b[0m";
+    vi.useFakeTimers();
+    try {
+      const { service, processes, events } = harness();
+      service.spawn(4, { id: "pane-osc", command: "bash", cwd: "/tmp" });
+      const raw = "\u001b]7;file://host/worktree\u0007\u001b[31mred\u001b[0m";
 
-    processes[0]?.data(raw);
+      processes[0]?.data(raw);
+      expect(events).toEqual([]);
+      vi.advanceTimersByTime(16);
+      expect(events).toEqual([
+        {
+          channel: "pty:data",
+          ownerId: 4,
+          payload: { id: "pane-osc", data: raw },
+        },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("coalesces successive onData bursts into one IPC message", () => {
+    vi.useFakeTimers();
+    try {
+      const { service, processes, events } = harness();
+      service.spawn(4, { id: "pane-batch", command: "bash", cwd: "/tmp" });
+
+      processes[0]?.data("hel");
+      processes[0]?.data("lo");
+      expect(events).toEqual([]);
+      vi.advanceTimersByTime(16);
+
+      expect(events).toEqual([
+        {
+          channel: "pty:data",
+          ownerId: 4,
+          payload: { id: "pane-batch", data: "hello" },
+        },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("flushes coalesced output immediately on process exit", () => {
+    const { service, processes, events } = harness();
+    service.spawn(2, { id: "pane-a", command: "bash", cwd: "/tmp" });
+
+    processes[0]?.data("bye");
+    processes[0]?.exit(17, 9);
+
+    expect(service.has(2, "pane-a")).toBe(false);
+    expect(events).toEqual([
+      {
+        channel: "pty:data",
+        ownerId: 2,
+        payload: { id: "pane-a", data: "bye" },
+      },
+      {
+        channel: "pty:exit",
+        ownerId: 2,
+        payload: { id: "pane-a", exitCode: 17, signal: 9 },
+      },
+    ]);
+  });
+
+  it("flushes immediately once pending output hits the size cap", () => {
+    const { service, processes, events } = harness();
+    service.spawn(1, { id: "pane-cap", command: "bash", cwd: "/tmp" });
+    const chunk = "x".repeat(128 * 1024);
+
+    processes[0]?.data(chunk);
 
     expect(events).toEqual([
       {
         channel: "pty:data",
-        ownerId: 4,
-        payload: { id: "pane-osc", data: raw },
+        ownerId: 1,
+        payload: { id: "pane-cap", data: chunk },
       },
     ]);
   });
@@ -221,20 +288,20 @@ describe("PtyService", () => {
     expect(processes[0]?.killed).toBe(0);
   });
 
-  it("cleans one owner idempotently without affecting other owners", () => {
+  it("cleans one owner idempotently without affecting other owners", async () => {
     const { service, processes, events } = harness();
     service.spawn(1, { id: "pane-a", command: "bash", cwd: "/tmp" });
     service.spawn(1, { id: "pane-b", command: "bash", cwd: "/tmp" });
     service.spawn(2, { id: "pane-a", command: "bash", cwd: "/tmp" });
 
-    expect(service.cleanup(1)).toBe(2);
-    expect(service.cleanup(1)).toBe(0);
+    await expect(service.cleanup(1)).resolves.toBe(2);
+    await expect(service.cleanup(1)).resolves.toBe(0);
     expect(service.size).toBe(1);
     expect(processes.map((pty) => pty.killed)).toEqual([1, 1, 0]);
     expect(events).toEqual([]);
   });
 
-  it("kills and disposes idempotently even when process.kill throws", () => {
+  it("kills and disposes idempotently even when process.kill throws", async () => {
     const { service, processes } = harness();
     service.spawn(1, { id: "pane-a", command: "bash", cwd: "/tmp" });
     service.spawn(1, { id: "pane-b", command: "bash", cwd: "/tmp" });
@@ -242,10 +309,10 @@ describe("PtyService", () => {
       throw new Error("already gone");
     });
 
-    expect(service.kill(1, "pane-a")).toBe(true);
-    expect(service.kill(1, "pane-a")).toBe(false);
-    expect(service.dispose()).toBe(1);
-    expect(service.dispose()).toBe(0);
+    await expect(service.kill(1, "pane-a")).resolves.toBe(true);
+    await expect(service.kill(1, "pane-a")).resolves.toBe(false);
+    await expect(service.dispose()).resolves.toBe(1);
+    await expect(service.dispose()).resolves.toBe(0);
     expect(service.size).toBe(0);
   });
 
@@ -264,7 +331,7 @@ describe("PtyService", () => {
 describe("PtyService in WSL mode", () => {
   const ZSH_ARGS = ["-l", "-c", "cd /home/m/repo && exec claude"];
 
-  function wslHarness() {
+  function wslHarness(options?: { hangReap?: boolean }) {
     const killed: string[] = [];
     const processes: FakePty[] = [];
     const calls: Array<{
@@ -287,6 +354,11 @@ describe("PtyService in WSL mode", () => {
         sanitizeLocaleEnv: (env) => ({ ...env }),
         killPaneTree: async (marker) => {
           killed.push(marker);
+          if (options?.hangReap) {
+            await new Promise(() => {
+              // Never settles: kill/dispose must time out instead of hanging.
+            });
+          }
         },
       },
       spawn: (file, args, options) => {
@@ -338,7 +410,7 @@ describe("PtyService in WSL mode", () => {
     expect(env.HEAD_TERMINAL_PANE).toMatch(/^[0-9a-f-]{36}$/u);
   });
 
-  it("kills the Linux tree by marker, since the pid is only wsl.exe", () => {
+  it("kills the Linux tree by marker, since the pid is only wsl.exe", async () => {
     const { service, calls, killed } = wslHarness();
 
     service.spawn(7, {
@@ -347,9 +419,42 @@ describe("PtyService in WSL mode", () => {
       args: ZSH_ARGS,
       cwd: "/home/m/repo",
     });
-    expect(service.kill(7, "pane-1")).toBe(true);
+    await expect(service.kill(7, "pane-1")).resolves.toBe(true);
 
     expect(killed).toEqual([calls[0].options.env.HEAD_TERMINAL_PANE]);
+  });
+
+  it("reaps the Linux tree on natural exit, not only on kill", () => {
+    const { service, calls, processes, killed } = wslHarness();
+
+    service.spawn(7, {
+      id: "pane-1",
+      command: "/usr/bin/zsh",
+      args: ZSH_ARGS,
+      cwd: "/home/m/repo",
+    });
+    processes[0]?.exit(0);
+
+    expect(service.has(7, "pane-1")).toBe(false);
+    expect(killed).toEqual([calls[0].options.env.HEAD_TERMINAL_PANE]);
+  });
+
+  it("gives up on a hung WSL reap so dispose cannot block forever", async () => {
+    vi.useFakeTimers();
+    try {
+      const { service } = wslHarness({ hangReap: true });
+      service.spawn(7, {
+        id: "pane-1",
+        command: "/usr/bin/zsh",
+        args: ZSH_ARGS,
+        cwd: "/home/m/repo",
+      });
+      const disposed = service.dispose();
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(disposed).resolves.toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("gives each pane its own marker", () => {

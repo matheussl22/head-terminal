@@ -111,4 +111,20 @@ describe("git-context-registry", () => {
     expect(fetchGitContext).not.toHaveBeenCalled();
     expect(startGitWatch).not.toHaveBeenCalled();
   });
+
+  it("skips the renderer poll when main already polls", async () => {
+    vi.useFakeTimers();
+    startGitWatch.mockResolvedValue({ polling: true });
+    try {
+      acquireGitContext("/repo", vi.fn());
+      await vi.waitFor(() => expect(startGitWatch).toHaveBeenCalledTimes(1));
+      await Promise.resolve();
+      fetchGitContext.mockClear();
+
+      await vi.advanceTimersByTimeAsync(16_000);
+      expect(fetchGitContext).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

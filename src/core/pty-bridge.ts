@@ -13,7 +13,7 @@ export interface PtySpawnOptions {
 export interface PtyBridge {
   pty: ElectronPty;
   write: (data: string) => void;
-  dispose: () => void;
+  dispose: () => void | Promise<void>;
 }
 
 export interface IDisposable {
@@ -24,7 +24,7 @@ export interface ElectronPty {
   id: string;
   pid: number;
   resize(cols: number, rows: number): void;
-  kill(): void;
+  kill(): void | Promise<void>;
   onData(callback: (data: Uint8Array) => void): IDisposable;
   onExit(callback: (event: { exitCode: number }) => void): IDisposable;
 }
@@ -59,14 +59,19 @@ export async function createPtyBridge(
         rows: nextRows,
       });
     },
-    kill: () => {
-      void window.headTerminal.terminal.kill(id).catch(() => {
+    kill: () =>
+      window.headTerminal.terminal.kill(id).catch(() => {
         // The process may have exited between the renderer request and main.
-      });
-    },
+      }),
     onData: (callback) => {
       const unsubscribe = window.headTerminal.terminal.onData((event) => {
-        if (event.id === id) callback(encoder.encode(event.data));
+        if (event.id !== id) {
+          return;
+        }
+        const payload = event.data;
+        callback(
+          typeof payload === "string" ? encoder.encode(payload) : payload,
+        );
       });
       return { dispose: unsubscribe };
     },
@@ -93,7 +98,7 @@ export async function createPtyBridge(
       disposed = true;
       write.dispose();
       try {
-        pty.kill();
+        return pty.kill();
       } catch {
         // Process may already be gone.
       }

@@ -4,7 +4,45 @@ import { sendAgentCommand } from "../../actions/sendAgentCommand";
 import { PALETTE_ACTIONS } from "../../config/toolbar";
 import { exportDiagnosticBundle } from "../../core/export-diagnostic";
 import { useSessionStore } from "../../core/session-manager";
+import { getTerminal } from "../../core/terminal-registry";
 import { isVoiceInputSupported, toggleVoiceInput } from "../../core/voice-input";
+
+function getFocusable(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex='-1'])",
+    ),
+  ).filter((element) => element.tabIndex >= 0);
+}
+
+function trapTabInside(event: KeyboardEvent, container: HTMLElement): void {
+  if (event.key !== "Tab") {
+    return;
+  }
+
+  const focusable = getFocusable(container);
+  if (focusable.length === 0) {
+    event.preventDefault();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const active = document.activeElement;
+
+  if (event.shiftKey) {
+    if (active === first || !container.contains(active)) {
+      event.preventDefault();
+      last.focus();
+    }
+    return;
+  }
+
+  if (active === last || !container.contains(active)) {
+    event.preventDefault();
+    first.focus();
+  }
+}
 
 interface CommandPaletteProps {
   open: boolean;
@@ -22,6 +60,7 @@ export function CommandPalette({
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const splitActivePane = useSessionStore((state) => state.splitActivePane);
   const activePaneId = useSessionStore((state) => state.activePaneId);
   const closePane = useSessionStore((state) => state.closePane);
@@ -59,6 +98,13 @@ export function CommandPalette({
     setSelectedIndex(0);
   }, [available, query]);
 
+  const closePalette = useCallback(() => {
+    onClose();
+    if (activePaneId) {
+      getTerminal(activePaneId)?.terminal.focus();
+    }
+  }, [activePaneId, onClose]);
+
   const runAction = useCallback(
     (command: string) => {
       if (command === "__split_vertical__") {
@@ -83,9 +129,9 @@ export function CommandPalette({
         sendAgentCommand(command);
       }
 
-      onClose();
+      closePalette();
     },
-    [activePaneId, closePane, onClose, onRenameRequest, onSettingsRequest, splitActivePane],
+    [activePaneId, closePalette, closePane, onRenameRequest, onSettingsRequest, splitActivePane],
   );
 
   useEffect(() => {
@@ -96,8 +142,12 @@ export function CommandPalette({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        closePalette();
         return;
+      }
+
+      if (dialogRef.current) {
+        trapTabInside(event, dialogRef.current);
       }
 
       if (event.key === "ArrowDown") {
@@ -126,17 +176,19 @@ export function CommandPalette({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [filtered, onClose, open, runAction, selectedIndex]);
+  }, [closePalette, filtered, open, runAction, selectedIndex]);
 
   if (!open) {
     return null;
   }
 
   return (
-    <div className="command-palette-backdrop" onClick={onClose}>
+    <div className="command-palette-backdrop" onClick={closePalette}>
       <div
+        ref={dialogRef}
         className="command-palette"
         role="dialog"
+        aria-modal="true"
         aria-label="Paleta de comandos"
         onClick={(event) => event.stopPropagation()}
       >
@@ -149,6 +201,9 @@ export function CommandPalette({
         />
 
         <ul className="command-palette__list">
+          {filtered.length === 0 && (
+            <li className="command-palette__empty">Nenhum comando encontrado</li>
+          )}
           {filtered.map((action, index) => (
             <li key={action.id}>
               <button

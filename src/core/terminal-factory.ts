@@ -10,11 +10,17 @@ import {
   loadRendererPreference,
   type TerminalRenderer,
 } from "./ui-preferences";
+import {
+  isTerminalPasteKey,
+  pasteClipboardIntoTerminal,
+} from "./terminal-clipboard";
 
 const SCROLLBACK = 5000;
 const MIN_COLS = 80;
 const MIN_ROWS = 24;
 const WEBGL_FAILED_KEY = "head-terminal.webgl-failed";
+/** One xterm write per rAF, capped so a huge burst still yields. */
+const MAX_FRAME_WRITE_BYTES = 192 * 1024;
 
 export interface ConfiguredTerminal {
   terminal: Terminal;
@@ -59,17 +65,9 @@ export function createConfiguredTerminal(): ConfiguredTerminal {
       return false;
     }
 
-    if (mod && event.shiftKey && event.key.toLowerCase() === "v") {
+    if (isTerminalPasteKey(event)) {
       event.preventDefault();
-      void window.headTerminal.clipboard.readText()
-        .then((text) => {
-          if (text) {
-            terminal.paste(text);
-          }
-        })
-        .catch((error) => {
-          logError("terminal.clipboard_read_failed", error);
-        });
+      pasteClipboardIntoTerminal(terminal);
       return false;
     }
 
@@ -87,30 +85,98 @@ export function createConfiguredTerminal(): ConfiguredTerminal {
     });
   }
 
-  const renderer = loadRendererPreference();
-  const webglEnabled = shouldEnableWebglRenderer(renderer);
-  logEvent("info", "terminal.renderer", {
-    webgl: webglEnabled,
-    preference: renderer,
-    reason: webglEnabled ? "enabled" : "dom",
-  });
-
-  if (webglEnabled) {
-    void import("@xterm/addon-webgl").then(({ WebglAddon }) => {
-      try {
-        const webglAddon = new WebglAddon();
-        terminal.loadAddon(webglAddon);
-        webglAddon.onContextLoss(() => {
-          markWebglFailed();
-          webglAddon.dispose();
-        });
-      } catch {
-        markWebglFailed();
-      }
-    });
-  }
-
   return { terminal, fitAddon, searchAddon };
+}
+
+export interface WebglController {
+  setVisible(visible: boolean): void;
+  dispose(): void;
+}
+
+/**
+ * GPU renderer for one pane. Attached only while that pane's session is
+ * visible; the xterm buffer stays. A context loss falls back on this pane
+ * and records the global auto-fail flag only if it was on screen.
+ */
+export function createWebglController(terminal: Terminal): WebglController {
+  let visible = false;
+  let disposed = false;
+  let addon: { dispose(): void } | null = null;
+  let loadToken = 0;
+
+  const dropAddon = () => {
+    const current = addon;
+    addon = null;
+    if (!current) {
+      return;
+    }
+    try {
+      current.dispose();
+    } catch {
+      // Addon may already be gone after a context loss.
+    }
+  };
+
+  const attach = () => {
+    if (disposed || !visible || addon) {
+      return;
+    }
+    const renderer = loadRendererPreference();
+    const webglEnabled = shouldEnableWebglRenderer(renderer);
+    logEvent("info", "terminal.renderer", {
+      webgl: webglEnabled,
+      preference: renderer,
+      reason: webglEnabled ? "enabled" : "dom",
+    });
+    if (!webglEnabled) {
+      return;
+    }
+
+    const token = ++loadToken;
+    void import("@xterm/addon-webgl")
+      .then(({ WebglAddon }) => {
+        if (disposed || !visible || token !== loadToken || addon) {
+          return;
+        }
+        try {
+          const webglAddon = new WebglAddon();
+          terminal.loadAddon(webglAddon);
+          webglAddon.onContextLoss(() => {
+            dropAddon();
+            if (visible && !disposed) {
+              markWebglFailed();
+            }
+          });
+          addon = webglAddon;
+        } catch {
+          if (visible && !disposed) {
+            markWebglFailed();
+          }
+        }
+      })
+      .catch(() => {
+        if (visible && !disposed) {
+          markWebglFailed();
+        }
+      });
+  };
+
+  return {
+    setVisible(nextVisible) {
+      visible = nextVisible;
+      if (nextVisible) {
+        attach();
+        return;
+      }
+      loadToken += 1;
+      dropAddon();
+    },
+    dispose() {
+      disposed = true;
+      loadToken += 1;
+      dropAddon();
+    },
+  };
 }
 
 function markWebglFailed(): void {
@@ -161,13 +227,26 @@ export function fitTerminal(fitAddon: FitAddon, terminal: Terminal): void {
 
 const frameTextDecoder = new TextDecoder();
 
+function concatChunks(chunks: Uint8Array[], bytes: number): Uint8Array {
+  if (chunks.length === 1) {
+    return chunks[0];
+  }
+  const merged = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged;
+}
+
 export function createRafPtyWriter(
   terminal: Terminal,
   onFrameText?: (text: string) => void,
+  isHidden?: () => boolean,
 ): (data: Uint8Array) => void {
-  let pending: Uint8Array[] = [];
+  const pending: Uint8Array[] = [];
   let rafId: number | null = null;
-  let pendingBytes = 0;
 
   const flush = () => {
     rafId = null;
@@ -175,12 +254,22 @@ export function createRafPtyWriter(
       return;
     }
 
-    const batch = pending;
-    const bytes = pendingBytes;
-    pending = [];
-    pendingBytes = 0;
+    let takeCount = 0;
+    let takeBytes = 0;
+    for (const chunk of pending) {
+      if (takeCount > 0 && takeBytes + chunk.byteLength > MAX_FRAME_WRITE_BYTES) {
+        break;
+      }
+      takeBytes += chunk.byteLength;
+      takeCount += 1;
+      if (takeBytes >= MAX_FRAME_WRITE_BYTES) {
+        break;
+      }
+    }
 
-    recordPtyReadBatch(bytes);
+    const batch = pending.splice(0, takeCount);
+    const merged = concatChunks(batch, takeBytes);
+    recordPtyReadBatch(takeBytes);
 
     // Hidden panes are written to just like visible ones: xterm pauses its
     // own renderer while a terminal sits outside the viewport (see
@@ -188,22 +277,16 @@ export function createRafPtyWriter(
     // parsing only — and switching sessions becomes a pure visibility flip
     // onto an already-correct, already-scrolled screen instead of replaying
     // a backlog.
-    for (const chunk of batch) {
-      terminal.write(chunk);
+    const skipDetectors = isHidden?.() === true || !onFrameText;
+    if (skipDetectors) {
+      terminal.write(merged);
+    } else {
+      const text = frameTextDecoder.decode(merged);
+      terminal.write(merged, () => onFrameText(text));
     }
 
-    if (onFrameText) {
-      const merged = new Uint8Array(bytes);
-      let offset = 0;
-      for (const chunk of batch) {
-        merged.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      const text = frameTextDecoder.decode(merged);
-      // Detectores (activity/workspace/context) rodam regex sobre o frame —
-      // adiados para depois do write/paint deste frame, senão travam a
-      // digitação e a pintura do próprio output que estão analisando.
-      setTimeout(() => onFrameText(text), 0);
+    if (pending.length > 0 && rafId === null) {
+      rafId = requestAnimationFrame(flush);
     }
   };
 
@@ -213,7 +296,6 @@ export function createRafPtyWriter(
     }
 
     pending.push(data);
-    pendingBytes += data.byteLength;
 
     if (rafId === null) {
       rafId = requestAnimationFrame(flush);

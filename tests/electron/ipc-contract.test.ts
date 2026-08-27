@@ -21,6 +21,14 @@ const electron = vi.hoisted(() => {
     clipboard: {
       readText: vi.fn(() => "clipboard value"),
       writeText: vi.fn(),
+      readImage: vi.fn(() => ({
+        isEmpty: () => true,
+        getSize: () => ({ width: 0, height: 0 }),
+        toPNG: () => Buffer.alloc(0),
+      })),
+      availableFormats: vi.fn(() => ["text/plain"]),
+      read: vi.fn(() => ""),
+      readBuffer: vi.fn(() => Buffer.alloc(0)),
     },
     ipcMain: {
       handle: vi.fn((channel: string, listener: (...args: unknown[]) => unknown) => {
@@ -116,7 +124,7 @@ describe("Electron IPC contract", () => {
     const channels = flattenChannels(IPC_CHANNELS);
 
     expect(new Set(channels).size).toBe(channels.length);
-    expect(channels).toHaveLength(46);
+    expect(channels).toHaveLength(48);
     expect(channels.every((channel) => /^[a-z]+:[a-z][a-z-]*$/.test(channel))).toBe(true);
   });
 
@@ -239,5 +247,57 @@ describe("Electron IPC contract", () => {
 
     send(IPC_CHANNELS.app.respondToClose, harness.trustedEvent, true);
     expect(harness.window.close).toHaveBeenCalledOnce();
+  });
+
+  it("turns an empty clipboard into a no-op paste payload", async () => {
+    electron.clipboard.readText.mockReturnValue("");
+    const harness = fakeWindow();
+    registerIpc({ window: harness.window });
+
+    expect(
+      await invoke(IPC_CHANNELS.clipboard.readForTerminal, harness.trustedEvent),
+    ).toBeNull();
+    expect(
+      await invoke(IPC_CHANNELS.clipboard.importPaths, harness.trustedEvent, []),
+    ).toBeNull();
+  });
+
+  it("kills owner PTYs on in-page reload and still cleans up on destroy", () => {
+    const harness = fakeWindow();
+    const cleanup = vi.fn();
+    const services: IpcServices = {
+      terminal: {
+        spawn: vi.fn(),
+        write: vi.fn(),
+        resize: vi.fn(),
+        kill: vi.fn(),
+        cleanup,
+      },
+    };
+    registerIpc({ window: harness.window, services });
+
+    const listenerFor = (event: string) => {
+      const call = vi.mocked(harness.window.webContents.on).mock.calls.find(
+        ([name]) => name === event,
+      );
+      if (typeof call?.[1] !== "function") {
+        throw new Error(`missing ${event} listener`);
+      }
+      return call[1] as () => void;
+    };
+
+    const onReload = listenerFor("did-start-loading");
+    const onDestroyed = listenerFor("destroyed");
+    const onGone = listenerFor("render-process-gone");
+
+    onReload();
+    expect(cleanup).toHaveBeenCalledWith(73);
+    onReload();
+    expect(cleanup).toHaveBeenCalledTimes(2);
+
+    onDestroyed();
+    expect(cleanup).toHaveBeenCalledTimes(3);
+    onGone();
+    expect(cleanup).toHaveBeenCalledTimes(3);
   });
 });

@@ -1,6 +1,6 @@
 import { decodePtyData } from "./pty-text";
 
-const RECENT_TEXT_LIMIT = 600;
+const RECENT_TEXT_LIMIT = 400;
 
 // Avisos de contexto restante impressos por agents (Claude Code e afins).
 // ponytail: casa texto plano; ANSI no meio das palavras quebra o match —
@@ -47,9 +47,8 @@ export class ContextMeter {
   constructor(private readonly onPercent: (percent: number) => void) {}
 
   onData(data: string | Uint8Array): void {
-    this.recentText = (this.recentText + decodePtyData(data)).slice(
-      -RECENT_TEXT_LIMIT,
-    );
+    this.recentText =
+      this.recentText.slice(-RECENT_TEXT_LIMIT) + decodePtyData(data);
 
     const percent = extractContextPercent(this.recentText);
     if (percent !== null && percent !== this.lastPercent) {

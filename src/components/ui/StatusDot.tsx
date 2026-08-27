@@ -23,11 +23,12 @@ export function StatusDot({
 }: StatusDotProps) {
   const shouldPulse = pulse || activity === "working";
   const color = ACTIVITY_COLOR[activity];
+  const exited = activity === "exited";
 
   return (
     <span
-      className={`status-dot ${shouldPulse ? "status-dot--pulse" : ""} ${className}`.trim()}
-      style={{ backgroundColor: color, color }}
+      className={`status-dot ${shouldPulse ? "status-dot--pulse" : ""} ${exited ? "status-dot--exited" : ""} ${className}`.trim()}
+      style={{ backgroundColor: exited ? undefined : color, color }}
       title={ACTIVITY_LABEL[activity]}
       aria-hidden
     />

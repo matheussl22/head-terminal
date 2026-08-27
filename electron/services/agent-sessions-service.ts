@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { ResumableSessionEntry } from "../types/api";
+import { toPosixPath } from "./wsl-service";
 
 const MAX_ENTRIES = 20;
 const CLAUDE_TITLE_SCAN_LINES = 50;
@@ -32,13 +33,33 @@ export interface AgentSessionRoots {
   cursorProjectsRoot: string;
 }
 
+/** Linux `$HOME` (UNC on Windows) or the native homedir. Extracted so a
+ * WSL pane's transcripts are not looked up under `C:\Users\...` while the
+ * CLI writes them to `/root/.claude`. */
+export function resolveAgentSessionRoots(options: {
+  posixHome: string | null;
+  toWindowsPath?: (posix: string) => string;
+  nativeHome?: string;
+}): AgentSessionRoots {
+  const nativeHome = options.nativeHome ?? homedir();
+  const posixHome = options.posixHome;
+  const toWindowsPath = options.toWindowsPath;
+  const base = posixHome
+    ? (suffix: string) => {
+        const posix = `${posixHome}${suffix}`;
+        return toWindowsPath ? toWindowsPath(posix) : posix;
+      }
+    : (suffix: string) => join(nativeHome, ...suffix.slice(1).split("/"));
+  return {
+    claudeProjectsRoot: base("/.claude/projects"),
+    codexRoot: base("/.codex"),
+    cursorProjectsRoot: base("/.cursor/projects"),
+  };
+}
+
 /** Overridable in tests so nothing here ever touches the real `$HOME`. */
 function defaultRoots(): AgentSessionRoots {
-  return {
-    claudeProjectsRoot: join(homedir(), ".claude", "projects"),
-    codexRoot: join(homedir(), ".codex"),
-    cursorProjectsRoot: join(homedir(), ".cursor", "projects"),
-  };
+  return resolveAgentSessionRoots({ posixHome: null });
 }
 
 // Scaffolding injected around the user's actual text in Claude/Cursor
@@ -71,8 +92,12 @@ function formatFallbackTitle(ms: number): string {
 
 /** A listed session before the list is handed to the renderer: carries the
  * extra context the collapse/disambiguate passes need, none of which crosses
- * the IPC boundary. */
-interface DraftEntry extends ResumableSessionEntry {
+ * the IPC boundary. `fromTranscript` is derived from `titleSource` only in
+ * `toResumableEntry`. */
+interface DraftEntry {
+  id: string;
+  title: string;
+  updatedAt: string;
   /** Cleaned opening message, longer than the title. */
   titleSource?: string;
   /** Id of the transcript's opening record. A `--resume` can copy the whole
@@ -82,7 +107,12 @@ interface DraftEntry extends ResumableSessionEntry {
 }
 
 function toResumableEntry(entry: DraftEntry): ResumableSessionEntry {
-  return { id: entry.id, title: entry.title, updatedAt: entry.updatedAt };
+  return {
+    id: entry.id,
+    title: entry.title,
+    updatedAt: entry.updatedAt,
+    fromTranscript: Boolean(entry.titleSource),
+  };
 }
 
 /** Drops the older copies a `--resume` fork leaves behind, keeping the newest
@@ -257,6 +287,24 @@ function firstTextBlock(content: unknown): string | undefined {
  * leave every pane on Windows unable to anchor: no anchor persisted, and every
  * restart opening a blank conversation instead of resuming.
  */
+function cwdLookupSpellings(cwd: string): string[] {
+  const posix = toPosixPath(cwd);
+  return [...new Set([cwd, cwd.replaceAll("\\", "/"), posix])];
+}
+
+async function resolveEncodedProjectDir(
+  root: string,
+  cwd: string,
+  encode: (cwd: string) => string,
+): Promise<string | null> {
+  const encodings = [...new Set(cwdLookupSpellings(cwd).map(encode))];
+  for (const encoded of encodings) {
+    const dir = await resolveProjectDir(root, encoded);
+    if (dir) return dir;
+  }
+  return null;
+}
+
 async function resolveProjectDir(
   root: string,
   encoded: string,
@@ -340,7 +388,11 @@ async function listClaudeSessions(
   // the wrong root either lists the wrong account's history or an id that
   // doesn't exist under this pane's config dir, and --resume fails.
   const root = claudeConfigDir ? join(claudeConfigDir, "projects") : claudeProjectsRoot;
-  const dir = await resolveProjectDir(root, encodeClaudeProjectDir(cwd));
+  const dir = await resolveEncodedProjectDir(
+    root,
+    cwd,
+    encodeClaudeProjectDir,
+  );
   if (!dir) return [];
 
   let files;
@@ -481,30 +533,38 @@ async function listCodexSessions(
     readCodexIndex(codexRoot),
   ]);
 
-  const matches: Array<{ id: string; title: string; effectiveMs: number }> = [];
+  const matches: Array<{
+    id: string;
+    title: string;
+    effectiveMs: number;
+    fromTranscript: boolean;
+  }> = [];
   for (const file of files) {
     const meta = await readCodexSessionMeta(file.path).catch(() => null);
-    if (!meta || meta.cwd !== cwd) continue;
+    if (!meta || toPosixPath(meta.cwd) !== toPosixPath(cwd)) continue;
     const indexed = index.get(meta.id);
     // Sort key must match what gets displayed — mixing the index's
     // updated_at with the file's own mtime produces a list that looks
     // out of order even though each half is individually sorted.
     const indexedMs = indexed?.updatedAt ? Date.parse(indexed.updatedAt) : NaN;
     const effectiveMs = Number.isNaN(indexedMs) ? file.mtime : indexedMs;
+    const threadName = indexed?.threadName?.trim() ?? "";
     matches.push({
       id: meta.id,
-      title: indexed?.threadName?.trim() || formatFallbackTitle(effectiveMs),
+      title: threadName || formatFallbackTitle(effectiveMs),
       effectiveMs,
+      fromTranscript: Boolean(threadName),
     });
   }
 
   return matches
     .sort((a, b) => b.effectiveMs - a.effectiveMs)
     .slice(0, MAX_ENTRIES)
-    .map(({ id, title, effectiveMs }) => ({
+    .map(({ id, title, effectiveMs, fromTranscript }) => ({
       id,
       title,
       updatedAt: new Date(effectiveMs).toISOString(),
+      titleSource: fromTranscript ? title : undefined,
     }));
 }
 
@@ -541,9 +601,10 @@ async function listCursorSessions(
   cwd: string,
   cursorProjectsRoot: string,
 ): Promise<DraftEntry[]> {
-  const projectDir = await resolveProjectDir(
+  const projectDir = await resolveEncodedProjectDir(
     cursorProjectsRoot,
-    encodeCursorProjectDir(cwd),
+    cwd,
+    encodeCursorProjectDir,
   );
   if (!projectDir) return [];
 

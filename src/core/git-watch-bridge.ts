@@ -40,8 +40,9 @@ export async function fetchGitContext(cwd: string): Promise<GitContext> {
 export async function startGitWatch(
   watchId: string,
   cwd: string,
-): Promise<void> {
-  await window.headTerminal.git.watch({ watchId, cwd });
+): Promise<{ polling: boolean }> {
+  const result = await window.headTerminal.git.watch({ watchId, cwd });
+  return { polling: Boolean(result?.polling) };
 }
 
 export async function stopGitWatch(watchId: string): Promise<void> {

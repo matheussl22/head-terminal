@@ -79,6 +79,14 @@ describe("git-watch-bridge", () => {
     expect(git.unwatch).toHaveBeenCalledWith("pane:1");
   });
 
+  it("reports when main is already polling", async () => {
+    const git = installGitMock();
+    git.watch.mockResolvedValue({ polling: true });
+    await expect(startGitWatch("pane:1", "/repo")).resolves.toEqual({
+      polling: true,
+    });
+  });
+
   it("routes changed events and exposes the preload unsubscribe", async () => {
     const git = installGitMock();
     const onChange = vi.fn();

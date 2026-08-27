@@ -298,11 +298,12 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  opacity: 0;
+  opacity: 0.55;
   transition: opacity var(--transition-fast);
 }
 
 .session-sidebar__item:hover .session-sidebar__actions,
+.session-sidebar__item:focus-within .session-sidebar__actions,
 .session-sidebar__item--active .session-sidebar__actions {
   opacity: 1;
 }
@@ -402,7 +403,9 @@
 }
 
 .session-sidebar__pane-dot--exited {
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent;
+  box-sizing: border-box;
+  border: 1.5px solid var(--status-exited);
 }
 
 .session-sidebar__git-badge {

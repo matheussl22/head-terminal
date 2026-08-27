@@ -1,4 +1,5 @@
 import { getShellPath } from "../core/agent-launcher";
+import { HT_UNIX_CMD_FN, UNIX_USER_BIN_PATH_EXPORT } from "../core/unix-cli-probe";
 
 export interface AgentProfile {
   id: string;
@@ -19,7 +20,7 @@ export const AGENT_RESUME_FALLBACK_OSC = 7771;
 
 /** How long a resumed agent has to live before its failure counts as a real
  * session ending rather than a resume that never started. */
-const RESUME_FAILURE_WINDOW_SECONDS = 5;
+const RESUME_FAILURE_WINDOW_SECONDS = 30;
 
 // Session ids picked from the resume dropdown are always claude/codex/cursor
 // UUIDs (see electron/services/agent-sessions-service.ts) or codex's rollout
@@ -57,24 +58,28 @@ function withShellFallback(agentCmd: string): string[] {
   return [
     "-l",
     "-c",
-    `${agentCmd}; printf "\\033]${AGENT_FALLBACK_OSC};agent-exited:%s\\007" $?; exec zsh -l`,
+    `${UNIX_USER_BIN_PATH_EXPORT}; ${agentCmd}; printf "\\033]${AGENT_FALLBACK_OSC};agent-exited:%s\\007" $?; exec zsh -l`,
   ];
 }
 
 /**
  * The official installer puts the CLI on the PATH as `cursor-agent`, while
  * older setups reach it as the `agent` subcommand of `cursor`. Neither name is
- * safe to hardcode, so the pane picks whichever the shell can actually find —
- * otherwise the pane opens straight into `command not found`.
+ * safe to hardcode, so the pane picks whichever the shell can actually find.
+ *
+ * WSL interop also finds the Windows `cursor-agent.cmd`; executing that as a
+ * Unix script is what produced `@echo: not found` in the pane. `ht_unix_cmd`
+ * skips those hits so a missing Linux CLI fails cleanly (and can be installed)
+ * instead of crashing the agent.
  */
 const CURSOR_SHIM =
-  'ht_cursor() { if command -v cursor-agent >/dev/null 2>&1; '
-  + 'then cursor-agent "$@"; '
-  + 'elif command -v cursor-agent.cmd >/dev/null 2>&1; '
-  + 'then cursor-agent.cmd "$@"; '
-  + 'elif command -v cursor-agent.exe >/dev/null 2>&1; '
-  + 'then cursor-agent.exe "$@"; '
-  + 'else cursor agent "$@"; fi; }; ';
+  HT_UNIX_CMD_FN
+  + "ht_cursor() { "
+  + "if ht_unix_cmd cursor-agent; then cursor-agent \"$@\"; "
+  + "elif ht_unix_cmd cursor; then cursor agent \"$@\"; "
+  + "else printf '%s\\n' "
+  + "'[head-terminal] cursor-agent Linux não encontrado "
+  + "(o .cmd do Windows não roda no WSL)' >&2; return 127; fi; }; ";
 
 function cursorWithFallbackArgs(
   continueConversation: boolean,

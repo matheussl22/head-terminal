@@ -44,6 +44,11 @@ interface AgentCliStatus {
 
 let cliStatusCache: AgentCliStatus | null = null;
 
+function folderChipLabel(path: string): string {
+  const segments = path.split(/[/\\]/).filter(Boolean);
+  return segments.at(-1) ?? path;
+}
+
 function AgentIcon({ id }: { id: string }) {
   if (id === "antigravity") return <IconActivity size={18} />;
   if (id === "claude") return <IconAgentClaude size={18} />;
@@ -79,9 +84,19 @@ export function CreateSessionDialog({
       return;
     }
     const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
+      if (event.key !== "Escape") {
+        return;
       }
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement
+      ) {
+        event.stopImmediatePropagation();
+        return;
+      }
+      onClose();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -142,14 +157,22 @@ export function CreateSessionDialog({
           window.headTerminal.system.checkAgentClis().then((status) => {
             cliStatusCache = status;
             setCliStatus(status);
-          }).catch(() =>
-            setCliStatus({
-              antigravity: true,
-              cursor: true,
-              claude: true,
-              codex: true,
-            }),
-          ),
+            if (
+              lastAgent !== "shell" &&
+              !status[lastAgent as keyof AgentCliStatus]
+            ) {
+              setAgentProfileId(status.cursor ? "cursor" : "shell");
+            }
+          }).catch(() => {
+            const none: AgentCliStatus = {
+              antigravity: false,
+              cursor: false,
+              claude: false,
+              codex: false,
+            };
+            setCliStatus(none);
+            setAgentProfileId("shell");
+          }),
         )
         .finally(() => setEnsuringClis(false));
     }
@@ -162,10 +185,13 @@ export function CreateSessionDialog({
   const profiles = Object.values(buildAgentProfiles());
 
   const isAgentAvailable = (id: string): boolean => {
-    if (!cliStatus || id === "shell") {
+    if (id === "shell") {
       return true;
     }
-    return cliStatus[id as keyof AgentCliStatus] ?? true;
+    if (!cliStatus) {
+      return false;
+    }
+    return cliStatus[id as keyof AgentCliStatus] ?? false;
   };
 
   const validateAndCreate = async () => {
@@ -259,7 +285,7 @@ export function CreateSessionDialog({
                 setCwd(event.target.value);
                 setCwdError(null);
               }}
-              placeholder="/home/user/projeto"
+              placeholder="C:\Users\projeto"
             />
             <button
               type="button"
@@ -281,12 +307,13 @@ export function CreateSessionDialog({
                 key={item}
                 type="button"
                 className="create-session-dialog__chip"
+                title={item}
                 onClick={() => {
                   setCwd(item);
                   setCwdError(null);
                 }}
               >
-                {item.split("/").pop() ?? item}
+                {folderChipLabel(item)}
               </button>
             ))}
           </div>
@@ -378,7 +405,9 @@ export function CreateSessionDialog({
             type="button"
             className="create-session-dialog__create"
             disabled={
-              creating || (agentProfileId === "claude" && !claudeAccountId)
+              creating
+              || !isAgentAvailable(agentProfileId)
+              || (agentProfileId === "claude" && !claudeAccountId)
             }
             onClick={() => void validateAndCreate()}
           >

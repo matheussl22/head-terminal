@@ -1,6 +1,6 @@
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { arch, homedir } from "node:os";
+import { arch } from "node:os";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -17,6 +17,7 @@ import { IPC_CHANNELS } from "./ipc/channels";
 import { registerIpc, type IpcServices } from "./ipc/register";
 import {
   listResumableSessions,
+  resolveAgentSessionRoots,
   type AgentSessionRoots,
 } from "./services/agent-sessions-service";
 import {
@@ -48,8 +49,16 @@ import { WslService } from "./services/wsl-service";
 
 const RUN_ID = randomUUID().replaceAll("-", "");
 
-if (!app.isPackaged) {
+if (process.env.HEAD_TERMINAL_USER_DATA) {
+  app.setPath("userData", process.env.HEAD_TERMINAL_USER_DATA);
+} else if (!app.isPackaged) {
   app.setPath("userData", `${app.getPath("userData")} Dev`);
+}
+
+const e2eCdpPort = process.env.HEAD_TERMINAL_E2E_CDP;
+if (e2eCdpPort) {
+  app.commandLine.appendSwitch("remote-debugging-port", e2eCdpPort);
+  app.commandLine.appendSwitch("remote-allow-origins", "*");
 }
 
 // Windows silently drops notifications from a process whose AppUserModelId
@@ -110,6 +119,8 @@ if (!gotSingleInstanceLock) {
   const requestSignalShutdown = () => app.quit();
   process.on("SIGTERM", requestSignalShutdown);
   process.on("SIGINT", requestSignalShutdown);
+  process.on("unhandledRejection", (reason) => { console.error("unhandledRejection", reason); });
+  process.on("uncaughtException", (error) => { console.error("uncaughtException", error); app.quit(); });
 
   const focusMainWindow = () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -346,6 +357,7 @@ async function createServices(): Promise<{
     migration: {
       loadPreferences: () => migration.loadMigratedPreferences(),
     },
+    toAgentPath: (windowsPath) => wsl.toPosixPath(windowsPath),
   };
 
   void ensureAgentClis()
@@ -375,7 +387,7 @@ async function createServices(): Promise<{
       disposePromise = (async () => {
         if (disposed) return;
         disposed = true;
-        pty.dispose();
+        await pty.dispose();
         git.dispose();
         await Promise.all([
           voice.dispose(),
@@ -391,15 +403,10 @@ async function createServices(): Promise<{
 
 /** Session transcripts live in the Linux home even when the app is Windows. */
 function agentSessionRoots(wsl: WslService): AgentSessionRoots {
-  const home = wsl.isWslMode() ? wsl.home : null;
-  const base = home
-    ? (posix: string) => wsl.toWindowsPath(`${home}${posix}`)
-    : (posix: string) => path.join(homedir(), posix.slice(1).replaceAll("/", path.sep));
-  return {
-    claudeProjectsRoot: base("/.claude/projects"),
-    codexRoot: base("/.codex"),
-    cursorProjectsRoot: base("/.cursor/projects"),
-  };
+  return resolveAgentSessionRoots({
+    posixHome: wsl.isWslMode() ? wsl.home : null,
+    toWindowsPath: (posix) => wsl.toWindowsPath(posix),
+  });
 }
 
 function createMainWindow(): BrowserWindow {
@@ -421,12 +428,17 @@ function createMainWindow(): BrowserWindow {
 
   bindWindowsTaskbarLaunch(window);
 
-  window.once("ready-to-show", () => window.show());
+  const hideWindow = process.env.HEAD_TERMINAL_NO_FOCUS === "1";
+  window.once("ready-to-show", () => {
+    if (!hideWindow) window.show();
+  });
   window.webContents.once("did-finish-load", () => {
     // Some virtual displays and GPU-less Linux sessions never emit
     // ready-to-show even though the renderer is fully loaded.
-    if (!window.isDestroyed() && !window.isVisible()) window.show();
-    if (process.env.HEAD_TERMINAL_SMOKE === "1") {
+    if (!hideWindow && !window.isDestroyed() && !window.isVisible()) {
+      window.show();
+    }
+    if (process.env.HEAD_TERMINAL_SMOKE === "1" || hideWindow) {
       console.info("HEAD_TERMINAL_RENDERER_READY");
     }
   });

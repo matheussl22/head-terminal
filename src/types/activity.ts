@@ -26,10 +26,10 @@ export const NEEDS_ATTENTION: ReadonlySet<PaneActivity> = new Set([
 
 export const ACTIVITY_LABEL: Record<PaneActivity, string> = {
   starting: "Iniciando",
-  idle: "Ativo",
+  idle: "Pronto",
   working: "Executando",
   waiting_input: "Aguardando",
-  agent_fallback: "Agent caiu — shell ativo",
+  agent_fallback: "Shell",
   error: "Erro",
   exited: "Encerrado",
 };

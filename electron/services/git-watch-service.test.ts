@@ -118,6 +118,7 @@ describe("GitWatchService", () => {
 
     await service.watch({ watchId: "pane:1", cwd: repo });
     listener.mockClear();
+    expect(service.isPolling()).toBe(true);
 
     // A quiet repository must not produce one event per tick.
     await new Promise((resolve) => setTimeout(resolve, 250));

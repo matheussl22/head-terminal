@@ -3,11 +3,15 @@ import type { ReactNode } from "react";
 interface TooltipProps {
   content: string;
   children: ReactNode;
+  below?: boolean;
 }
 
-export function Tooltip({ content, children }: TooltipProps) {
+export function Tooltip({ content, children, below = false }: TooltipProps) {
   return (
-    <span className="tooltip" data-tooltip={content}>
+    <span
+      className={below ? "tooltip tooltip--below" : "tooltip"}
+      data-tooltip={content}
+    >
       {children}
     </span>
   );
