@@ -36,6 +36,9 @@ interface UsePtyProcessOptions {
   cwd: string;
   agentProfileId: string;
   claudeAccountId?: string;
+  ollamaModel?: string;
+  ollamaThinkOff?: boolean;
+  ggufPath?: string;
   restartKey: number;
   continueConversation: boolean;
   resumeSessionId?: string;
@@ -54,6 +57,9 @@ export function usePtyProcess({
   cwd,
   agentProfileId,
   claudeAccountId,
+  ollamaModel,
+  ollamaThinkOff,
+  ggufPath,
   restartKey,
   continueConversation,
   resumeSessionId,
@@ -160,6 +166,9 @@ export function usePtyProcess({
         const profile = getAgentProfile(agentProfileId, {
           continueConversation,
           resumeSessionId,
+          ollamaModel,
+          ollamaThinkOff,
+          ggufPath,
         });
         const claudeConfigDir = claudeAccountId
           ? resolveClaudeConfigDir(claudeAccountId)
@@ -301,6 +310,9 @@ export function usePtyProcess({
   }, [
     agentProfileId,
     claudeAccountId,
+    ollamaModel,
+    ollamaThinkOff,
+    ggufPath,
     continueConversation,
     resumeSessionId,
     cwd,

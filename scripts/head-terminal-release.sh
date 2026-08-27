@@ -41,5 +41,7 @@ LOG_DIR="$(ensure_log_dir)"
 LOG_FILE="$LOG_DIR/prod.log"
 export HEAD_TERMINAL_CHANNEL="prod"
 
-echo "----- $(date -Is) electron:prod bin=$RELEASE_BINARY DISPLAY=${DISPLAY:-wayland} -----" >>"$LOG_FILE"
-exec "$RELEASE_BINARY" "${RELEASE_ARGS[@]}" >>"$LOG_FILE" 2>&1
+mapfile -t KEYRING_ARGS < <(keyring_fallback_args)
+
+echo "----- $(date -Is) electron:prod bin=$RELEASE_BINARY DISPLAY=${DISPLAY:-wayland} keyring=${KEYRING_ARGS[*]:-ok} -----" >>"$LOG_FILE"
+exec "$RELEASE_BINARY" "${RELEASE_ARGS[@]}" "${KEYRING_ARGS[@]}" >>"$LOG_FILE" 2>&1

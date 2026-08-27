@@ -58,9 +58,11 @@ export interface IpcServices {
     getDefaultCwd(): Promise<string> | string;
     pathExists(path: string): Promise<boolean>;
     selectDirectory(window: BrowserWindow, defaultPath?: string): Promise<string | null>;
+    selectFile?(window: BrowserWindow, defaultPath?: string): Promise<string | null>;
     confirm(window: BrowserWindow, input: ConfirmInput): Promise<boolean>;
     checkAgentClis(): Promise<AgentCliStatus>;
     ensureAgentClis(): Promise<AgentCliInstallResult>;
+    listOllamaModels?(): Promise<string[]>;
     deleteClaudeProfile(path: string): Promise<void>;
     getPlatform(): Promise<PlatformInfo> | PlatformInfo;
     selectWslDistro?(distro: string): Promise<boolean>;
@@ -239,6 +241,12 @@ export function registerIpc({
       value === undefined ? undefined : asString(value, "defaultPath", { maxLength: 16_384 }),
     ) ?? unsupported("system.selectDirectory"),
   );
+  handle(IPC_CHANNELS.system.selectFile, (_event, value) =>
+    services.system?.selectFile?.(
+      window,
+      value === undefined ? undefined : asString(value, "defaultPath", { maxLength: 16_384 }),
+    ) ?? unsupported("system.selectFile"),
+  );
   handle(IPC_CHANNELS.system.confirm, (_event, value) =>
     services.system?.confirm(window, validateConfirmInput(value)) ??
       unsupported("system.confirm"),
@@ -248,6 +256,10 @@ export function registerIpc({
   );
   handle(IPC_CHANNELS.system.ensureAgentClis, () =>
     services.system?.ensureAgentClis() ?? unsupported("system.ensureAgentClis"),
+  );
+  handle(IPC_CHANNELS.system.listOllamaModels, () =>
+    services.system?.listOllamaModels?.() ??
+      unsupported("system.listOllamaModels"),
   );
   handle(IPC_CHANNELS.system.deleteClaudeProfile, (_event, value) =>
     services.system?.deleteClaudeProfile(

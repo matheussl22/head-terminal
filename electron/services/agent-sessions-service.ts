@@ -5,15 +5,18 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { ResumableSessionEntry } from "../types/api";
+import { TITLE_MAX_LENGTH, summarizeTitle } from "./session-title";
 
 const MAX_ENTRIES = 20;
 const CLAUDE_TITLE_SCAN_LINES = 50;
 const CODEX_MAX_CANDIDATE_FILES = 300;
+// The user's first prompt only comes after the CLI's own header records
+// (instructions, permissions, environment), so the scan has to reach past them.
+const CODEX_TITLE_SCAN_LINES = 40;
 // A fork is only visible after its file's head has been read, so a few extra
 // candidates are inspected — otherwise collapsing the copies would leave the
 // list shorter than MAX_ENTRIES.
 const CLAUDE_MAX_CANDIDATE_FILES = MAX_ENTRIES * 2;
-const TITLE_MAX_LENGTH = 80;
 // Kept past the title itself so conversations opened with the same pasted
 // prompt can still be told apart (see disambiguateTitles).
 const TITLE_SOURCE_MAX_LENGTH = 400;
@@ -47,7 +50,15 @@ function defaultRoots(): AgentSessionRoots {
 // wraps the real question, so just its tag markers are stripped.
 const STRIP_BLOCK_TAG =
   /<(local-command-caveat|command-name|command-message|command-args|timestamp)>[\s\S]*?<\/\1>/gi;
+// A command's output can be longer than the window the head scan reads, so
+// its closing tag may never show up — dropping to the end of what was read is
+// what keeps a "Set model to Sonnet" echo from becoming a conversation's name.
+const STRIP_OUTPUT_BLOCK =
+  /<(local-command-stdout|local-command-stderr)>[\s\S]*?(?:<\/\1>|$)/gi;
 const STRIP_TAG_ONLY = /<\/?user_query[^>]*>/gi;
+// Attachment placeholders: they say a screenshot was pasted, never what for.
+const STRIP_ATTACHMENT = /\[(?:image|imagem|screenshot)(?:\s*#\d+)?\]/gi;
+const STRIP_ANSI = /\u001B\[[0-9;]*[A-Za-z]/g;
 
 function isEnoent(error: unknown): boolean {
   return (error as NodeJS.ErrnoException)?.code === "ENOENT";
@@ -59,8 +70,11 @@ function truncate(text: string, max: number): string {
 
 function cleanTitleText(raw: string): string {
   return raw
+    .replace(STRIP_OUTPUT_BLOCK, " ")
     .replace(STRIP_BLOCK_TAG, " ")
     .replace(STRIP_TAG_ONLY, " ")
+    .replace(STRIP_ATTACHMENT, " ")
+    .replace(STRIP_ANSI, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -241,7 +255,11 @@ function firstTextBlock(content: unknown): string | undefined {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
     const block = content.find(
-      (item) => item && typeof item === "object" && (item as { type?: unknown }).type === "text",
+      (item) =>
+        item
+        && typeof item === "object"
+        && ((item as { type?: unknown }).type === "text"
+          || (item as { type?: unknown }).type === "input_text"),
     ) as { text?: unknown } | undefined;
     if (typeof block?.text === "string") return block.text;
   }
@@ -375,7 +393,7 @@ async function listClaudeSessions(
       return {
         id: candidate.id,
         title: head.titleSource
-          ? truncate(head.titleSource, TITLE_MAX_LENGTH)
+          ? summarizeTitle(head.titleSource)
           : formatFallbackTitle(candidate.mtime),
         updatedAt: new Date(candidate.mtime).toISOString(),
         titleSource: head.titleSource,
@@ -472,6 +490,34 @@ async function readCodexSessionMeta(filePath: string): Promise<{ id: string; cwd
   return { id, cwd: record.payload.cwd };
 }
 
+/** Prompts the CLI injects before the user gets to type: naming a session
+ * after one of these would give every Codex conversation the same title. */
+const CODEX_INJECTED_PROMPT =
+  /^\s*(?:<(?:environment_context|user_instructions|permissions)|#\s*AGENTS\.md)/iu;
+
+/** Codex only names a session once the user runs `/name`, so most rollouts
+ * would show up as a bare timestamp. The opening prompt is a better name, and
+ * it sits a few records past the header the CLI writes first. */
+async function readCodexTitleSource(filePath: string): Promise<string | undefined> {
+  const lines = await readFirstLines(filePath, CODEX_TITLE_SCAN_LINES);
+  for (const line of lines) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const payload = (parsed as { payload?: { type?: unknown; role?: unknown; content?: unknown } })
+      .payload;
+    if (payload?.type !== "message" || payload.role !== "user") continue;
+    const text = firstTextBlock(payload.content);
+    if (typeof text !== "string" || CODEX_INJECTED_PROMPT.test(text)) continue;
+    const cleaned = cleanTitleText(text);
+    if (cleaned) return truncate(cleaned, TITLE_SOURCE_MAX_LENGTH);
+  }
+  return undefined;
+}
+
 async function listCodexSessions(
   cwd: string,
   codexRoot: string,
@@ -481,7 +527,12 @@ async function listCodexSessions(
     readCodexIndex(codexRoot),
   ]);
 
-  const matches: Array<{ id: string; title: string; effectiveMs: number }> = [];
+  const matches: Array<{
+    id: string;
+    path: string;
+    threadName?: string;
+    effectiveMs: number;
+  }> = [];
   for (const file of files) {
     const meta = await readCodexSessionMeta(file.path).catch(() => null);
     if (!meta || meta.cwd !== cwd) continue;
@@ -493,19 +544,33 @@ async function listCodexSessions(
     const effectiveMs = Number.isNaN(indexedMs) ? file.mtime : indexedMs;
     matches.push({
       id: meta.id,
-      title: indexed?.threadName?.trim() || formatFallbackTitle(effectiveMs),
+      path: file.path,
+      threadName: indexed?.threadName?.trim() || undefined,
       effectiveMs,
     });
   }
 
-  return matches
-    .sort((a, b) => b.effectiveMs - a.effectiveMs)
-    .slice(0, MAX_ENTRIES)
-    .map(({ id, title, effectiveMs }) => ({
-      id,
-      title,
-      updatedAt: new Date(effectiveMs).toISOString(),
-    }));
+  // Only the rows that make the list are worth a second pass over their file.
+  return Promise.all(
+    matches
+      .sort((a, b) => b.effectiveMs - a.effectiveMs)
+      .slice(0, MAX_ENTRIES)
+      .map(async (match) => {
+        const titleSource = match.threadName
+          ? undefined
+          : await readCodexTitleSource(match.path).catch(() => undefined);
+        return {
+          id: match.id,
+          title:
+            match.threadName
+            ?? (titleSource
+              ? summarizeTitle(titleSource)
+              : formatFallbackTitle(match.effectiveMs)),
+          updatedAt: new Date(match.effectiveMs).toISOString(),
+          titleSource,
+        };
+      }),
+  );
 }
 
 // --- Cursor: ~/.cursor/projects/<cwd-encoded>/agent-transcripts/<chatId>/<chatId>.jsonl ---
@@ -580,7 +645,7 @@ async function listCursorSessions(
       return {
         id: candidate.id,
         title: titleSource
-          ? truncate(titleSource, TITLE_MAX_LENGTH)
+          ? summarizeTitle(titleSource)
           : formatFallbackTitle(candidate.mtime),
         updatedAt: new Date(candidate.mtime).toISOString(),
         titleSource: titleSource ?? undefined,

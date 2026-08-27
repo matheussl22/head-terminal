@@ -116,7 +116,7 @@ describe("Electron IPC contract", () => {
     const channels = flattenChannels(IPC_CHANNELS);
 
     expect(new Set(channels).size).toBe(channels.length);
-    expect(channels).toHaveLength(46);
+    expect(channels).toHaveLength(48);
     expect(channels.every((channel) => /^[a-z]+:[a-z][a-z-]*$/.test(channel))).toBe(true);
   });
 

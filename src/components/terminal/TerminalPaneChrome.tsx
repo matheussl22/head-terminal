@@ -6,7 +6,6 @@ import {
   type ComponentType,
 } from "react";
 
-import { ACTIVITY_LABEL } from "../../types/activity";
 import { contextColor } from "../../core/context-meter";
 import { formatBranchLabel } from "../../core/git-context-utils";
 import {
@@ -23,6 +22,9 @@ import {
   IconActivity,
   IconAgentClaude,
   IconAgentCodex,
+  IconAgentOllama,
+  IconAgentOrnith,
+  IconAgentQwen,
   IconAgentCursor,
   IconAgentShell,
   IconClose,
@@ -38,6 +40,9 @@ const AGENT_ICON: Record<string, ComponentType<{ size?: number }>> = {
   cursor: IconAgentCursor,
   claude: IconAgentClaude,
   codex: IconAgentCodex,
+  ollama: IconAgentOllama,
+  ornith: IconAgentOrnith,
+  qwen27: IconAgentQwen,
   shell: IconAgentShell,
 };
 
@@ -46,6 +51,9 @@ const AGENT_LABEL: Record<string, string> = {
   cursor: "cx",
   claude: "cc",
   codex: "cdx",
+  ollama: "olm",
+  ornith: "orn",
+  qwen27: "qw",
   shell: "sh",
 };
 
@@ -379,11 +387,6 @@ export function TerminalPaneHeader({
             ctx {contextPercent}%
           </span>
         )}
-        <span
-          className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}
-        >
-          {ACTIVITY_LABEL[activity]}
-        </span>
         {activity === "agent_fallback" && (
           <button
             type="button"

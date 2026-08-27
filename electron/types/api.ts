@@ -82,6 +82,8 @@ export interface AgentCliStatus {
   claude: boolean;
   cursor: boolean;
   codex: boolean;
+  ollama: boolean;
+  ornith: boolean;
 }
 
 export type InstallableAgentId = "cursor" | "claude" | "codex";
@@ -156,6 +158,9 @@ export interface PersistedWorkspace {
     cwd: string;
     agentProfileId: string;
     claudeAccountId?: string;
+    ollamaModel?: string;
+    ollamaThinkOff?: boolean;
+    ggufPath?: string;
     layout: unknown;
     pinned?: boolean;
   }>;
@@ -198,9 +203,13 @@ export interface HeadTerminalApi {
     getDefaultCwd(): Promise<string>;
     pathExists(path: string): Promise<boolean>;
     selectDirectory(defaultPath?: string): Promise<string | null>;
+    /** Open a file picker. Used for GGUF weights that live only on this machine. */
+    selectFile(defaultPath?: string): Promise<string | null>;
     confirm(input: ConfirmInput): Promise<boolean>;
     checkAgentClis(): Promise<AgentCliStatus>;
     ensureAgentClis(): Promise<AgentCliInstallResult>;
+    /** Models already pulled locally; empty when ollama or its daemon is off. */
+    listOllamaModels(): Promise<string[]>;
     deleteClaudeProfile(path: string): Promise<void>;
     getPlatform(): Promise<PlatformInfo>;
     /** Windows only; false when the distro is unknown. */

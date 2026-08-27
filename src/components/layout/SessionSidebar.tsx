@@ -34,6 +34,9 @@ import {
   IconActivity,
   IconAgentClaude,
   IconAgentCodex,
+  IconAgentOllama,
+  IconAgentOrnith,
+  IconAgentQwen,
   IconAgentCursor,
   IconAgentShell,
   IconClose,
@@ -58,6 +61,9 @@ const AGENT_ICON: Record<string, ComponentType<{ size?: number }>> = {
   cursor: IconAgentCursor,
   claude: IconAgentClaude,
   codex: IconAgentCodex,
+  ollama: IconAgentOllama,
+  ornith: IconAgentOrnith,
+  qwen27: IconAgentQwen,
   shell: IconAgentShell,
 };
 
@@ -635,7 +641,12 @@ export function SessionSidebar({
                 contextMenu.session.cwd,
                 `${contextMenu.session.title} (cópia)`,
                 contextMenu.session.agentProfileId,
-                contextMenu.session.claudeAccountId,
+                {
+                  claudeAccountId: contextMenu.session.claudeAccountId,
+                  ollamaModel: contextMenu.session.ollamaModel,
+                  ollamaThinkOff: contextMenu.session.ollamaThinkOff,
+                  ggufPath: contextMenu.session.ggufPath,
+                },
               ),
             );
             setContextMenu(null);

@@ -14,6 +14,9 @@ interface UseAgentSessionOptions {
   cwd: string;
   agentProfileId: string;
   claudeAccountId?: string;
+  ollamaModel?: string;
+  ollamaThinkOff?: boolean;
+  ggufPath?: string;
   isVisible: boolean;
   shouldSpawn: boolean;
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -25,6 +28,9 @@ export function useAgentSession({
   cwd,
   agentProfileId,
   claudeAccountId,
+  ollamaModel,
+  ollamaThinkOff,
+  ggufPath,
   isVisible,
   shouldSpawn,
   containerRef,
@@ -126,6 +132,9 @@ export function useAgentSession({
     cwd,
     agentProfileId,
     claudeAccountId,
+    ollamaModel,
+    ollamaThinkOff,
+    ggufPath,
     restartKey,
     continueConversation,
     resumeSessionId,

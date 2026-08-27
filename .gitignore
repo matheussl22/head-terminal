@@ -15,6 +15,9 @@ out
 dist-ssr
 *.local
 
+# Local GGUF weights — never commit the models, only the path in preferences.
+*.gguf
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

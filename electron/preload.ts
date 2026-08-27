@@ -49,9 +49,13 @@ const api: HeadTerminalApi = {
     pathExists: (path) => ipcRenderer.invoke(IPC_CHANNELS.system.pathExists, path),
     selectDirectory: (defaultPath) =>
       ipcRenderer.invoke(IPC_CHANNELS.system.selectDirectory, defaultPath),
+    selectFile: (defaultPath) =>
+      ipcRenderer.invoke(IPC_CHANNELS.system.selectFile, defaultPath),
     confirm: (input) => ipcRenderer.invoke(IPC_CHANNELS.system.confirm, input),
     checkAgentClis: () => ipcRenderer.invoke(IPC_CHANNELS.system.checkAgentClis),
     ensureAgentClis: () => ipcRenderer.invoke(IPC_CHANNELS.system.ensureAgentClis),
+    listOllamaModels: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.system.listOllamaModels),
     deleteClaudeProfile: (path) =>
       ipcRenderer.invoke(IPC_CHANNELS.system.deleteClaudeProfile, path),
     getPlatform: () => ipcRenderer.invoke(IPC_CHANNELS.system.getPlatform),

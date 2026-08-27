@@ -1,8 +1,4 @@
-import {
-  ACTIVITY_LABEL,
-  ACTIVITY_PRIORITY,
-  type PaneActivity,
-} from "../types/activity";
+import { ACTIVITY_PRIORITY, type PaneActivity } from "../types/activity";
 import { collectPaneIds } from "./session-layout";
 import type { PaneRuntime } from "./session-manager";
 import type { AgentSession } from "../types/session";
@@ -33,24 +29,6 @@ export function getSessionActivity(
 ): PaneActivity {
   const paneIds = collectPaneIds(session.layout);
   return aggregatePaneActivity(paneRuntime, paneIds);
-}
-
-export function getSessionActivityLabel(
-  session: AgentSession,
-  paneRuntime: Record<string, PaneRuntime>,
-): string {
-  const activity = getSessionActivity(session, paneRuntime);
-  const paneIds = collectPaneIds(session.layout);
-  const workingCount = paneIds.filter(
-    (paneId) => paneRuntime[paneId]?.activity === "working",
-  ).length;
-
-  const label = ACTIVITY_LABEL[activity];
-  if (workingCount > 1) {
-    return `${label} (${workingCount})`;
-  }
-
-  return label;
 }
 
 export function countWorkingSessions(

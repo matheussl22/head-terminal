@@ -56,19 +56,6 @@
   white-space: nowrap;
 }
 
-.agent-toolbar__session-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: var(--space-2);
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-  font-size: var(--font-xs);
-  color: var(--text-secondary);
-}
-
 .agent-toolbar__global-status {
   display: inline-flex;
   align-items: center;

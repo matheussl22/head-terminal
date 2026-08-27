@@ -32,7 +32,12 @@ export function createInitialSession(
   cwd: string,
   title?: string,
   agentProfileId = DEFAULT_AGENT_PROFILE_ID,
-  claudeAccountId?: string,
+  extras: {
+    claudeAccountId?: string;
+    ollamaModel?: string;
+    ollamaThinkOff?: boolean;
+    ggufPath?: string;
+  } = {},
 ): AgentSession {
   const profile = getAgentProfile(agentProfileId);
   const sessionTitle = title ?? basename(cwd);
@@ -42,7 +47,10 @@ export function createInitialSession(
     title: sessionTitle,
     cwd,
     agentProfileId: profile.id,
-    claudeAccountId,
+    claudeAccountId: extras.claudeAccountId,
+    ollamaModel: extras.ollamaModel,
+    ollamaThinkOff: extras.ollamaThinkOff,
+    ggufPath: extras.ggufPath,
   });
 }
 
@@ -51,6 +59,9 @@ const AGENT_SHORT_NAME: Record<string, string> = {
   cursor: "Cursor",
   claude: "Claude",
   codex: "OpenAI",
+  ollama: "Ollama",
+  ornith: "Ornith",
+  qwen27: "Qwen",
   shell: "Shell",
 };
 

@@ -14,6 +14,8 @@ export interface AgentCliStatus {
   cursor: boolean;
   claude: boolean;
   codex: boolean;
+  ollama: boolean;
+  ornith: boolean;
 }
 
 function validatePath(value: string): string {
@@ -86,6 +88,8 @@ async function runZshCliDiscovery(): Promise<{ stdout: string; ran: boolean }> {
     "{ command -v cursor-agent || command -v cursor; } >/dev/null 2>&1 && echo cursor",
     "command -v claude >/dev/null 2>&1 && echo claude",
     "command -v codex >/dev/null 2>&1 && echo codex",
+    "command -v ollama >/dev/null 2>&1 && echo ollama",
+    "command -v llama-cli >/dev/null 2>&1 && echo ornith",
   ].join("; ");
 
   try {
@@ -152,7 +156,33 @@ export async function checkAgentClis(): Promise<AgentCliStatus> {
     cursor: found.has("cursor"),
     claude: found.has("claude"),
     codex: found.has("codex"),
+    ollama: found.has("ollama"),
+    ornith: found.has("ornith"),
   };
+}
+
+/**
+ * Models already pulled on this machine, newest listing order preserved.
+ *
+ * `ollama list` needs the daemon up; when it is down — or ollama is not
+ * installed — the command fails and the answer is an empty list, which the
+ * dialog turns into "type the name yourself" rather than an error.
+ */
+export async function listOllamaModels(): Promise<string[]> {
+  const stdout = await runCommand("ollama", ["list"], {
+    maxBuffer: 256 * 1024,
+    timeoutMs: CLI_CHECK_TIMEOUT_MS,
+  }).then(
+    (result) => result.stdout,
+    () => "",
+  );
+
+  return stdout
+    .split(/\r?\n/u)
+    .slice(1) // header row: NAME  ID  SIZE  MODIFIED
+    .map((line) => line.split(/\s+/u)[0]?.trim() ?? "")
+    .filter((name) => name.length > 0 && name.length <= 128)
+    .slice(0, 200);
 }
 
 function claudeProfilesRoot(): string {

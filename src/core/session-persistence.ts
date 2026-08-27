@@ -18,6 +18,9 @@ export interface PersistedSession {
   cwd: string;
   agentProfileId: string;
   claudeAccountId?: string;
+  ollamaModel?: string;
+  ollamaThinkOff?: boolean;
+  ggufPath?: string;
   layout: LayoutNode;
   pinned?: boolean;
 }
@@ -43,6 +46,9 @@ function toPersistedSession(session: AgentSession): PersistedSession {
     cwd: session.cwd,
     agentProfileId: session.agentProfileId,
     claudeAccountId: session.claudeAccountId,
+    ollamaModel: session.ollamaModel,
+    ollamaThinkOff: session.ollamaThinkOff,
+    ggufPath: session.ggufPath,
     layout: session.layout,
     pinned: session.pinned,
   };

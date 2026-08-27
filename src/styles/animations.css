@@ -78,7 +78,6 @@
 @media (prefers-reduced-motion: reduce) {
   .status-dot--pulse,
   .session-sidebar__compact-item--ring-working,
-  .terminal-pane-header__status--working,
   .terminal-pane-header__context--critical {
     animation: none;
   }

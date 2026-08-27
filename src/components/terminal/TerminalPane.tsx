@@ -15,6 +15,9 @@ interface TerminalPaneProps {
   cwd: string;
   agentProfileId: string;
   claudeAccountId?: string;
+  ollamaModel?: string;
+  ollamaThinkOff?: boolean;
+  ggufPath?: string;
   isVisible: boolean;
   shouldSpawn: boolean;
   isActive: boolean;
@@ -33,6 +36,9 @@ export function TerminalPane({
   cwd,
   agentProfileId,
   claudeAccountId,
+  ollamaModel,
+  ollamaThinkOff,
+  ggufPath,
   isVisible,
   shouldSpawn,
   isActive,
@@ -54,6 +60,9 @@ export function TerminalPane({
     cwd,
     agentProfileId,
     claudeAccountId,
+    ollamaModel,
+    ollamaThinkOff,
+    ggufPath,
     isVisible,
     shouldSpawn,
     containerRef,

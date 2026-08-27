@@ -8,6 +8,10 @@ const COPY_ON_SELECT_KEY = "head-terminal.copy-on-select";
 const RECENT_CWDS_KEY = "head-terminal.recent-cwds";
 const LAST_AGENT_KEY = "head-terminal.last-agent";
 const LAST_CLAUDE_ACCOUNT_KEY = "head-terminal.last-claude-account";
+const LAST_OLLAMA_MODEL_KEY = "head-terminal.last-ollama-model";
+const LAST_OLLAMA_THINK_OFF_KEY = "head-terminal.last-ollama-think-off";
+const LAST_ORNITH_GGUF_KEY = "head-terminal.last-ornith-gguf";
+const LAST_QWEN27_GGUF_KEY = "head-terminal.last-qwen27-gguf";
 const MIGRATION_APPLIED_KEY = "head-terminal.migration.preferences.v1";
 
 const MIGRATABLE_KEYS = new Set([
@@ -20,6 +24,10 @@ const MIGRATABLE_KEYS = new Set([
   RECENT_CWDS_KEY,
   LAST_AGENT_KEY,
   LAST_CLAUDE_ACCOUNT_KEY,
+  LAST_OLLAMA_MODEL_KEY,
+  LAST_OLLAMA_THINK_OFF_KEY,
+  LAST_ORNITH_GGUF_KEY,
+  LAST_QWEN27_GGUF_KEY,
   "head-terminal.claude-accounts",
   "head-terminal.claude-default-account-name",
 ]);
@@ -179,4 +187,34 @@ export function loadLastClaudeAccount(): string {
 
 export function saveLastClaudeAccount(accountId: string): void {
   storageSet(LAST_CLAUDE_ACCOUNT_KEY, accountId);
+}
+
+export function loadLastOllamaModel(): string {
+  return storageGet(LAST_OLLAMA_MODEL_KEY) ?? "";
+}
+
+export function saveLastOllamaModel(model: string): void {
+  storageSet(LAST_OLLAMA_MODEL_KEY, model.trim());
+}
+
+export function loadLastOllamaThinkOff(): boolean {
+  return storageGet(LAST_OLLAMA_THINK_OFF_KEY) === "1";
+}
+
+export function saveLastOllamaThinkOff(thinkOff: boolean): void {
+  storageSet(LAST_OLLAMA_THINK_OFF_KEY, thinkOff ? "1" : "0");
+}
+
+export type LlamaAgentId = "ornith" | "qwen27";
+
+function lastGgufKey(agentId: LlamaAgentId): string {
+  return agentId === "ornith" ? LAST_ORNITH_GGUF_KEY : LAST_QWEN27_GGUF_KEY;
+}
+
+export function loadLastGgufPath(agentId: LlamaAgentId): string {
+  return storageGet(lastGgufKey(agentId)) ?? "";
+}
+
+export function saveLastGgufPath(agentId: LlamaAgentId, path: string): void {
+  storageSet(lastGgufKey(agentId), path.trim());
 }

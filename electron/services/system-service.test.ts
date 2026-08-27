@@ -76,6 +76,8 @@ describe("system-service", () => {
       cursor: expect.any(Boolean),
       claude: expect.any(Boolean),
       codex: expect.any(Boolean),
+      ollama: expect.any(Boolean),
+      ornith: expect.any(Boolean),
     });
   });
 

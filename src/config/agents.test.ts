@@ -8,6 +8,7 @@ import {
   AGENT_FALLBACK_OSC,
   buildAgentProfiles,
   getAgentProfile,
+  quoteGgufPath,
 } from "./agents";
 
 describe("agent profiles continue flag", () => {
@@ -101,5 +102,137 @@ describe("agent profiles resume flag", () => {
     });
     expect(profiles.claude.args.join(" ")).not.toContain("--resume");
     expect(profiles.claude.args.join(" ")).not.toContain("rm -rf");
+  });
+});
+
+describe("ollama profile", () => {
+  it("runs the chosen local model", () => {
+    const profiles = buildAgentProfiles({
+      ollamaModel: "qwen38-27b-uncensored:latest",
+    });
+    expect(profiles.ollama.args.join(" ")).toContain(
+      "ollama run qwen38-27b-uncensored:latest",
+    );
+    expect(profiles.ollama.args.join(" ")).toContain(String(AGENT_FALLBACK_OSC));
+  });
+
+  it("accepts namespaced model names", () => {
+    const profiles = buildAgentProfiles({ ollamaModel: "library/llama3.2:3b" });
+    expect(profiles.ollama.args.join(" ")).toContain(
+      "ollama run library/llama3.2:3b",
+    );
+  });
+
+  it("explains itself instead of running anything without a model", () => {
+    const args = buildAgentProfiles().ollama.args.join(" ");
+    expect(args).not.toContain("ollama run");
+    expect(args).toContain("Nenhum modelo Ollama");
+  });
+
+  it("rejects a model name carrying shell syntax", () => {
+    const args = buildAgentProfiles({
+      ollamaModel: "llama3; rm -rf / #",
+    }).ollama.args.join(" ");
+    expect(args).not.toContain("ollama run");
+    expect(args).not.toContain("rm -rf");
+  });
+
+  it("leaves the other profiles untouched", () => {
+    const profiles = buildAgentProfiles({ ollamaModel: "llama3.2" });
+    expect(profiles.claude.args.join(" ")).not.toContain("ollama");
+    expect(profiles.shell.args.join(" ")).not.toContain("ollama");
+  });
+
+  it("starts with thinking off when asked", () => {
+    const args = buildAgentProfiles({
+      ollamaModel: "qwen38-27b-uncensored:latest",
+      ollamaThinkOff: true,
+    }).ollama.args.join(" ");
+    expect(args).toContain(
+      "ollama run qwen38-27b-uncensored:latest --think=false",
+    );
+  });
+
+  it("keeps thinking on by default", () => {
+    const args = buildAgentProfiles({
+      ollamaModel: "qwen38-27b-uncensored:latest",
+    }).ollama.args.join(" ");
+    expect(args).toContain("ollama run qwen38-27b-uncensored:latest");
+    expect(args).not.toContain("--think=false");
+  });
+});
+
+describe("ornith profile", () => {
+  it("runs llama-cli in conversation mode with the MoE 3060 config", () => {
+    const args = buildAgentProfiles().ornith.args.join(" ");
+    expect(args).toContain("llama-cli -m");
+    expect(args).toContain("Ornith-1.5-35B-Q4_K_M.gguf");
+    expect(args).toContain("-cnv");
+    expect(args).toContain("--cpu-moe");
+    expect(args).toContain("-c 16384");
+    expect(args).toContain("--reasoning on");
+    expect(args).toContain(String(AGENT_FALLBACK_OSC));
+  });
+
+  it("explains a missing GGUF instead of launching llama-cli blindly", () => {
+    const args = buildAgentProfiles().ornith.args.join(" ");
+    expect(args).toContain("[ ! -f");
+    expect(args).toContain("huggingface-cli download");
+    expect(args).toContain("ornith-ai/Ornith-1.5-35B-A3B-GGUF");
+  });
+
+  it("uses the GGUF the user pointed at on this machine", () => {
+    const custom = "/data/weights/custom ornith.gguf";
+    const args = buildAgentProfiles({ ggufPath: custom }).ornith.args.join(" ");
+    expect(args).toContain("'/data/weights/custom ornith.gguf'");
+    expect(args).not.toContain("ornith-1.5-35b");
+  });
+
+  it("quotes a path that would otherwise break the login shell", () => {
+    const sneaky = "/tmp/foo.gguf'; rm -rf / #.gguf";
+    const args = buildAgentProfiles({ ggufPath: sneaky }).ornith.args.join(" ");
+    expect(args).toContain("llama-cli -m");
+    expect(args).toContain("'\\''");
+    expect(args).toContain(quoteGgufPath(sneaky));
+  });
+
+  it("rejects a path that is not a GGUF and falls back to the conventional file", () => {
+    const args = buildAgentProfiles({
+      ggufPath: "/tmp/not-a-model.bin",
+    }).ornith.args.join(" ");
+    expect(args).toContain("Ornith-1.5-35B-Q4_K_M.gguf");
+    expect(args).not.toContain("not-a-model.bin");
+  });
+
+  it("leaves the other profiles untouched", () => {
+    const profiles = buildAgentProfiles();
+    expect(profiles.ollama.args.join(" ")).not.toContain("llama-cli");
+    expect(profiles.shell.args.join(" ")).not.toContain("Ornith");
+  });
+});
+
+describe("qwen27 profile", () => {
+  it("runs llama-cli with CUDA fit instead of ngl 99", () => {
+    const args = buildAgentProfiles().qwen27.args.join(" ");
+    expect(args).toContain("llama-cli -m");
+    expect(args).toContain("Qwen3.8-27B-Uncensored-IQ4_XS.gguf");
+    expect(args).toContain("-cnv");
+    expect(args).toContain("--fit on");
+    expect(args).toContain("--fit-target 128");
+    expect(args).toContain("-c 4096");
+    expect(args).toContain("--cache-type-k q4_0");
+    expect(args).toContain("-t 6");
+    expect(args).toContain("--load-mode mmap+mlock");
+    expect(args).toContain("--reasoning off");
+    expect(args).not.toContain("-ngl 99");
+    expect(args).not.toContain("--cpu-moe");
+    expect(args).toContain(String(AGENT_FALLBACK_OSC));
+  });
+
+  it("uses a machine-local GGUF when given one", () => {
+    const custom = "/mnt/models/Qwen3.8-27B-Uncensored-IQ4_XS.gguf";
+    const args = buildAgentProfiles({ ggufPath: custom }).qwen27.args.join(" ");
+    expect(args).toContain(`'${custom}'`);
+    expect(args).not.toContain("qwen38-27b-uncensored/");
   });
 });

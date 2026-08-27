@@ -127,10 +127,24 @@ function App() {
   }, []);
 
   const handleCreateConfirm = useCallback(
-    (cwd: string, agentProfileId: string, claudeAccountId?: string) => {
+    (
+      cwd: string,
+      agentProfileId: string,
+      extras?: {
+        claudeAccountId?: string;
+        ollamaModel?: string;
+        ollamaThinkOff?: boolean;
+        ggufPath?: string;
+      },
+    ) => {
       const title = nextAgentSessionTitle(agentProfileId, sessions);
       addSession(
-        createInitialSession(cwd, title, agentProfileId, claudeAccountId),
+        createInitialSession(
+          cwd,
+          title,
+          agentProfileId,
+          extras,
+        ),
       );
     },
     [addSession, sessions],
