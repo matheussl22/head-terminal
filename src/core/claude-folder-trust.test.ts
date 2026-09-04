@@ -36,6 +36,17 @@ describe("isClaudeFolderTrustPrompt", () => {
     expect(isClaudeFolderTrustPrompt(painted)).toBe(true);
   });
 
+  it("matches a ConPTY frame, where the gaps between words are cursor moves", () => {
+    // What a native Windows pane actually receives: no spaces survive the
+    // ANSI strip, the words run together.
+    const frame =
+      "Accessing\x1b[1Cworkspace:\x1b[1CC:\\Users\\m\\proj\x1b[2;1HQuick\x1b[1Csafety\x1b[1Ccheck:"
+      + "\x1b[1CIs\x1b[1Cthis\x1b[1Ca\x1b[1Cproject\x1b[1Cyou\x1b[1Ccreated..."
+      + "\x1b[5;1H❯\x1b[1CNo,\x1b[1Cexit\x1b[6;3HYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder"
+      + "\x1b[8;1HEnter\x1b[1Cto\x1b[1Cconfirm\x1b[1C·\x1b[1CEsc\x1b[1Cto\x1b[1Ccancel";
+    expect(isClaudeFolderTrustPrompt(frame)).toBe(true);
+  });
+
   it("does not treat a later tool-approval prompt as folder trust", () => {
     expect(
       isClaudeFolderTrustPrompt(

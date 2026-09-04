@@ -1,9 +1,13 @@
 import { createRequire } from "node:module";
 import { existsSync, readFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 
-import { PANE_MARKER_ENV, withWslEnvPassthrough } from "./wsl-service";
+import {
+  killWindowsProcessTree,
+  POWERSHELL_COMMAND,
+  resolvePowerShell,
+  resolveWindowsCwd,
+} from "./windows-shell";
 
 const require = createRequire(import.meta.url);
 
@@ -15,8 +19,8 @@ const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /** Batch node-pty onData into fewer IPC messages (one per pane). */
 const COALESCE_INTERVAL_MS = 12;
 const COALESCE_MAX_CHARS = 128 * 1024;
-/** Upper bound on WSL tree reaping so before-quit cannot hang. */
-const WSL_REAP_TIMEOUT_MS = 5_000;
+/** Upper bound on the Windows tree kill so before-quit cannot hang. */
+const WINDOWS_KILL_TIMEOUT_MS = 5_000;
 
 export interface Disposable {
   dispose(): void;
@@ -58,35 +62,6 @@ export interface PtySpawnRequest {
   env?: Record<string, string>;
 }
 
-/**
- * What `PtyService` needs from `WslService`. Structural so tests can supply a
- * two-line stub and production can pass the real thing.
- */
-export interface WslBridge {
-  isWslMode(): boolean;
-  wrap(
-    command: string,
-    args: readonly string[],
-    cwd: string,
-  ): { file: string; args: string[] };
-  spawnCwd(posix: string, windowsFallback: string): string;
-  toPosixPath(windows: string): string;
-  resolvePaneCwd(posix: string): string;
-  sanitizeLocaleEnv(env: Record<string, string>): Record<string, string>;
-  killPaneTree(marker: string): Promise<void>;
-}
-
-/** Pane variables that must survive the crossing into the distro. */
-const WSL_FORWARDED_ENV = [
-  "TERM",
-  "COLORTERM",
-  "LANG",
-  "LC_ALL",
-  "LC_CTYPE",
-  "CLAUDE_CONFIG_DIR",
-  PANE_MARKER_ENV,
-] as const;
-
 export interface PtySpawnResult {
   id: string;
   pid: number;
@@ -107,21 +82,30 @@ export type PtyServiceEvent =
 export interface PtyServiceOptions {
   /** Delivers an event to the WebContents identified by ownerId. */
   emit?: (event: PtyServiceEvent) => void;
+  /**
+   * Diagnostic sink for the geometry that actually reaches node-pty. The
+   * renderer logs what it *asked* for (`terminal.resized`); this is the only
+   * place that sees what ConPTY/the pty was really given, which is what
+   * decides whether a degenerate width came from this side of the boundary.
+   */
+  log?: (event: string, meta: Record<string, unknown>) => void;
   /** Dependency injection seam; production defaults to node-pty.spawn. */
   spawn?: SpawnPty;
   /** Base environment inherited by child processes. Defaults to process.env. */
   env?: NodeJS.ProcessEnv;
-  /** Present only on Windows, where every argv is wrapped into WSL. */
-  wsl?: WslBridge;
-  /** Directory the Windows launcher itself starts in. Defaults to the home. */
+  /** Where a Windows pane opens when its cwd is gone. Defaults to the home. */
   windowsHome?: string;
-  /** Host platform. Injected so the POSIX spawn path is testable on Windows. */
+  /** Host platform. Injected so both spawn paths are testable anywhere. */
   platform?: NodeJS.Platform;
   /**
-   * POSIX-compatible shell used on Windows when WSL is unavailable.
-   * Defaults to Git Bash. Injected so tests do not need a real Git install.
+   * Executable the abstract `powershell` command resolves to on Windows.
+   * Defaults to PowerShell 7 when installed, else Windows PowerShell 5.1.
    */
   windowsShell?: string;
+  /** Kills a Windows pane's process tree. Injected so tests never taskkill. */
+  killWindowsTree?: (pid: number) => Promise<void>;
+  /** Directory check for the Windows cwd fallback. Defaults to the filesystem. */
+  pathExists?: (path: string) => boolean;
 }
 
 interface PtyEntry {
@@ -131,37 +115,10 @@ interface PtyEntry {
   listeners: Disposable[];
   pendingData: string;
   flushTimer: ReturnType<typeof setTimeout> | null;
-  /** Set in WSL mode: identifies the Linux process tree behind `wsl.exe`. */
-  wslMarker?: string;
 }
 
 interface NodePtyModule {
   spawn: SpawnPty;
-}
-
-const GIT_BASH_CANDIDATES = [
-  "C:\\Program Files\\Git\\bin\\bash.exe",
-  "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
-];
-
-function resolveGitBash(): string | null {
-  const fromEnv = process.env.ProgramFiles
-    ? [
-        `${process.env.ProgramFiles}\\Git\\bin\\bash.exe`,
-        `${process.env.ProgramFiles}\\Git\\usr\\bin\\bash.exe`,
-      ]
-    : [];
-  for (const candidate of [...fromEnv, ...GIT_BASH_CANDIDATES]) {
-    if (existsSync(candidate)) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-/** Login-shell scripts from the renderer still say `exec zsh -l`. */
-function adaptZshArgsForGitBash(args: string[]): string[] {
-  return args.map((arg) => arg.replaceAll("exec zsh -l", "exec bash -l"));
 }
 
 function loadNodePty(): NodePtyModule {
@@ -319,26 +276,28 @@ function linuxDescendants(pid: number, seen = new Set<number>()): number[] {
 export class PtyService {
   private readonly entries = new Map<string, PtyEntry>();
   private readonly emit: (event: PtyServiceEvent) => void;
+  private readonly log: (event: string, meta: Record<string, unknown>) => void;
   private readonly spawnPty: SpawnPty;
   private readonly baseEnv: NodeJS.ProcessEnv;
-  private readonly wsl: WslBridge | null;
   private readonly windowsHome: string;
   private readonly platform: NodeJS.Platform;
-  private readonly windowsShell: string | null;
+  private readonly windowsShell: string;
+  private readonly killWindowsTree: (pid: number) => Promise<void>;
+  private readonly pathExists: (path: string) => boolean;
 
   constructor(options: PtyServiceOptions = {}) {
     this.emit = options.emit ?? (() => undefined);
+    this.log = options.log ?? (() => undefined);
     this.spawnPty =
       options.spawn ??
       ((file, args, spawnOptions) =>
         loadNodePty().spawn(file, args, spawnOptions));
     this.baseEnv = options.env ?? process.env;
-    this.wsl = options.wsl ?? null;
     this.windowsHome = options.windowsHome ?? homedir();
     this.platform = options.platform ?? process.platform;
-    this.windowsShell = options.windowsShell ?? (
-      this.platform === "win32" ? resolveGitBash() : null
-    );
+    this.windowsShell = options.windowsShell ?? resolvePowerShell();
+    this.killWindowsTree = options.killWindowsTree ?? killWindowsProcessTree;
+    this.pathExists = options.pathExists ?? existsSync;
   }
 
   spawn(ownerId: number, request: PtySpawnRequest): PtySpawnResult {
@@ -358,45 +317,23 @@ export class PtyService {
     const args = normalizeArgs(request.args);
     const cols = normalizeDimension(request.cols, DEFAULT_COLS, "cols");
     const rows = normalizeDimension(request.rows, DEFAULT_ROWS, "rows");
-    let env = buildEnvironment(this.baseEnv, request.env);
+    const env = buildEnvironment(this.baseEnv, request.env);
 
-    // The Windows↔WSL boundary is here and nowhere else: the argv built by
-    // the renderer crosses untouched, only wrapped.
-    const inWsl = this.wsl?.isWslMode() ?? false;
-    const nativeWindowsShell = this.platform === "win32" && !inWsl
-      ? this.windowsShell
-      : null;
-    if (this.platform === "win32" && !inWsl && !nativeWindowsShell) {
-      // A POSIX shell has nothing to run on in Windows itself. Say so, rather
-      // than letting node-pty report a missing `/usr/bin/zsh`.
-      throw new Error(
-        "Nenhuma distribuição WSL disponível. Instale o WSL2 e escolha a distribuição em Configurações.",
-      );
-    }
-    const marker = inWsl ? randomUUID() : undefined;
-    if (marker) {
-      env = (this.wsl as WslBridge).sanitizeLocaleEnv(env);
-      env[PANE_MARKER_ENV] = marker;
-      env = withWslEnvPassthrough(env, WSL_FORWARDED_ENV);
-    }
-    // A workspace saved before the distro existed still holds Windows paths.
-    // In WSL mode every cwd must be POSIX, and the translation is idempotent,
-    // so it runs on the way in rather than trusting whoever persisted it. The
-    // result still has to exist in the distro, or the pane opens in `/` with a
-    // relay error printed over the agent's first screen.
-    const requestCwd = inWsl
-      ? (this.wsl as WslBridge).resolvePaneCwd(
-          (this.wsl as WslBridge).toPosixPath(request.cwd),
-        )
+    // The platform boundary is here and nowhere else. The renderer speaks in
+    // abstract terms — `powershell` as the shell, whatever cwd the workspace
+    // carries — and Windows resolves both: the shell to the executable that
+    // is actually installed, the cwd to a directory that actually exists
+    // (a workspace saved by the WSL-era app still holds POSIX paths).
+    const onWindows = this.platform === "win32";
+    const launch = {
+      file: onWindows && request.command === POWERSHELL_COMMAND
+        ? this.windowsShell
+        : request.command,
+      args,
+    };
+    const cwd = onWindows
+      ? resolveWindowsCwd(request.cwd, this.windowsHome, this.pathExists)
       : request.cwd;
-    const launch = inWsl
-      ? (this.wsl as WslBridge).wrap(request.command, args, requestCwd)
-      : nativeWindowsShell
-        ? { file: nativeWindowsShell, args: adaptZshArgsForGitBash(args) }
-        : { file: request.command, args };
-    const cwd = inWsl
-      ? (this.wsl as WslBridge).spawnCwd(requestCwd, this.windowsHome)
-      : requestCwd;
 
     const processPty = this.spawnPty(launch.file, launch.args, {
       name: "xterm-256color",
@@ -404,6 +341,16 @@ export class PtyService {
       rows,
       cwd,
       env,
+    });
+    this.log("pty.spawned", {
+      id: request.id,
+      cols,
+      rows,
+      requestedCols: request.cols,
+      requestedRows: request.rows,
+      cwd,
+      requestedCwd: request.cwd,
+      file: launch.file,
     });
 
     const entry: PtyEntry = {
@@ -413,7 +360,6 @@ export class PtyService {
       listeners: [],
       pendingData: "",
       flushTimer: null,
-      ...(marker ? { wslMarker: marker } : {}),
     };
     this.entries.set(key, entry);
 
@@ -430,8 +376,6 @@ export class PtyService {
         processPty.onExit(({ exitCode, signal }) => {
           if (this.entries.get(key) !== entry) return;
           this.flushPendingData(entry);
-          // Natural exit still reaps the Linux tree; do not block the exit
-          // event on WSL — kill/dispose are the paths that await it.
           void this.detachEntry(key, entry, false);
           this.emit({
             channel: "pty:exit",
@@ -458,10 +402,10 @@ export class PtyService {
 
   resize(ownerId: number, id: string, cols: number, rows: number): void {
     const entry = this.getOwnedEntry(ownerId, id);
-    entry.process.resize(
-      normalizeDimension(cols, DEFAULT_COLS, "cols"),
-      normalizeDimension(rows, DEFAULT_ROWS, "rows"),
-    );
+    const nextCols = normalizeDimension(cols, DEFAULT_COLS, "cols");
+    const nextRows = normalizeDimension(rows, DEFAULT_ROWS, "rows");
+    entry.process.resize(nextCols, nextRows);
+    this.log("pty.resized", { id, cols: nextCols, rows: nextRows });
   }
 
   /** Kills one owned PTY. Returns false when it was already gone. */
@@ -559,12 +503,13 @@ export class PtyService {
       }
     }
 
-    // In WSL mode the pid belongs to `wsl.exe`; the tree that matters lives
-    // inside the distro and is killed there, by marker — including when the
-    // Windows process already exited on its own.
-    const reap = this.reapWslTree(entry);
-
     if (kill) {
+      // ConPTY going away takes the shell with it, but not necessarily an
+      // agent that detached from the console — so the tree is killed by pid
+      // first, while the shell is still there to be found as its root.
+      const reap = this.platform === "win32" && entry.process.pid > 0
+        ? withTimeout(this.killWindowsTree(entry.process.pid), WINDOWS_KILL_TIMEOUT_MS)
+        : Promise.resolve();
       let descendantPids: number[] = [];
       // node-pty kills the foreground shell, but detached/background children
       // may survive it. On POSIX the PTY child is a session/process-group
@@ -604,15 +549,7 @@ export class PtyService {
       return reap;
     }
 
-    void reap;
     return Promise.resolve();
-  }
-
-  private reapWslTree(entry: PtyEntry): Promise<void> {
-    if (!entry.wslMarker || !this.wsl) {
-      return Promise.resolve();
-    }
-    return withTimeout(this.wsl.killPaneTree(entry.wslMarker), WSL_REAP_TIMEOUT_MS);
   }
 }
 

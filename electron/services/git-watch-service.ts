@@ -1,6 +1,6 @@
 import { watch as watchFs, type FSWatcher } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 import {
   createSessionWorktree,
@@ -11,9 +11,6 @@ import {
 
 const WATCH_ID_PATTERN = /^[a-zA-Z0-9._:-]{1,128}$/u;
 const DEBOUNCE_MS = 120;
-/** Polling cadence in WSL mode. Long enough that a `wsl.exe` git call per
- * repository stays cheap, short enough that a commit shows up quickly. */
-const DEFAULT_POLL_INTERVAL_MS = 4_000;
 
 export interface GitWatchInput {
   watchId: string;
@@ -107,7 +104,7 @@ async function watchDirectories(repoRoot: string): Promise<string[]> {
     const head = (await readFile(join(gitDir, "HEAD"), "utf8")).trim();
     if (head.startsWith("ref: ")) {
       const refPath = resolve(commonGitDir, head.slice(5));
-      if (refPath.startsWith(`${commonGitDir}/`)) {
+      if (refPath.startsWith(`${commonGitDir}${sep}`)) {
         const parent = dirname(refPath);
         if (await isDirectory(parent)) {
           paths.add(parent);
@@ -122,9 +119,9 @@ async function watchDirectories(repoRoot: string): Promise<string[]> {
 
 export interface GitWatchServiceOptions {
   /**
-   * Set on Windows: inotify events do not cross the 9p/virtiofs boundary, so
-   * a `\\wsl.localhost` watch is simply silent. Polling is the honest
-   * fallback there and stays off everywhere else.
+   * Refresh on a timer as well as on filesystem events. Off by default:
+   * `fs.watch` is reliable on every native filesystem the app runs on, and
+   * the option exists for tests and for network mounts that swallow events.
    */
   pollIntervalMs?: number;
 }
@@ -328,11 +325,6 @@ export class GitWatchService {
   }
 }
 
-/**
- * Facade matching `IpcServices.git`. Each watch id retains only its own window
- * emitter, preventing duplicate fan-out when IPC `watch` is called repeatedly.
- */
-export const WSL_POLL_INTERVAL_MS = DEFAULT_POLL_INTERVAL_MS;
 
 export function createGitService(options: GitWatchServiceOptions = {}): {
   getContext: typeof getGitContext;

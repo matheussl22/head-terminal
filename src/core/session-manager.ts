@@ -6,6 +6,10 @@ import {
   collectPaneIds,
   createInitialLayout,
   createPaneId,
+  findPaneNode,
+  mapPaneNodes,
+  resolvePaneCwd,
+  setPaneCwdInLayout,
   splitPaneInLayout,
   updateSplitRatioInLayout,
 } from "./session-layout";
@@ -103,6 +107,9 @@ interface SessionStore {
   renameSession: (sessionId: string, title: string) => void;
   updateSessionAgent: (sessionId: string, agentProfileId: string) => void;
   updateSessionCwd: (sessionId: string, cwd: string) => void;
+  /** Moves one terminal to another folder and restarts only that terminal.
+   * The session's own `cwd` stays the default for the other panes. */
+    updatePaneCwd: (paneId: string, cwd: string) => void;
   setRunEverything: (enabled: boolean) => void;
   removeSession: (sessionId: string) => void;
   reorderSessions: (fromIndex: number, toIndex: number) => void;
@@ -450,8 +457,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     }
 
     set((state) => {
+      // Moving the session moves every terminal in it: a pane that had picked
+      // its own folder follows too, otherwise "change folder" would silently
+      // leave some panes behind.
       const nextSessions = state.sessions.map((session) =>
-        session.id === sessionId ? { ...session, cwd: trimmed } : session,
+        session.id === sessionId
+          ? {
+              ...session,
+              cwd: trimmed,
+              layout: mapPaneNodes(session.layout, ({ cwd: _own, ...pane }) => pane),
+            }
+          : session,
       );
       const next = { sessions: nextSessions };
       persistWorkspaceState({ ...state, ...next }, { immediate: true });
@@ -459,6 +475,41 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     });
 
     get().restartSessionPanes(sessionId);
+  },
+
+  updatePaneCwd: (paneId, cwd) => {
+    const trimmed = cwd.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    let changed = false;
+    set((state) => {
+      const nextSessions = state.sessions.map((session) => {
+        if (!sessionHasPane(session, paneId)) {
+          return session;
+        }
+        if (resolvePaneCwd(session, paneId) === trimmed) {
+          return session;
+        }
+        changed = true;
+        // Back on the session default when that is what was picked, so the
+        // pane keeps following the session instead of pinning a copy of it.
+        const own = trimmed === session.cwd ? undefined : trimmed;
+        return { ...session, layout: setPaneCwdInLayout(session.layout, paneId, own) };
+      });
+      if (!changed) {
+        return state;
+      }
+      const next = { sessions: nextSessions };
+      persistWorkspaceState({ ...state, ...next }, { immediate: true });
+      return next;
+    });
+
+    if (changed) {
+      // A conversation belongs to a folder: the agent restarts fresh there.
+      get().restartPane(paneId);
+    }
   },
 
   setRunEverything: (enabled) => {
@@ -751,11 +802,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       }
 
       const newPaneId = createPaneId();
+      // A split inherits the folder of the pane it came from — its own one
+      // when it picked one, otherwise it follows the session like its sibling.
       const layout = splitPaneInLayout(
         session.layout,
         targetPaneId,
         direction,
         newPaneId,
+        findPaneNode(session.layout, targetPaneId)?.cwd,
       );
 
       const nextSessions: AgentSession[] = state.sessions.map((item) =>

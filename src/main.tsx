@@ -10,8 +10,13 @@ import {
   logEvent,
 } from "./core/logger";
 import { startStartupWatchdog } from "./core/startup-watchdog";
+import { initPlatformInfo } from "./core/platform-info";
 
 async function bootstrapFrontend(): Promise<void> {
+  // Fired before anything awaits getStartupContext below, so it's usually
+  // resolved by the time the first pane creates its terminal instance.
+  initPlatformInfo();
+
   let context: { runId: string; channel?: "dev" | "prod" } = {
     runId: crypto.randomUUID().replace(/-/g, "").slice(0, 12),
   };

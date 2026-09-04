@@ -1,6 +1,6 @@
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { arch } from "node:os";
+import { arch, release } from "node:os";
 import { randomUUID } from "node:crypto";
 
 import {
@@ -20,15 +20,8 @@ import {
   resolveAgentSessionRoots,
   type AgentSessionRoots,
 } from "./services/agent-sessions-service";
-import {
-  createWslCommandRunner,
-  setCommandRunner,
-} from "./services/command-runner";
 import { DiagnosticService } from "./services/diagnostic-service";
-import {
-  createGitService,
-  WSL_POLL_INTERVAL_MS,
-} from "./services/git-watch-service";
+import { createGitService } from "./services/git-watch-service";
 import { McpService } from "./services/mcp-service";
 import {
   defaultLegacyDatabasePaths,
@@ -38,14 +31,17 @@ import {
 import { PtyService } from "./services/pty-service";
 import { SecretService } from "./services/secret-service";
 import * as systemService from "./services/system-service";
-import {
-  configureAgentCliInstaller,
-  ensureAgentClis,
-} from "./services/agent-cli-install-service";
+import { ensureAgentClis } from "./services/agent-cli-install-service";
 import { VoiceService } from "./services/voice-service";
 import { WorkspaceService } from "./services/workspace-service";
 import { bindWindowsTaskbarLaunch } from "./services/windows-launcher";
-import { WslService } from "./services/wsl-service";
+
+/** `os.release()` on Windows is "10.0.26200" (major.minor.build); xterm.js
+ * only wants the build number. Undefined on a format it doesn't recognize. */
+function parseWindowsBuildNumber(osRelease: string): number | undefined {
+  const build = Number(osRelease.split(".")[2]);
+  return Number.isFinite(build) ? build : undefined;
+}
 
 const RUN_ID = randomUUID().replaceAll("-", "");
 
@@ -195,24 +191,6 @@ async function createServices(): Promise<{
   // Everything below this line speaks POSIX. On Windows the distro is
   // resolved once, here, and the boundary is crossed only inside the runner,
   // the PTY wrapper and the session roots.
-  const wsl = new WslService({
-    settingsPath: path.join(userDataPath, "wsl.json"),
-  });
-  await wsl.initialize();
-  if (wsl.isWslMode()) {
-    setCommandRunner(createWslCommandRunner(wsl));
-    systemService.setPosixHome(wsl.home);
-    systemService.setNativePathTranslator((posix) => wsl.toWindowsPath(posix));
-  }
-  diagnostics.appendEvent(JSON.stringify({
-    ts: new Date().toISOString(),
-    event: "wsl.initialized",
-    enabled: wsl.isWslMode(),
-    distro: wsl.distro,
-    home: wsl.home,
-    available: wsl.availableDistros,
-  }));
-  configureAgentCliInstaller({ wslMode: wsl.isWslMode() });
   const migration = new MigrationService({
     userDataPath,
     workspaceService: workspace,
@@ -258,7 +236,13 @@ async function createServices(): Promise<{
   });
 
   const pty = new PtyService({
-    ...(wsl.isWslMode() ? { wsl } : {}),
+    log(event, meta) {
+      diagnostics.appendEvent(JSON.stringify({
+        ts: new Date().toISOString(),
+        event,
+        ...meta,
+      }));
+    },
     emit(event) {
       const owner = webContents.fromId(event.ownerId);
       if (!owner || owner.isDestroyed()) return;
@@ -270,11 +254,7 @@ async function createServices(): Promise<{
       );
     },
   });
-  // Under WSL the repository lives on ext4 and inotify never reaches Windows,
-  // so the watcher polls instead of listening.
-  const git = createGitService(
-    wsl.isWslMode() ? { pollIntervalMs: WSL_POLL_INTERVAL_MS } : {},
-  );
+  const git = createGitService();
   const voice = new VoiceService({ secrets });
   const mcp = new McpService();
 
@@ -291,31 +271,17 @@ async function createServices(): Promise<{
       getPlatform: () => ({
         platform: process.platform,
         arch: arch(),
-        // Profile directories are built from this, and in WSL mode they must
-        // be POSIX so the agent inside the distro can find them.
-        homeDir: systemService.getPosixHome(),
+        // Profile directories are built from this in the renderer.
+        homeDir: systemService.getHome(),
         ...(process.platform === "win32"
           ? {
-              wsl: {
-                enabled: wsl.isWslMode(),
-                distro: wsl.distro,
-                available: [...wsl.availableDistros],
-              },
+              // xterm.js uses this to compensate for how ConPTY reflows the
+              // screen on redraw/resize, which otherwise conflicts with its
+              // own line-wrap tracking and garbles full-screen redraws.
+              windowsBuild: parseWindowsBuildNumber(release()),
             }
           : {}),
       }),
-      async selectWslDistro(distro: string) {
-        const applied = await wsl.selectDistro(distro);
-        if (applied) {
-          systemService.setPosixHome(wsl.home);
-          diagnostics.appendEvent(JSON.stringify({
-            ts: new Date().toISOString(),
-            event: "wsl.distro_selected",
-            distro,
-          }));
-        }
-        return applied;
-      },
       async selectDirectory(window, defaultPath) {
         const result = await dialog.showOpenDialog(window, {
           properties: ["openDirectory", "createDirectory"],
@@ -353,23 +319,13 @@ async function createServices(): Promise<{
     mcp,
     sessions: {
       listResumable: (cwd, agent, claudeConfigDir) =>
-        listResumableSessions(
-          cwd,
-          agent,
-          // The cwd stays POSIX — it is only ever encoded into a directory
-          // name — while the roots are read over UNC from Windows.
-          claudeConfigDir === undefined
-            ? undefined
-            : wsl.toWindowsPath(claudeConfigDir),
-          agentSessionRoots(wsl),
-        ),
+        listResumableSessions(cwd, agent, claudeConfigDir, agentSessionRoots),
     },
     diagnostics,
     workspace,
     migration: {
       loadPreferences: () => migration.loadMigratedPreferences(),
     },
-    toAgentPath: (windowsPath) => wsl.toPosixPath(windowsPath),
   };
 
   void ensureAgentClis()
@@ -413,13 +369,7 @@ async function createServices(): Promise<{
   };
 }
 
-/** Session transcripts live in the Linux home even when the app is Windows. */
-function agentSessionRoots(wsl: WslService): AgentSessionRoots {
-  return resolveAgentSessionRoots({
-    posixHome: wsl.isWslMode() ? wsl.home : null,
-    toWindowsPath: (posix) => wsl.toWindowsPath(posix),
-  });
-}
+const agentSessionRoots: AgentSessionRoots = resolveAgentSessionRoots();
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({

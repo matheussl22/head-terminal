@@ -39,12 +39,8 @@ const CURSOR_FALLBACK = {
   urlPrefix: "https://downloads.cursor.com/lab/2026.08.11-e8db854/",
 };
 
-let nativeWindowsInstallers = process.platform === "win32";
+const nativeWindowsInstallers = process.platform === "win32";
 let inFlight: Promise<AgentCliInstallResult> | null = null;
-
-export function configureAgentCliInstaller(options: { wslMode: boolean }): void {
-  nativeWindowsInstallers = process.platform === "win32" && !options.wslMode;
-}
 
 function missingAgents(status: AgentCliStatus): InstallableAgentId[] {
   return INSTALLABLE.filter((id) => !status[id]);

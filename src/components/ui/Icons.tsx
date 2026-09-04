@@ -7,6 +7,7 @@ import {
   Bot,
   Check,
   Cpu,
+  Folder,
   GitBranch,
   LockKeyhole,
   Mic,
@@ -48,6 +49,10 @@ export function IconCommand({ className, size = 14 }: IconProps) {
 
 export function IconPlus({ className, size = 14 }: IconProps) {
   return <Plus className={className} size={size} aria-hidden />;
+}
+
+export function IconFolder({ className, size = 12 }: IconProps) {
+  return <Folder className={className} size={size} strokeWidth={2} />;
 }
 
 export function IconGitBranch({ className, size = 12 }: IconProps) {

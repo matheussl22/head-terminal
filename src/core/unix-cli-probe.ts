@@ -1,11 +1,10 @@
 /**
- * WSL appends the Windows PATH, so `command -v cursor-agent` happily returns
- * `/mnt/c/Users/.../cursor-agent.cmd`. A Unix shell then tries to parse the
- * batch file (`@echo: not found`). Same for `.exe` on a Windows drive: the
- * pane lives in the distro and needs a Linux CLI.
- *
- * Git Bash uses `/c/Users/...`, not `/mnt/c/`, so native Windows .exe still
- * matches. `/mnt/wsl/` is three letters after `mnt/` and is not rejected.
+ * A Unix pane needs a Unix CLI. A PATH that leaks Windows launchers in — a
+ * `cursor-agent.cmd`, a `.ps1`, anything under a mounted drive — would make
+ * `command -v cursor-agent` succeed and the shell then choke on the batch
+ * file (`@echo: not found`). Those hits are skipped so a missing Linux CLI
+ * fails cleanly instead. `/mnt/wsl/` is three letters after `mnt/` and is
+ * not rejected.
  */
 export const WINDOWS_INTEROP_CLI_GLOB = "*.cmd|*.bat|*.ps1|/mnt/[a-z]/*";
 

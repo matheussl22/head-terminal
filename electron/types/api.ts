@@ -94,19 +94,14 @@ export interface AgentCliInstallResult {
   failed: Array<{ id: InstallableAgentId; error: string }>;
 }
 
-/** Windows only. Absent elsewhere, where there is no boundary to describe. */
-export interface WslInfo {
-  enabled: boolean;
-  distro: string | null;
-  available: string[];
-}
-
 export interface PlatformInfo {
   platform: NodeJS.Platform;
   arch: string;
-  /** POSIX home in WSL mode, so paths built from it work inside the distro. */
+  /** The user's home as the host spells it (`C:\Users\x` on Windows). */
   homeDir: string;
-  wsl?: WslInfo;
+  /** Windows only. Feeds xterm.js's `windowsPty` option, which compensates
+   * for how ConPTY reflows the screen on redraw/resize. */
+  windowsBuild?: number;
 }
 
 export interface SecretBackendStatus {
@@ -214,8 +209,6 @@ export interface HeadTerminalApi {
     listOllamaModels(): Promise<string[]>;
     deleteClaudeProfile(path: string): Promise<void>;
     getPlatform(): Promise<PlatformInfo>;
-    /** Windows only; false when the distro is unknown. */
-    selectWslDistro(distro: string): Promise<boolean>;
   };
   secrets: {
     has(key: AllowedSecretKey): Promise<boolean>;

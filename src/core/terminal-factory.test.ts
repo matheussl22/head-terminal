@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Terminal } from "@xterm/xterm";
 
-import { createRafPtyWriter } from "./terminal-factory";
+import type { FitAddon } from "@xterm/addon-fit";
+
+import { createRafPtyWriter, fitTerminal } from "./terminal-factory";
 
 function encode(text: string): Uint8Array {
   return new TextEncoder().encode(text);
@@ -97,5 +99,81 @@ describe("createRafPtyWriter", () => {
     flushRaf();
     expect(writes).toHaveLength(2);
     expect((writes[1] as Uint8Array).byteLength).toBe(150 * 1024);
+  });
+});
+
+describe("fitTerminal", () => {
+  function fakeTerminal(cols: number, rows: number) {
+    const resizes: Array<{ cols: number; rows: number }> = [];
+    const terminal = {
+      cols,
+      rows,
+      element: undefined,
+      resize(nextCols: number, nextRows: number) {
+        resizes.push({ cols: nextCols, rows: nextRows });
+        terminal.cols = nextCols;
+        terminal.rows = nextRows;
+      },
+    };
+    return { terminal, resizes };
+  }
+
+  function fakeFitAddon(
+    proposed: { cols: number; rows: number } | undefined,
+  ): FitAddon {
+    return {
+      proposeDimensions: () => proposed,
+      fit: () => {
+        throw new Error("fit() applies the degenerate floor — never call it");
+      },
+    } as unknown as FitAddon;
+  }
+
+  it("applies a measurable proposal", () => {
+    const { terminal, resizes } = fakeTerminal(80, 24);
+
+    const size = fitTerminal(
+      fakeFitAddon({ cols: 152, rows: 47 }),
+      terminal as unknown as Terminal,
+    );
+
+    expect(size).toEqual({ cols: 152, rows: 47 });
+    expect(resizes).toEqual([{ cols: 152, rows: 47 }]);
+  });
+
+  it("leaves the buffer alone when the pane measures zero", () => {
+    // @xterm/addon-fit floors at 2x1: applying it truncates every line in the
+    // scrollback to two characters, with no way back on a ConPTY pane.
+    const { terminal, resizes } = fakeTerminal(152, 47);
+
+    const size = fitTerminal(
+      fakeFitAddon({ cols: 2, rows: 1 }),
+      terminal as unknown as Terminal,
+    );
+
+    expect(size).toBeNull();
+    expect(resizes).toEqual([]);
+    expect(terminal.cols).toBe(152);
+  });
+
+  it("leaves the buffer alone when the pane cannot be measured at all", () => {
+    const { terminal, resizes } = fakeTerminal(152, 47);
+
+    expect(
+      fitTerminal(fakeFitAddon(undefined), terminal as unknown as Terminal),
+    ).toBeNull();
+    expect(resizes).toEqual([]);
+  });
+
+  it("skips the resize when the proposal already matches", () => {
+    const { terminal, resizes } = fakeTerminal(152, 47);
+
+    const size = fitTerminal(
+      fakeFitAddon({ cols: 152, rows: 47 }),
+      terminal as unknown as Terminal,
+    );
+
+    expect(size).toEqual({ cols: 152, rows: 47 });
+    expect(resizes).toEqual([]);
   });
 });

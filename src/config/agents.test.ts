@@ -6,9 +6,12 @@ vi.mock("../core/agent-launcher", () => ({
 
 import {
   AGENT_FALLBACK_OSC,
+  ORNITH_DEFAULT_GGUF,
+  QWEN27_DEFAULT_GGUF,
   buildAgentProfiles,
   getAgentProfile,
   quoteGgufPath,
+  sanitizeGgufPath,
 } from "./agents";
 
 describe("agent profiles continue flag", () => {
@@ -170,6 +173,7 @@ describe("ornith profile", () => {
   it("runs llama-cli in conversation mode with the MoE 3060 config", () => {
     const args = buildAgentProfiles().ornith.args.join(" ");
     expect(args).toContain("llama-cli -m");
+    expect(args).toContain(ORNITH_DEFAULT_GGUF);
     expect(args).toContain("Ornith-1.5-35B-Q4_K_M.gguf");
     expect(args).toContain("-cnv");
     expect(args).toContain("--cpu-moe");
@@ -219,6 +223,7 @@ describe("qwen27 profile", () => {
   it("runs llama-cli with CUDA fit instead of ngl 99", () => {
     const args = buildAgentProfiles().qwen27.args.join(" ");
     expect(args).toContain("llama-cli -m");
+    expect(args).toContain(QWEN27_DEFAULT_GGUF);
     expect(args).toContain("Qwen3.8-27B-Uncensored-IQ4_XS.gguf");
     expect(args).toContain("-cnv");
     expect(args).toContain("--fit on");
@@ -238,5 +243,38 @@ describe("qwen27 profile", () => {
     const args = buildAgentProfiles({ ggufPath: custom }).qwen27.args.join(" ");
     expect(args).toContain(`'${custom}'`);
     expect(args).not.toContain("qwen38-27b-uncensored/");
+  });
+});
+
+describe("sanitizeGgufPath", () => {
+  it("keeps a POSIX path", () => {
+    expect(sanitizeGgufPath(ORNITH_DEFAULT_GGUF)).toBe(ORNITH_DEFAULT_GGUF);
+    expect(sanitizeGgufPath("~/models/foo.gguf")).toBe("~/models/foo.gguf");
+  });
+
+  it("maps a Windows drive path to the WSL mount", () => {
+    expect(
+      sanitizeGgufPath(
+        "D:\\models\\ornith-1.5-35b\\Ornith-1.5-35B-Q4_K_M.gguf",
+      ),
+    ).toBe(ORNITH_DEFAULT_GGUF);
+    expect(
+      sanitizeGgufPath(
+        "d:/models/qwen38-27b-uncensored/Qwen3.8-27B-Uncensored-IQ4_XS.gguf",
+      ),
+    ).toBe(QWEN27_DEFAULT_GGUF);
+  });
+
+  it("feeds a Windows path through to llama-cli as POSIX", () => {
+    const args = buildAgentProfiles({
+      ggufPath: "D:\\models\\weights\\custom ornith.gguf",
+    }).ornith.args.join(" ");
+    expect(args).toContain("'/mnt/d/models/weights/custom ornith.gguf'");
+    expect(args).not.toContain("ornith-1.5-35b");
+  });
+
+  it("rejects anything that is not a GGUF", () => {
+    expect(sanitizeGgufPath("D:\\models\\notes.txt")).toBeUndefined();
+    expect(sanitizeGgufPath("/tmp/not-a-model.bin")).toBeUndefined();
   });
 });

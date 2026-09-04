@@ -18,6 +18,7 @@ import {
   useSessionStore,
 } from "../../core/session-manager";
 import { NEW_CONVERSATION_LABEL } from "../../core/conversation-display";
+import { basenamePath } from "../../core/path-utils";
 import { usePaneConversation } from "../../hooks/usePaneConversation";
 import { GitBranchBadge } from "../ui/GitBranchBadge";
 import {
@@ -31,6 +32,7 @@ import {
   IconAgentShell,
   IconClose,
   IconPencil,
+  IconFolder,
   IconRefresh,
 } from "../ui/Icons";
 import { ResumeSessionMenu } from "./ResumeSessionMenu";
@@ -296,6 +298,35 @@ function PaneConversationName({
   );
 }
 
+/** The folder this terminal runs in. Picking another one restarts the pane
+ * there — a conversation belongs to a folder — without touching its siblings. */
+function PaneFolderButton({ paneId, cwd }: { paneId: string; cwd: string }) {
+  const updatePaneCwd = useSessionStore((state) => state.updatePaneCwd);
+
+  return (
+    <button
+      type="button"
+      className="terminal-pane-header__cwd"
+      title={`Pasta: ${cwd} — clique para trocar (reinicia só este terminal)`}
+      aria-label={`Pasta do terminal: ${cwd}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        void window.headTerminal.system
+          .selectDirectory(cwd)
+          .then((selected) => {
+            if (typeof selected === "string" && selected) {
+              updatePaneCwd(paneId, selected);
+            }
+          })
+          .catch(() => undefined);
+      }}
+    >
+      <IconFolder size={11} className="terminal-pane-header__cwd-icon" />
+      <span className="terminal-pane-header__cwd-text">{basenamePath(cwd, cwd)}</span>
+    </button>
+  );
+}
+
 interface TerminalPaneHeaderProps {
   paneId: string;
   cwd: string;
@@ -347,6 +378,7 @@ export function TerminalPaneHeader({
           <AgentIcon agentProfileId={agentProfileId} size={13} />
         </span>
         <span className="terminal-pane-header__name">{shortLabel}</span>
+        <PaneFolderButton paneId={paneId} cwd={cwd} />
         {branchLabel && (
           <span className="terminal-pane-header__branch" title={branchLabel}>
             <GitBranchBadge

@@ -33,7 +33,6 @@ export const IPC_CHANNELS = {
     listOllamaModels: "system:list-ollama-models",
     deleteClaudeProfile: "system:delete-claude-profile",
     getPlatform: "system:get-platform",
-    selectWslDistro: "system:select-wsl-distro",
   },
   secrets: {
     has: "secrets:has",

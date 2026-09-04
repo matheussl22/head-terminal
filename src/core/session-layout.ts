@@ -1,4 +1,8 @@
-import type { LayoutNode, SplitDirection } from "../types/session";
+import type {
+  LayoutNode,
+  PaneLayoutNode,
+  SplitDirection,
+} from "../types/session";
 
 export interface PaneRect {
   paneId: string;
@@ -51,6 +55,7 @@ export function splitPaneInLayout(
   targetPaneId: string,
   direction: SplitDirection,
   newPaneId: string,
+  newPaneCwd?: string,
 ): LayoutNode {
   if (layout.kind === "pane") {
     if (layout.paneId !== targetPaneId) {
@@ -62,15 +67,67 @@ export function splitPaneInLayout(
       direction,
       ratio: 0.5,
       first: layout,
-      second: { kind: "pane", paneId: newPaneId },
+      second: {
+        kind: "pane",
+        paneId: newPaneId,
+        ...(newPaneCwd ? { cwd: newPaneCwd } : {}),
+      },
     };
   }
 
   return {
     ...layout,
-    first: splitPaneInLayout(layout.first, targetPaneId, direction, newPaneId),
-    second: splitPaneInLayout(layout.second, targetPaneId, direction, newPaneId),
+    first: splitPaneInLayout(layout.first, targetPaneId, direction, newPaneId, newPaneCwd),
+    second: splitPaneInLayout(layout.second, targetPaneId, direction, newPaneId, newPaneCwd),
   };
+}
+
+export function findPaneNode(
+  layout: LayoutNode,
+  paneId: string,
+): PaneLayoutNode | null {
+  if (layout.kind === "pane") {
+    return layout.paneId === paneId ? layout : null;
+  }
+  return findPaneNode(layout.first, paneId) ?? findPaneNode(layout.second, paneId);
+}
+
+/** Rewrites every pane node; the split structure stays as it is. */
+export function mapPaneNodes(
+  layout: LayoutNode,
+  transform: (pane: PaneLayoutNode) => PaneLayoutNode,
+): LayoutNode {
+  if (layout.kind === "pane") {
+    return transform(layout);
+  }
+  return {
+    ...layout,
+    first: mapPaneNodes(layout.first, transform),
+    second: mapPaneNodes(layout.second, transform),
+  };
+}
+
+/** Gives one pane its own working directory; `undefined` puts it back on the session's. */
+export function setPaneCwdInLayout(
+  layout: LayoutNode,
+  paneId: string,
+  cwd: string | undefined,
+): LayoutNode {
+  return mapPaneNodes(layout, (pane) => {
+    if (pane.paneId !== paneId) {
+      return pane;
+    }
+    const { cwd: _previous, ...rest } = pane;
+    return cwd ? { ...rest, cwd } : rest;
+  });
+}
+
+/** Where this pane's terminal runs: its own folder, else the session's default. */
+export function resolvePaneCwd(
+  session: { cwd: string; layout: LayoutNode },
+  paneId: string,
+): string {
+  return findPaneNode(session.layout, paneId)?.cwd ?? session.cwd;
 }
 
 export function closePaneInLayout(

@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  configureAgentCliInstaller,
-  ensureAgentClis,
-} from "./agent-cli-install-service";
+import { ensureAgentClis } from "./agent-cli-install-service";
 
 afterEach(() => {
-  configureAgentCliInstaller({ wslMode: false });
   delete process.env.HEAD_TERMINAL_SKIP_CLI_INSTALL;
 });
 

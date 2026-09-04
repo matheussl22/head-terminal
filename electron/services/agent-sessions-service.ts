@@ -5,7 +5,6 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import type { ResumableSessionEntry } from "../types/api";
-import { toPosixPath } from "./wsl-service";
 import { TITLE_MAX_LENGTH, summarizeTitle } from "./session-title";
 
 const MAX_ENTRIES = 20;
@@ -36,33 +35,35 @@ export interface AgentSessionRoots {
   cursorProjectsRoot: string;
 }
 
-/** Linux `$HOME` (UNC on Windows) or the native homedir. Extracted so a
- * WSL pane's transcripts are not looked up under `C:\Users\...` while the
- * CLI writes them to `/root/.claude`. */
+/** Where each CLI keeps its transcripts, under the user's home. */
 export function resolveAgentSessionRoots(options: {
-  posixHome: string | null;
-  toWindowsPath?: (posix: string) => string;
-  nativeHome?: string;
-}): AgentSessionRoots {
-  const nativeHome = options.nativeHome ?? homedir();
-  const posixHome = options.posixHome;
-  const toWindowsPath = options.toWindowsPath;
-  const base = posixHome
-    ? (suffix: string) => {
-        const posix = `${posixHome}${suffix}`;
-        return toWindowsPath ? toWindowsPath(posix) : posix;
-      }
-    : (suffix: string) => join(nativeHome, ...suffix.slice(1).split("/"));
+  home?: string;
+} = {}): AgentSessionRoots {
+  const home = options.home ?? homedir();
   return {
-    claudeProjectsRoot: base("/.claude/projects"),
-    codexRoot: base("/.codex"),
-    cursorProjectsRoot: base("/.cursor/projects"),
+    claudeProjectsRoot: join(home, ".claude", "projects"),
+    codexRoot: join(home, ".codex"),
+    cursorProjectsRoot: join(home, ".cursor", "projects"),
   };
 }
 
 /** Overridable in tests so nothing here ever touches the real `$HOME`. */
 function defaultRoots(): AgentSessionRoots {
-  return resolveAgentSessionRoots({ posixHome: null });
+  return resolveAgentSessionRoots();
+}
+
+/**
+ * Two spellings of one directory: Windows tolerates either separator and is
+ * case-insensitive on the drive letter, and the CLIs record whichever form
+ * they were handed.
+ */
+function samePath(left: string, right: string): boolean {
+  const normalize = (value: string) =>
+    value
+      .replaceAll("\\", "/")
+      .replace(/\/+$/u, "")
+      .replace(/^([A-Za-z]):/u, (_, drive: string) => `${drive.toUpperCase()}:`);
+  return normalize(left) === normalize(right);
 }
 
 // Scaffolding injected around the user's actual text in Claude/Cursor
@@ -306,8 +307,7 @@ function firstTextBlock(content: unknown): string | undefined {
  * restart opening a blank conversation instead of resuming.
  */
 function cwdLookupSpellings(cwd: string): string[] {
-  const posix = toPosixPath(cwd);
-  return [...new Set([cwd, cwd.replaceAll("\\", "/"), posix])];
+  return [...new Set([cwd, cwd.replaceAll("\\", "/")])];
 }
 
 async function resolveEncodedProjectDir(
@@ -587,7 +587,7 @@ async function listCodexSessions(
   }> = [];
   for (const file of files) {
     const meta = await readCodexSessionMeta(file.path).catch(() => null);
-    if (!meta || toPosixPath(meta.cwd) !== toPosixPath(cwd)) continue;
+    if (!meta || !samePath(meta.cwd, cwd)) continue;
     const indexed = index.get(meta.id);
     // Sort key must match what gets displayed — mixing the index's
     // updated_at with the file's own mtime produces a list that looks

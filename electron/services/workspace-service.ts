@@ -21,7 +21,8 @@ function isBoundedString(value: unknown, maxLength: number): value is string {
 function isLayoutNode(value: unknown, depth = 0): boolean {
   if (!isRecord(value) || depth > 16) return false;
   if (value.kind === "pane") {
-    return isBoundedString(value.paneId, 256);
+    return isBoundedString(value.paneId, 256)
+      && (value.cwd === undefined || isBoundedString(value.cwd, 16_384));
   }
   if (value.kind !== "split") return false;
   return (value.direction === "horizontal" || value.direction === "vertical")

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 
-import type { WslInfo } from "../../../electron/types/api";
 
 import { buildAgentProfiles } from "../../config/agents";
 import { resolveDefaultCwd } from "../../core/agent-launcher";
@@ -83,8 +82,6 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [apiKeySaveError, setApiKeySaveError] = useState<string | null>(null);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [mcpByAgent, setMcpByAgent] = useState<Record<string, McpAgentState>>({});
-  const [wsl, setWsl] = useState<WslInfo | null>(null);
-  const [wslPending, setWslPending] = useState(false);
 
   const refreshAccounts = () => {
     const accounts = loadClaudeAccountProfiles();
@@ -106,10 +103,6 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setClaudeAccountError(null);
     setApiKeySaveError(null);
     refreshAccounts();
-    void window.headTerminal.system
-      .getPlatform()
-      .then((info) => setWsl(info.wsl ?? null))
-      .catch(() => setWsl(null));
   }, [open]);
 
   useEffect(() => {
@@ -394,47 +387,6 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                   </label>
                 </div>
 
-                {wsl && (
-                  <div className="settings-card settings-card--rows">
-                    <label className="settings-row">
-                      <span>
-                        <strong>Distribuição WSL</strong>
-                        <small>
-                          {wsl.enabled
-                            ? "Onde os agentes, o git e os repositórios rodam. Vale para os próximos terminais."
-                            : "Nenhuma distribuição encontrada. Instale o WSL2 para abrir terminais."}
-                        </small>
-                      </span>
-                      <select
-                        value={wsl.distro ?? ""}
-                        disabled={wslPending || wsl.available.length === 0}
-                        onChange={(event) => {
-                          const distro = event.target.value;
-                          setWslPending(true);
-                          void window.headTerminal.system
-                            .selectWslDistro(distro)
-                            .then((applied) => {
-                              if (applied) {
-                                setWsl((current) =>
-                                  current ? { ...current, distro, enabled: true } : current,
-                                );
-                              }
-                            })
-                            .finally(() => setWslPending(false));
-                        }}
-                      >
-                        {wsl.available.length === 0 && (
-                          <option value="">Nenhuma</option>
-                        )}
-                        {wsl.available.map((distro) => (
-                          <option key={distro} value={distro}>
-                            {distro}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                )}
               </section>
             )}
 

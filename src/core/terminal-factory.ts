@@ -16,8 +16,16 @@ import {
 } from "./terminal-clipboard";
 
 const SCROLLBACK = 5000;
-const MIN_COLS = 80;
-const MIN_ROWS = 24;
+/**
+ * @xterm/addon-fit floors its proposal at 2x1 whenever the pane measures zero
+ * — a minimized window, a pane whose layout hasn't settled — and `fit()`
+ * applies that floor. Resizing the buffer to 2 columns truncates every line in
+ * it, and a ConPTY pane never reflows them back, so the scrollback comes back
+ * as one or two characters per row. Anything below a pane a human could use is
+ * treated as "not measurable yet" and skipped instead.
+ */
+const MIN_FIT_COLS = 10;
+const MIN_FIT_ROWS = 3;
 const WEBGL_FAILED_KEY = "head-terminal.webgl-failed";
 /** One xterm write per rAF, capped so a huge burst still yields. */
 const MAX_FRAME_WRITE_BYTES = 192 * 1024;
@@ -199,30 +207,39 @@ function shouldEnableWebglRenderer(preference: TerminalRenderer): boolean {
   return true;
 }
 
-export function fitTerminal(fitAddon: FitAddon, terminal: Terminal): void {
-  fitAddon.fit();
-
+/**
+ * Applies the proposed geometry by hand instead of calling `fitAddon.fit()`,
+ * which applies whatever it proposes — degenerate floor included. Returns the
+ * size in effect, or `null` when the pane wasn't measurable and the terminal
+ * was left exactly as it was.
+ */
+export function fitTerminal(
+  fitAddon: FitAddon,
+  terminal: Terminal,
+): { cols: number; rows: number } | null {
   const proposed = fitAddon.proposeDimensions();
-  if (proposed && proposed.cols >= 2 && proposed.rows >= 2) {
+  if (!proposed || proposed.cols < MIN_FIT_COLS || proposed.rows < MIN_FIT_ROWS) {
+    return null;
+  }
+
+  let cols = proposed.cols;
   const viewport = terminal.element?.querySelector<HTMLElement>(".xterm-viewport");
   if (viewport) {
     const scrollbarWidth = viewport.offsetWidth - viewport.clientWidth;
     if (scrollbarWidth > 0) {
       const cellWidth = viewport.clientWidth / proposed.cols;
-      const cols = Math.max(
-        2,
+      cols = Math.max(
+        MIN_FIT_COLS,
         proposed.cols - Math.ceil(scrollbarWidth / Math.max(cellWidth, 1)),
       );
-      if (cols !== terminal.cols || proposed.rows !== terminal.rows) {
-        terminal.resize(cols, proposed.rows);
-      }
     }
   }
+
+  if (cols !== terminal.cols || proposed.rows !== terminal.rows) {
+    terminal.resize(cols, proposed.rows);
   }
 
-  if (terminal.cols < 2 || terminal.rows < 2) {
-    terminal.resize(MIN_COLS, MIN_ROWS);
-  }
+  return { cols, rows: proposed.rows };
 }
 
 const frameTextDecoder = new TextDecoder();

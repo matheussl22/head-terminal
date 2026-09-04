@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +9,6 @@ import {
   resolveAgentSessionRoots,
   type AgentSessionRoots,
 } from "./agent-sessions-service";
-import { toWindowsPath } from "./wsl-service";
 
 const cleanup: string[] = [];
 
@@ -487,9 +485,10 @@ describe("agent-sessions-service", () => {
     expect(after[0].title).toBe("como o head-terminal salva a conversa");
   });
 
-  it("finds Claude transcripts when the session cwd is a Windows path for a WSL folder", async () => {
+  it("finds Claude transcripts written with the other separator", async () => {
     const roots = await makeRoots();
-    const dir = join(roots.claudeProjectsRoot, "-mnt-c-Users-mathe-proj");
+    // The CLI saw `C:/Users/mathe/proj`; the pane carries backslashes.
+    const dir = join(roots.claudeProjectsRoot, "C--Users-mathe-proj");
     await mkdir(dir, { recursive: true });
     await writeFile(
       join(dir, "win.jsonl"),
@@ -510,96 +509,10 @@ describe("agent-sessions-service", () => {
     expect(entries[0].fromTranscript).toBe(true);
   });
 
-  it("finds Cursor transcripts when WSL encoded the Windows cwd as mnt-c-…", async () => {
-    const roots = await makeRoots();
-    const dir = join(
-      roots.cursorProjectsRoot,
-      "mnt-c-Users-mathe",
-      "agent-transcripts",
-      "chat-wsl",
-    );
-    await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, "chat-wsl.jsonl"),
-      JSON.stringify({
-        message: {
-          content: [
-            {
-              type: "text",
-              text: "<timestamp>Wednesday, Aug 26, 2026, 9:28 AM (UTC-3)</timestamp>\n<user_query>\noi\n</user_query>",
-            },
-          ],
-        },
-      }),
-    );
-
-    const entries = await listResumableSessions(
-      String.raw`C:\Users\mathe`,
-      "cursor",
-      undefined,
-      roots,
-    );
-    expect(entries).toEqual([
-      expect.objectContaining({
-        id: "chat-wsl",
-        title: "oi",
-        fromTranscript: true,
-      }),
-    ]);
-  });
-
-  it("points WSL session roots at the Linux home over UNC, not C:\\Users", () => {
-    const roots = resolveAgentSessionRoots({
-      posixHome: "/root",
-      toWindowsPath: (posix) => toWindowsPath(posix, "Ubuntu"),
-    });
-    expect(roots.claudeProjectsRoot).toBe(
-      String.raw`\\wsl.localhost\Ubuntu\root\.claude\projects`,
-    );
-    expect(roots.cursorProjectsRoot).toBe(
-      String.raw`\\wsl.localhost\Ubuntu\root\.cursor\projects`,
-    );
-  });
-});
-
-const LIVE_CLAUDE_ROOT =
-  String.raw`\\wsl.localhost\Ubuntu\root\.claude\projects`;
-const LIVE_CURSOR_ROOT =
-  String.raw`\\wsl.localhost\Ubuntu\root\.cursor\projects`;
-
-describe.skipIf(!existsSync(LIVE_CLAUDE_ROOT))("live WSL transcripts", () => {
-  it("titles a Windows-cwd Claude chat from the first typed message", async () => {
-    const entries = await listResumableSessions(
-      String.raw`C:\Users\mathe`,
-      "claude",
-      undefined,
-      {
-        claudeProjectsRoot: LIVE_CLAUDE_ROOT,
-        codexRoot: join(tmpdir(), "ht-no-codex"),
-        cursorProjectsRoot: LIVE_CURSOR_ROOT,
-      },
-    );
-    expect(entries.length).toBeGreaterThan(0);
-    expect(entries[0].fromTranscript).toBe(true);
-    expect(entries[0].title).not.toMatch(/^Sessão de /u);
-  });
-
-  it("titles a Windows-cwd Cursor chat from the first typed message", async () => {
-    if (!existsSync(LIVE_CURSOR_ROOT)) {
-      return;
-    }
-    const entries = await listResumableSessions(
-      String.raw`C:\Users\mathe`,
-      "cursor",
-      undefined,
-      {
-        claudeProjectsRoot: LIVE_CLAUDE_ROOT,
-        codexRoot: join(tmpdir(), "ht-no-codex"),
-        cursorProjectsRoot: LIVE_CURSOR_ROOT,
-      },
-    );
-    expect(entries.length).toBeGreaterThan(0);
-    expect(entries[0].fromTranscript).toBe(true);
-    expect(entries[0].title).not.toMatch(/^Sessão de /u);
+  it("keeps every CLI's transcripts under the user's own home", () => {
+    const roots = resolveAgentSessionRoots({ home: join("C:", "Users", "mathe") });
+    expect(roots.claudeProjectsRoot).toBe(join("C:", "Users", "mathe", ".claude", "projects"));
+    expect(roots.codexRoot).toBe(join("C:", "Users", "mathe", ".codex"));
+    expect(roots.cursorProjectsRoot).toBe(join("C:", "Users", "mathe", ".cursor", "projects"));
   });
 });

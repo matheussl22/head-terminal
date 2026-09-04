@@ -76,39 +76,42 @@ sudo apt install xvfb xdotool imagemagick
 
 On Wayland the application runs through Electron/Ozone, but the current visual automation uses X11/XWayland. Recording as implemented today depends on `parecord`; without it, only voice is unavailable.
 
-### Windows (WSL2)
+### Windows
 
-On Windows the application is a native Electron app whose panes open their PTY
-**inside WSL**. The agents (`claude`, `codex`, `cursor`, `agy`), `git` and the
-repositories all live in the distribution's ext4; Windows is only the graphical
-shell. Nothing in the launch mechanism changes, because it still runs on a real
-Linux — `wsl.exe` is wrapped around the argv in the main process and nowhere
-else.
+On Windows the application runs natively: each pane is a ConPTY (`node-pty`)
+hosting PowerShell — PowerShell 7 when installed, Windows PowerShell 5.1
+otherwise — and the agents are their Windows builds on `PATH`. Repositories are
+ordinary `C:\...` folders; `git`, the watcher (`fs.watch`) and the transcript
+lookup under `%USERPROFILE%\.claude` all run on the Windows side. WSL is not
+involved.
 
-Inside the distribution, install what the Linux section lists. On the Windows
-side:
+Requirements:
 
-- WSL2 with a distribution that has `zsh` and the agent CLIs installed;
-- Node.js 20 and npm.
+- Windows 10 1809 or later (ConPTY);
+- Node.js 20 and npm;
+- Git for Windows (for the Git context);
+- the agent CLIs: `winget install Anthropic.ClaudeCode`, `winget install
+  OpenAI.Codex`, the Cursor Agent Windows installer. Missing ones are offered
+  for installation on first start.
 
 No C++ toolchain is needed: `node-pty` publishes N-API prebuilds for
 `win32-x64` and `win32-arm64`, and the module loads them straight from
 `prebuilds/<platform>-<arch>`, so `rebuildConfig` skips the native rebuild on
 Windows. Linux has no published prebuild and still compiles normally.
 
-Check that `wsl.exe -l -q` lists the distribution and that
-`\\wsl.localhost\<distro>` is reachable from Explorer. With more than one
-distribution installed, pick which one to use under Settings → Terminal; the
-choice is stored in `wsl.json` in the app's user data.
+Panes carry their own working directory (the folder button in the pane header);
+the session's folder is the default for new panes. A workspace saved by the
+older WSL-based build is migrated on first start: `/mnt/c/...` folders become
+`C:\...`, folders that only existed inside the distribution fall back to the
+default folder.
 
 Known differences on Windows:
 
 | Area | Behaviour |
 |---|---|
 | Voice | Recording depends on `parecord`; the button is hidden until capture moves into the renderer. |
-| Git watcher | `inotify` does not cross the 9p boundary, so the Git context is polled instead of watched. |
+| Shell | The pane shell is PowerShell; agent profiles are PowerShell scripts (`-EncodedCommand`), the `zsh` profiles are Linux/macOS only. |
 | Installer | `npm run make` produces a Squirrel installer. Code signing is still pending, as is macOS notarization. |
-| Repositories in `/mnt/c` | They work, and paths are translated, but Git and the watcher are noticeably slower than on ext4. |
 
 ### macOS
 

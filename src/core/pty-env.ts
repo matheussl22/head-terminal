@@ -8,7 +8,8 @@ function localeEncodingSuffix(): string {
       .userAgentData?.platform ?? navigator.platform;
 
   // The shell on the other end is what decides the spelling, not the window
-  // manager: on Windows the pane runs inside WSL, so it is glibc's `utf8`.
+  // manager. PowerShell ignores LANG altogether, so Windows only has to be
+  // harmless here.
   return /linux|win/i.test(platform) ? "utf8" : "UTF-8";
 }
 

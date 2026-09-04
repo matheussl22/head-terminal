@@ -18,16 +18,6 @@ export function fail(message) {
   throw new Error(message);
 }
 
-export function toPosixPath(windows) {
-  const drive = /^([A-Za-z]):[\\/](.*)$/u.exec(windows);
-  if (drive) {
-    const rest = drive[2].replaceAll("\\", "/");
-    return `/mnt/${drive[1].toLowerCase()}${rest ? `/${rest}` : ""}`;
-  }
-  return windows.replaceAll("\\", "/");
-}
-
-export const PROJECT_POSIX = toPosixPath(PROJECT_DIR);
 
 export function powershell(command) {
   return new Promise((resolve, reject) => {
@@ -250,6 +240,30 @@ export async function waitForPaneReady(cdp, deadline, debug) {
   );
   debug(`paneReady=${paneReady}`);
   if (!paneReady) fail("Renderer never mounted a terminal pane");
+}
+
+/**
+ * A mounted pane is not a working pane: the pty spawn happens after mount and
+ * a rejected argv (see validateSpawnInput) leaves an empty terminal that every
+ * DOM-level scenario would still walk through happily.
+ */
+export async function waitForPtySpawn(cdp, { timeout = 30_000 } = {}) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    const diag = await evaluate(
+      cdp,
+      `localStorage.getItem("head-terminal.diag.v2") || ""`,
+    );
+    if (typeof diag === "string") {
+      const failed = diag
+        .split("\n")
+        .find((line) => line.includes('"js.pty.spawn_failed"'));
+      if (failed) fail(`pty spawn failed: ${failed.slice(0, 400)}`);
+      if (diag.includes('"js.pty.spawn_ok"')) return;
+    }
+    await delay(250);
+  }
+  fail("pty never spawned (no js.pty.spawn_ok checkpoint)");
 }
 
 export async function poll(cdp, expression, options = {}) {

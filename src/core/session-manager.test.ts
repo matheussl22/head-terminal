@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type AgentSession } from "../types/session";
 import { EMPTY_GIT_CONTEXT } from "../types/git-context";
-import { collectPaneIds } from "./session-layout";
+import {
+  collectPaneIds,
+  findPaneNode,
+  resolvePaneCwd,
+} from "./session-layout";
 import { createEmptySession, useSessionStore } from "./session-manager";
 
 function session(id: string, pinned = false): AgentSession {
@@ -441,5 +445,102 @@ describe("useSessionStore git context merge", () => {
       branch: "main",
       lastTouchedPath: "src/b.ts",
     });
+  });
+});
+
+describe("useSessionStore pane folders", () => {
+  beforeEach(() => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
+  });
+
+  function withSplitSession() {
+    const store = useSessionStore.getState();
+    const created = createEmptySession({
+      id: "s",
+      title: "s",
+      cwd: "C:\\Users\\m\\default",
+      agentProfileId: "claude",
+    });
+    store.addSession(created);
+    const [first] = collectPaneIds(created.layout);
+    useSessionStore.getState().setActivePaneId(first);
+    useSessionStore.getState().splitActivePane("vertical");
+    const session = useSessionStore.getState().sessions[0];
+    const [, second] = collectPaneIds(session.layout);
+    return { first, second };
+  }
+
+  it("moves one terminal to its own folder and restarts only that terminal", () => {
+    const { first, second } = withSplitSession();
+    const before = useSessionStore.getState().paneRestartKeys;
+
+    useSessionStore.getState().updatePaneCwd(second, "D:\\repo");
+
+    const state = useSessionStore.getState();
+    const session = state.sessions[0];
+    expect(resolvePaneCwd(session, second)).toBe("D:\\repo");
+    expect(resolvePaneCwd(session, first)).toBe("C:\\Users\\m\\default");
+    expect(session.cwd).toBe("C:\\Users\\m\\default");
+    expect(state.paneRestartKeys[second] ?? 0).toBe((before[second] ?? 0) + 1);
+    expect(state.paneRestartKeys[first] ?? 0).toBe(before[first] ?? 0);
+  });
+
+  it("does nothing when the folder is already the pane's", () => {
+    const { second } = withSplitSession();
+    const before = useSessionStore.getState().paneRestartKeys[second] ?? 0;
+
+    useSessionStore.getState().updatePaneCwd(second, "C:\\Users\\m\\default");
+    useSessionStore.getState().updatePaneCwd(second, "   ");
+
+    expect(useSessionStore.getState().paneRestartKeys[second] ?? 0).toBe(before);
+  });
+
+  it("puts a pane back on the session default instead of pinning a copy of it", () => {
+    const { second } = withSplitSession();
+    useSessionStore.getState().updatePaneCwd(second, "D:\\repo");
+    useSessionStore.getState().updatePaneCwd(second, "C:\\Users\\m\\default");
+
+    const session = useSessionStore.getState().sessions[0];
+    expect(findPaneNode(session.layout, second)?.cwd).toBeUndefined();
+  });
+
+  it("splits inherit a pinned folder, and follow the session otherwise", () => {
+    const { first, second } = withSplitSession();
+    useSessionStore.getState().updatePaneCwd(second, "D:\\repo");
+
+    useSessionStore.getState().setActivePaneId(second);
+    useSessionStore.getState().splitActivePane("horizontal");
+    let session = useSessionStore.getState().sessions[0];
+    const pinnedChild = collectPaneIds(session.layout).find(
+      (id) => id !== first && id !== second,
+    )!;
+    expect(resolvePaneCwd(session, pinnedChild)).toBe("D:\\repo");
+
+    useSessionStore.getState().setActivePaneId(first);
+    useSessionStore.getState().splitActivePane("horizontal");
+    session = useSessionStore.getState().sessions[0];
+    const plainChild = collectPaneIds(session.layout).find(
+      (id) => ![first, second, pinnedChild].includes(id),
+    )!;
+    expect(findPaneNode(session.layout, plainChild)?.cwd).toBeUndefined();
+    expect(resolvePaneCwd(session, plainChild)).toBe("C:\\Users\\m\\default");
+  });
+
+  it("moving the session takes every pane along, pinned ones included", () => {
+    const { first, second } = withSplitSession();
+    useSessionStore.getState().updatePaneCwd(second, "D:\\repo");
+
+    useSessionStore.getState().updateSessionCwd("s", "E:\\moved");
+
+    const session = useSessionStore.getState().sessions[0];
+    expect(resolvePaneCwd(session, first)).toBe("E:\\moved");
+    expect(resolvePaneCwd(session, second)).toBe("E:\\moved");
+    expect(findPaneNode(session.layout, second)?.cwd).toBeUndefined();
   });
 });

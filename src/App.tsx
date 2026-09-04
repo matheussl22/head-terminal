@@ -8,7 +8,10 @@ import {
 import {
   hydrateWorkspace,
   loadPersistedWorkspace,
+  savePersistedWorkspace,
 } from "./core/session-persistence";
+import { whenPlatformInfo } from "./core/platform-info";
+import { migrateWorkspaceCwds } from "./core/workspace-migration";
 import { useSessionStore } from "./core/session-manager";
 import { AppShell } from "./components/layout/AppShell";
 import { CreateSessionDialog } from "./components/layout/CreateSessionDialog";
@@ -67,7 +70,21 @@ function App() {
         setDefaultCwd(cwd);
         setBootstrapError(null);
 
-        const persisted = await loadPersistedWorkspace();
+        const loaded = await loadPersistedWorkspace();
+        const platform = await whenPlatformInfo();
+        const persisted = loaded
+          ? migrateWorkspaceCwds(loaded, {
+              isWindows: platform?.platform === "win32",
+              fallbackCwd: cwd,
+            })
+          : null;
+        if (persisted && persisted !== loaded) {
+          // Folders from the WSL era were rewritten; save once so the next
+          // start does not migrate again.
+          void savePersistedWorkspace(persisted).catch((error: unknown) => {
+            logError("workspace.migration_save_failed", error);
+          });
+        }
         if (persisted && persisted.sessions.length > 0) {
           const restored = hydrateWorkspace(persisted);
           hydrateWorkspaceState(

@@ -35,6 +35,7 @@ import type {
   WritePtyInput,
 } from "../types/api";
 import { IPC_CHANNELS } from "./channels";
+import { WINDOWS_SHELL_COMMAND } from "../../src/config/agents-shared";
 import { unsupported } from "./errors";
 import { asBoolean, asRecord, asString, assertTrustedSender } from "./validate";
 import { isPersistedWorkspace } from "../services/workspace-service";
@@ -69,7 +70,6 @@ export interface IpcServices {
     listOllamaModels?(): Promise<string[]>;
     deleteClaudeProfile(path: string): Promise<void>;
     getPlatform(): Promise<PlatformInfo> | PlatformInfo;
-    selectWslDistro?(distro: string): Promise<boolean>;
   };
   secrets?: {
     has(key: AllowedSecretKey): Promise<boolean>;
@@ -110,7 +110,6 @@ export interface IpcServices {
     readForTerminal(): Promise<string | null>;
     importPaths(paths: unknown): Promise<string | null>;
   };
-  toAgentPath?: (windowsPath: string) => string;
 }
 
 export interface RegisterIpcOptions {
@@ -279,11 +278,6 @@ export function registerIpc({
   handle(IPC_CHANNELS.system.getPlatform, () =>
     services.system?.getPlatform() ?? unsupported("system.getPlatform"),
   );
-  handle(IPC_CHANNELS.system.selectWslDistro, (_event, value) =>
-    services.system?.selectWslDistro?.(
-      asString(value, "distro", { maxLength: 128 }),
-    ) ?? false,
-  );
 
   handle(IPC_CHANNELS.secrets.has, (_event, value) =>
     services.secrets?.has(validateSecretKey(value)) ?? unsupported("secrets.has"),
@@ -344,7 +338,6 @@ export function registerIpc({
   });
   const pasteService = services.clipboardPaste ?? new ClipboardPasteService({
     clipboard,
-    ...(services.toAgentPath ? { toAgentPath: services.toAgentPath } : {}),
   });
   handle(IPC_CHANNELS.clipboard.readForTerminal, () => pasteService.readForTerminal());
   handle(IPC_CHANNELS.clipboard.importPaths, (_event, paths) =>
@@ -444,22 +437,64 @@ export function emitPtyExit(window: BrowserWindow, payload: PtyExitEvent): void 
   }
 }
 
-function validateSpawnInput(value: unknown): SpawnPtyInput {
-  const input = asRecord(value, "input");
-  const args = input.args;
+const ZSH_COMMANDS = new Set(["/bin/zsh", "/usr/bin/zsh"]);
+/** The only PowerShell switches a pane may start with; the script itself
+ * travels base64-encoded after `-EncodedCommand`. */
+const POWERSHELL_SWITCHES = new Set([
+  "-NoLogo",
+  "-NoExit",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-EncodedCommand",
+]);
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
+
+/**
+ * A pane launches one of two shells, each with a fixed argv shape: a login
+ * zsh with at most `-l -c <script>`, or PowerShell with a handful of switches
+ * and an encoded script. Anything else is not something the renderer builds.
+ */
+function validateShellArgs(command: string, args: unknown): string[] {
   if (
     !Array.isArray(args)
-    || args.length > 3
-    || !args.every((arg) => typeof arg === "string" && arg.length <= 32_768)
+    || !args.every((arg): arg is string => typeof arg === "string" && arg.length <= 32_768)
   ) {
     throw new TypeError("args must be an array of strings");
   }
+  if (ZSH_COMMANDS.has(command)) {
+    if (args.length > 3) {
+      throw new TypeError("args must be an array of strings");
+    }
+    return args;
+  }
+  // PowerShell: every switch from the allowlist, and an encoded script only
+  // right after -EncodedCommand.
+  if (args.length > 6) {
+    throw new TypeError("args must be an array of strings");
+  }
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (POWERSHELL_SWITCHES.has(arg)) {
+      continue;
+    }
+    const previous = index > 0 ? args[index - 1] : undefined;
+    if (previous === "-EncodedCommand" && BASE64.test(arg)) {
+      continue;
+    }
+    throw new TypeError("args must be an array of strings");
+  }
+  return args;
+}
+
+function validateSpawnInput(value: unknown): SpawnPtyInput {
+  const input = asRecord(value, "input");
   const cols = positiveInteger(input.cols, "cols", 1_000);
   const rows = positiveInteger(input.rows, "rows", 1_000);
   const command = asString(input.command, "command", { maxLength: 16_384 });
-  if (command !== "/bin/zsh" && command !== "/usr/bin/zsh") {
-    throw new TypeError("command must be an approved zsh executable");
+  if (!ZSH_COMMANDS.has(command) && command !== WINDOWS_SHELL_COMMAND) {
+    throw new TypeError("command must be an approved shell");
   }
+  const args = validateShellArgs(command, input.args);
   const env = input.env === undefined ? undefined : asStringRecord(input.env, "env");
   const allowedEnv = new Set([
     "LANG",

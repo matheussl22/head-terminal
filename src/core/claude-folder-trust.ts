@@ -3,13 +3,15 @@ import { decodePtyData } from "./pty-text";
 /** Claude Code paints this before the REPL. The option is already selected;
  * Enter confirms it. Trust is not persisted in `$HOME` or some non-git
  * folders, so Head Terminal confirms it once per spawn — the pane cwd is a
- * folder the user already picked. */
+ * folder the user already picked. Phrases are compared with every whitespace
+ * removed: ConPTY paints the gaps between words as cursor moves, not spaces,
+ * so a stripped Windows frame reads `Yes,Itrustthisfolder`. */
 const TRUST_PHRASES = [
-  "yes, i trust this folder",
-  "do you trust the files in this folder",
+  "yes,itrustthisfolder",
+  "doyoutrustthefilesinthisfolder",
 ];
 
-const TRUST_EXIT_PHRASE = "no, exit";
+const TRUST_EXIT_PHRASE = "no,exit";
 
 const ANSI_PATTERN =
   /\x1b(?:\[[0-9;?]*[ -/]*[@-~]|][^\x07\x1b]*(?:\x07|\x1b\\)|[()][AB012])/g;
@@ -23,7 +25,7 @@ export function stripAnsiForTrustPrompt(text: string): string {
 }
 
 export function isClaudeFolderTrustPrompt(text: string): boolean {
-  const normalized = stripAnsiForTrustPrompt(text).toLowerCase();
+  const normalized = stripAnsiForTrustPrompt(text).toLowerCase().replace(/\s+/gu, "");
   if (!normalized.includes(TRUST_EXIT_PHRASE)) {
     return false;
   }

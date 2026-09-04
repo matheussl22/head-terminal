@@ -2,8 +2,15 @@ export type SessionStatus = "starting" | "running" | "exited";
 
 export type SplitDirection = "horizontal" | "vertical";
 
+export interface PaneLayoutNode {
+  kind: "pane";
+  paneId: string;
+  /** This terminal's own working directory. Absent: the session's `cwd`. */
+  cwd?: string;
+}
+
 export type LayoutNode =
-  | { kind: "pane"; paneId: string }
+  | PaneLayoutNode
   | {
       kind: "split";
       direction: SplitDirection;
@@ -15,6 +22,7 @@ export type LayoutNode =
 export interface AgentSession {
   id: string;
   title: string;
+  /** Default working directory: what a pane opens in unless it has its own. */
   cwd: string;
   agentProfileId: string;
   claudeAccountId?: string;

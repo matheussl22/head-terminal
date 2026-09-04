@@ -1,6 +1,7 @@
 import type { ITerminalOptions, ITheme } from "@xterm/xterm";
 
 import { loadFontSize } from "../core/ui-preferences";
+import { getCachedPlatformInfo } from "../core/platform-info";
 
 // Hyper-inspired, but with ANSI colors that actually read on pure black.
 // (Stock Hyper blue #0A2FC4 is nearly invisible on #000.)
@@ -85,6 +86,23 @@ function createXtermTheme(): ITheme {
   };
 }
 
+/**
+ * Every Windows pane runs on ConPTY (node-pty). Without this, ConPTY's own
+ * screen reflow on redraw/resize disagrees with xterm.js's line-wrap tracking
+ * and full-screen redraws (Claude Code's Ink UI) come out with stray
+ * duplicated fragments. `undefined` (non-Windows, or platform info not fetched
+ * yet) leaves xterm.js on its default heuristics.
+ */
+function resolveWindowsPty(): ITerminalOptions["windowsPty"] {
+  const info = getCachedPlatformInfo();
+  if (!info || info.platform !== "win32" || info.windowsBuild === undefined) {
+    return undefined;
+  }
+  // node-pty defaults to the ConPTY backend on any Windows build recent
+  // enough to have one (>=1809), which covers every build worth supporting.
+  return { backend: "conpty", buildNumber: info.windowsBuild };
+}
+
 export function createTerminalOptions(): ITerminalOptions {
   return {
     convertEol: true,
@@ -98,5 +116,6 @@ export function createTerminalOptions(): ITerminalOptions {
     // Lift near-black ANSI colors so they never vanish on #000.
     minimumContrastRatio: 4.5,
     theme: createXtermTheme(),
+    windowsPty: resolveWindowsPty(),
   };
 }

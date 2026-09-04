@@ -124,7 +124,7 @@ describe("Electron IPC contract", () => {
     const channels = flattenChannels(IPC_CHANNELS);
 
     expect(new Set(channels).size).toBe(channels.length);
-    expect(channels).toHaveLength(50);
+    expect(channels).toHaveLength(49);
     expect(channels.every((channel) => /^[a-z]+:[a-z][a-z-]*$/.test(channel))).toBe(true);
   });
 
@@ -177,6 +177,62 @@ describe("Electron IPC contract", () => {
       await invoke(IPC_CHANNELS.terminal.spawn, harness.trustedEvent, input),
     ).toEqual({ id: "pane-1", pid: 321 });
     expect(spawn).toHaveBeenCalledWith(73, input);
+  });
+
+  it("accepts a PowerShell pane with the fixed switch set and an encoded script", async () => {
+    const harness = fakeWindow();
+    const spawn = vi.fn(() => ({ id: "pane-1", pid: 321 }));
+    const services: IpcServices = {
+      terminal: { spawn, write: vi.fn(), resize: vi.fn(), kill: vi.fn() },
+    };
+    registerIpc({ window: harness.window, services });
+    const input = {
+      id: "pane-1",
+      command: "powershell",
+      args: ["-NoLogo", "-NoExit", "-ExecutionPolicy", "Bypass", "-EncodedCommand", "VwByAGkAdABlAC0ASABvAHMAdAA="],
+      cwd: "C:\\Users\\m",
+      cols: 100,
+      rows: 30,
+    };
+
+    expect(
+      await invoke(IPC_CHANNELS.terminal.spawn, harness.trustedEvent, input),
+    ).toEqual({ id: "pane-1", pid: 321 });
+    expect(spawn).toHaveBeenCalledWith(73, input);
+  });
+
+  it("rejects PowerShell switches the renderer never builds", () => {
+    const harness = fakeWindow();
+    const spawn = vi.fn();
+    registerIpc({
+      window: harness.window,
+      services: { terminal: { spawn, write: vi.fn(), resize: vi.fn(), kill: vi.fn() } },
+    });
+    const base = { id: "pane-1", command: "powershell", cwd: "C:\\Users\\m", cols: 100, rows: 30 };
+
+    // A plain-text -Command would let anything through the argv join.
+    expect(() =>
+      invoke(IPC_CHANNELS.terminal.spawn, harness.trustedEvent, {
+        ...base,
+        args: ["-NoExit", "-Command", "Remove-Item -Recurse C:\\"],
+      }),
+    ).toThrow(/args/);
+    // A script not announced by -EncodedCommand.
+    expect(() =>
+      invoke(IPC_CHANNELS.terminal.spawn, harness.trustedEvent, {
+        ...base,
+        args: ["-NoLogo", "VwByAGkAdABlAC0ASABvAHMAdAA="],
+      }),
+    ).toThrow(/args/);
+    // Neither shell.
+    expect(() =>
+      invoke(IPC_CHANNELS.terminal.spawn, harness.trustedEvent, {
+        ...base,
+        command: "cmd.exe",
+        args: [],
+      }),
+    ).toThrow(/approved shell/);
+    expect(spawn).not.toHaveBeenCalled();
   });
 
   it("rejects malformed PTY, secret and workspace payloads before services run", () => {

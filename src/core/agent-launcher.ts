@@ -2,22 +2,22 @@ import {
   DEFAULT_AGENT_PROFILE_ID,
   getAgentProfile,
 } from "../config/agents";
+import { WINDOWS_SHELL_COMMAND } from "../config/agents-shared";
 import { createEmptySession } from "./session-manager";
 import { collectPaneIds } from "./session-layout";
+import { basenamePath } from "./path-utils";
+import { isWindowsHost } from "./platform-info";
 import type { AgentSession } from "../types/session";
 
-/** Always a POSIX shell: on Windows the pane's shell lives inside WSL. */
+/** PowerShell on Windows (resolved by the main process), a login zsh elsewhere. */
 function getFallbackShell(): string {
+  if (isWindowsHost()) {
+    return WINDOWS_SHELL_COMMAND;
+  }
   const platform = typeof navigator === "undefined"
     ? process.platform
     : navigator.platform;
   return /mac/i.test(platform) ? "/bin/zsh" : "/usr/bin/zsh";
-}
-
-function basename(path: string): string {
-  const normalized = path.replace(/\/+$/, "");
-  const parts = normalized.split("/");
-  return parts[parts.length - 1] || "Head";
 }
 
 async function resolveHomeDocumentsDir(): Promise<string> {
@@ -40,7 +40,7 @@ export function createInitialSession(
   } = {},
 ): AgentSession {
   const profile = getAgentProfile(agentProfileId);
-  const sessionTitle = title ?? basename(cwd);
+  const sessionTitle = title ?? basenamePath(cwd, "Head");
 
   return createEmptySession({
     id: crypto.randomUUID(),

@@ -74,35 +74,51 @@ export function useTerminalInstance(
     };
 
     let loggedFitOk = false;
+    let skippedFits = 0;
     let lastSentSize: { cols: number; rows: number } | null = null;
     const fitPane = () => {
-      fitTerminal(fitAddon, terminal);
+      const size = fitTerminal(fitAddon, terminal);
 
-      if (!loggedFitOk && terminal.cols > 0 && terminal.rows > 0) {
+      if (!size) {
+        // Pane not measurable — a minimized window reports a zero-sized
+        // viewport, and a pane that just mounted may not be laid out yet.
+        // The terminal deliberately keeps the size it has: fitting here
+        // would truncate its buffer (see fitTerminal). One log per streak,
+        // since a minimized window keeps the ResizeObserver ticking.
+        skippedFits += 1;
+        if (skippedFits === 1) {
+          logEvent("warn", "terminal.fit_skipped", {
+            paneId,
+            cols: terminal.cols,
+            rows: terminal.rows,
+          });
+        }
+        return;
+      }
+      skippedFits = 0;
+
+      if (!loggedFitOk) {
         loggedFitOk = true;
         checkpoint("js.terminal.fit_ok", {
           paneId,
-          cols: terminal.cols,
-          rows: terminal.rows,
-        });
-      } else if (terminal.cols <= 0 || terminal.rows <= 0) {
-        logEvent("warn", "terminal.fit_zero", {
-          paneId,
-          cols: terminal.cols,
-          rows: terminal.rows,
+          cols: size.cols,
+          rows: size.rows,
         });
       }
 
       // fitPane runs on every visibility flip and every ResizeObserver
       // tick, usually landing on the exact size the pty already has —
-      // re-sending it just churns SIGWINCH at the agent for nothing.
-      if (
-        terminal.cols > 0 &&
-        terminal.rows > 0 &&
-        (lastSentSize?.cols !== terminal.cols || lastSentSize.rows !== terminal.rows)
-      ) {
-        lastSentSize = { cols: terminal.cols, rows: terminal.rows };
-        created.resizePty.current?.(terminal.cols, terminal.rows);
+      // re-sending it just churns SIGWINCH at the agent for nothing. Every
+      // size that does reach the pty is logged, not just the first fit: a
+      // bad one corrupts the agent's redraw and used to leave no trace.
+      if (lastSentSize?.cols !== size.cols || lastSentSize.rows !== size.rows) {
+        logEvent("info", "terminal.resized", {
+          paneId,
+          cols: size.cols,
+          rows: size.rows,
+        });
+        lastSentSize = { cols: size.cols, rows: size.rows };
+        created.resizePty.current?.(size.cols, size.rows);
       }
     };
     registerPaneFitter(paneId, fitPane);

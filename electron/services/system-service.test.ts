@@ -13,13 +13,13 @@ import {
   deleteClaudeProfileDir,
   getDefaultCwd,
   pathExists,
-  setPosixHome,
+  setHomeOverride,
 } from "./system-service";
 
 const cleanup: string[] = [];
 
 afterEach(async () => {
-  setPosixHome(null);
+  setHomeOverride(null);
   resetCommandRunner();
   await Promise.all(
     cleanup.splice(0).map((path) => rm(path, { recursive: true, force: true })),
@@ -28,14 +28,21 @@ afterEach(async () => {
 
 describe("system-service", () => {
   it("keeps the default Documentos cwd when it exists", async () => {
-    // On Windows the panes live in the distro, so once its $HOME is installed
-    // the default cwd is POSIX no matter what the host's home looks like.
     const home = await mkdtemp(join(tmpdir(), "ht-home-"));
     cleanup.push(home);
     await mkdir(join(home, "Documentos"));
 
-    setPosixHome(home);
-    await expect(getDefaultCwd()).resolves.toBe(`${home}/Documentos`);
+    setHomeOverride(home);
+    await expect(getDefaultCwd()).resolves.toBe(join(home, "Documentos"));
+  });
+
+  it("takes an English Documents folder too", async () => {
+    const home = await mkdtemp(join(tmpdir(), "ht-home-"));
+    cleanup.push(home);
+    await mkdir(join(home, "Documents"));
+
+    setHomeOverride(home);
+    await expect(getDefaultCwd()).resolves.toBe(join(home, "Documents"));
   });
 
   it("falls back to the home when Documentos is not there", async () => {
@@ -44,7 +51,7 @@ describe("system-service", () => {
     const home = await mkdtemp(join(tmpdir(), "ht-home-"));
     cleanup.push(home);
 
-    setPosixHome(home);
+    setHomeOverride(home);
     await expect(getDefaultCwd()).resolves.toBe(home);
   });
 
@@ -79,7 +86,7 @@ describe("system-service", () => {
       return { stdout: "", stderr: "" };
     });
 
-    await expect(checkAgentClis()).resolves.toEqual({
+    await expect(checkAgentClis("linux")).resolves.toEqual({
       antigravity: false,
       cursor: false,
       claude: false,

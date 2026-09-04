@@ -15,7 +15,16 @@ import {
   type ClipboardImage,
   type ClipboardReader,
 } from "./clipboard-paste-service";
-import { toPosixPath } from "./wsl-service";
+
+/** One `toAgentPath` flavour: `C:\x\y` → `/mnt/c/x/y`, POSIX input untouched. */
+function toPosixPath(windows: string): string {
+  const drive = /^([A-Za-z]):(?:\\|\/)(.*)$/u.exec(windows);
+  if (drive) {
+    const rest = drive[2].replaceAll("\\", "/");
+    return `/mnt/${drive[1].toLowerCase()}${rest ? `/${rest}` : ""}`;
+  }
+  return windows.replaceAll("\\", "/");
+}
 
 /** 1×1 PNG (red pixel). */
 const TINY_PNG = Buffer.from(

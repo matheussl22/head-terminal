@@ -30,7 +30,6 @@ try {
 
 // This suite drives a real POSIX shell in the host. On Windows a pane's zsh
 // lives inside the distro instead, and node-pty here would only ever spawn
-// `wsl.exe` — that boundary is covered by wsl-launch.verify.test.ts.
 if (!skipReason) {
   try {
     accessSync(ZSH, constants.X_OK);

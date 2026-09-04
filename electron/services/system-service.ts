@@ -31,50 +31,37 @@ function validatePath(value: string): string {
   return value;
 }
 
-/**
- * Home the panes actually live in. On Windows that is the WSL `$HOME`, never
- * `C:\Users\...`, and it is installed at startup once the distro is known.
- */
-let posixHome: string | null = null;
+/** Overridable so tests never depend on the real home. */
+let homeOverride: string | null = null;
 
-export function setPosixHome(home: string | null): void {
-  posixHome = home;
+export function setHomeOverride(home: string | null): void {
+  homeOverride = home;
 }
 
-export function getPosixHome(): string {
-  return posixHome ?? homedir();
+export function getHome(): string {
+  return homeOverride ?? homedir();
 }
 
 /**
- * Turns a POSIX path into one this process can hand to `fs`. It is the
- * identity everywhere except Windows, where the files live inside the distro
- * and are reached over UNC.
- */
-let toNativePath: (posix: string) => string = (posix) => posix;
-
-export function setNativePathTranslator(
-  translate: (posix: string) => string,
-): void {
-  toNativePath = translate;
-}
-
-/**
- * Matches the Tauri default (`$HOME/Documentos`) without trusting `$HOME`.
- * The folder is only there on a machine set up in Portuguese, and a pane whose
- * cwd does not exist cannot start at all, so the home is the fallback.
+ * The user's documents folder when there is one — `Documentos` on a machine
+ * set up in Portuguese, `Documents` otherwise — else the home. A pane whose
+ * cwd does not exist cannot start at all, so the fallback must always exist.
  */
 export async function getDefaultCwd(): Promise<string> {
-  const home = posixHome ?? homedir();
-  const documents = posixHome
-    ? `${posixHome}/Documentos`
-    : join(homedir(), "Documentos");
-  return (await pathExists(documents)) ? documents : home;
+  const home = getHome();
+  for (const name of ["Documentos", "Documents"]) {
+    const candidate = join(home, name);
+    if (await pathExists(candidate)) {
+      return candidate;
+    }
+  }
+  return home;
 }
 
 /** `path_exists` historically means "is an existing directory". */
 export async function pathExists(path: string): Promise<boolean> {
   try {
-    return (await stat(toNativePath(validatePath(path)))).isDirectory();
+    return (await stat(validatePath(path))).isDirectory();
   } catch {
     return false;
   }
@@ -103,9 +90,9 @@ async function runZshCliDiscovery(): Promise<{ stdout: string; ran: boolean }> {
     return { stdout: result.stdout, ran: true };
   } catch (error) {
     const failure = error as NodeJS.ErrnoException & { stdout?: string };
-    // zsh missing (typical Windows without WSL) is not "none of the CLIs
-    // exist". A shell that started and exited non-zero still produced a
-    // valid probe — the last missing CLI just makes the status non-zero.
+    // A shell that started and exited non-zero still produced a valid probe
+    // — the last missing CLI just makes the status non-zero. A missing zsh
+    // produced nothing.
     if (failure.code === "ENOENT") {
       return { stdout: "", ran: false };
     }
@@ -144,18 +131,18 @@ async function runWindowsCliDiscovery(): Promise<string> {
   return found.join("\n");
 }
 
-async function runCliDiscovery(): Promise<string> {
-  const posix = await runZshCliDiscovery();
-  if (posix.ran || process.platform !== "win32") {
-    return posix.stdout;
+async function runCliDiscovery(platform: NodeJS.Platform): Promise<string> {
+  if (platform === "win32") {
+    return runWindowsCliDiscovery();
   }
-  // zsh itself is missing: look at native Windows PATH instead of treating
-  // every agent as uninstalled.
-  return runWindowsCliDiscovery();
+  return (await runZshCliDiscovery()).stdout;
 }
 
-export async function checkAgentClis(): Promise<AgentCliStatus> {
-  const found = new Set((await runCliDiscovery()).split(/\r?\n/u));
+/** `platform` is injectable so the POSIX probe is testable on a Windows host. */
+export async function checkAgentClis(
+  platform: NodeJS.Platform = process.platform,
+): Promise<AgentCliStatus> {
+  const found = new Set((await runCliDiscovery(platform)).split(/\r?\n/u));
   return {
     antigravity: found.has("antigravity"),
     cursor: found.has("cursor"),
@@ -191,7 +178,7 @@ export async function listOllamaModels(): Promise<string[]> {
 }
 
 function claudeProfilesRoot(): string {
-  return resolve(toNativePath(`${getPosixHome()}/.head-terminal/claude-profiles`));
+  return resolve(join(getHome(), ".head-terminal", "claude-profiles"));
 }
 
 /**
@@ -200,7 +187,7 @@ function claudeProfilesRoot(): string {
  * deletion outside the managed directory.
  */
 export async function deleteClaudeProfileDir(path: string): Promise<void> {
-  const target = resolve(toNativePath(validatePath(path)));
+  const target = resolve(validatePath(path));
   const root = claudeProfilesRoot();
   const profileId = target.slice(root.length + 1);
 

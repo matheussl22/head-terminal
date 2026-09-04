@@ -3,10 +3,22 @@ import path from "node:path";
 
 import { defineConfig } from "vite";
 
+/**
+ * Debug symbols are not needed at runtime and are the bulk of the prebuilds
+ * (~29 MB of `.pdb` on Windows). Copying them raced Vite's file watcher on
+ * the build output — `EBUSY` on a half-written `.pdb` took `forge start` down
+ * before Electron ever launched.
+ */
+function isRuntimeFile(source: string): boolean {
+  return !source.toLowerCase().endsWith(".pdb");
+}
+
 async function copyIfPresent(source: string, destination: string): Promise<void> {
-  await cp(source, destination, { recursive: true }).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT") throw error;
-  });
+  await cp(source, destination, { recursive: true, filter: isRuntimeFile }).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    },
+  );
 }
 
 export default defineConfig({

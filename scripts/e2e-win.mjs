@@ -7,7 +7,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import {
   BOOT_TIMEOUT_MS,
-  PROJECT_POSIX,
+  PROJECT_DIR,
   click,
   clickByText,
   connectRenderer,
@@ -22,7 +22,7 @@ import {
   snapshot,
   spawnDev,
   stopApp,
-  toPosixPath,
+  waitForPtySpawn,
   withWorkDir,
 } from "./e2e-win-harness.mjs";
 
@@ -196,20 +196,19 @@ async function scenarioClipboard({ cdp, debug }) {
     true,
   );
   debug(`imagePayload=${imagePayload}`);
+  const unquotedImagePath = typeof imagePayload === "string"
+    ? imagePayload.replaceAll("'", "").trim()
+    : "";
   if (
-    typeof imagePayload !== "string"
-    || !imagePayload.endsWith(".png")
-    || !imagePayload.includes("/mnt/")
+    !unquotedImagePath.endsWith(".png")
+    || !/^[A-Za-z]:\\/u.test(unquotedImagePath)
   ) {
     fail(
       `readForTerminal after bitmap: ${JSON.stringify(imagePayload)} (before=${JSON.stringify(clipboardText)})`,
     );
   }
 
-  const savedWindowsPath = imagePayload
-    .replaceAll("'", "")
-    .replace(/^\/mnt\/([a-z])\//u, (_, drive) => `${drive.toUpperCase()}:\\`)
-    .replaceAll("/", "\\");
+  const savedWindowsPath = unquotedImagePath;
   const pngBytes = await readFile(savedWindowsPath);
   const pngHead = Array.from(pngBytes.subarray(0, 4));
   if (pngHead[0] !== 0x89 || pngHead[1] !== 0x50 || pngHead[2] !== 0x4e || pngHead[3] !== 0x47) {
@@ -266,7 +265,7 @@ async function scenarioClipboard({ cdp, debug }) {
     `window.headTerminal.clipboard.readForTerminal()`,
     true,
   );
-  const expectedFile = toPosixPath(savedWindowsPath);
+  const expectedFile = savedWindowsPath;
   debug(`filePayload=${filePayload} expected=${expectedFile}`);
   if (
     typeof filePayload !== "string"
@@ -361,6 +360,19 @@ async function scenarioSplit({ cdp, debug }) {
     `document.querySelectorAll(".session-workspace--visible .layout-divider").length >= 1`,
   );
 
+  const folders = await evaluate(
+    cdp,
+    `[...document.querySelectorAll(
+      ".session-workspace--visible .terminal-pane-header__cwd",
+    )].map((button) => button.getAttribute("aria-label"))`,
+  );
+  if (!Array.isArray(folders) || folders.length !== 2) {
+    fail(`expected a folder button on both panes, got ${JSON.stringify(folders)}`);
+  }
+  if (folders[0] !== folders[1] || !/^Pasta do terminal: [A-Za-z]:\\/u.test(folders[0])) {
+    fail(`split pane should inherit a native folder, got ${JSON.stringify(folders)}`);
+  }
+
   await evaluate(
     cdp,
     `(() => {
@@ -416,7 +428,7 @@ async function scenarioSplit({ cdp, debug }) {
 async function scenarioSession({ cdp, debug }) {
   const before = await sessionCount(cdp);
   const firstTitle = await activeTitle(cdp);
-  await createShellSession(cdp, { cwd: PROJECT_POSIX, debug });
+  await createShellSession(cdp, { cwd: PROJECT_DIR, debug });
   const afterCreate = await sessionCount(cdp);
   if (afterCreate !== before + 1) {
     fail(`expected ${before + 1} sessions after Nova, got ${afterCreate}`);
@@ -524,8 +536,8 @@ async function scenarioGit({ cdp, debug }) {
     `Boolean(document.querySelector(".git-branch-badge") || document.querySelector(".terminal-status-bar"))`,
   );
   if (!already) {
-    debug(`no git badge on smoke cwd; creating Shell session at ${PROJECT_POSIX}`);
-    await createShellSession(cdp, { cwd: PROJECT_POSIX, debug });
+    debug(`no git badge on smoke cwd; creating Shell session at ${PROJECT_DIR}`);
+    await createShellSession(cdp, { cwd: PROJECT_DIR, debug });
   }
 
   try {
@@ -537,7 +549,7 @@ async function scenarioGit({ cdp, debug }) {
   } catch {
     const context = await evaluate(
       cdp,
-      `window.headTerminal.git.getContext(${JSON.stringify(PROJECT_POSIX)})`,
+      `window.headTerminal.git.getContext(${JSON.stringify(PROJECT_DIR)})`,
       true,
     );
     return {
@@ -567,7 +579,7 @@ async function scenarioGit({ cdp, debug }) {
 }
 
 async function prepareRestoreMarker(cdp, debug) {
-  await createShellSession(cdp, { cwd: PROJECT_POSIX, debug });
+  await createShellSession(cdp, { cwd: PROJECT_DIR, debug });
   await renameActiveSession(cdp, "E2E Restore", debug);
   const splitExists = await evaluate(
     cdp,
@@ -638,6 +650,8 @@ export async function runWinE2e(options = {}) {
         debug,
       });
       debug(`boot snapshot ${JSON.stringify(await snapshot(cdp))}`);
+      await waitForPtySpawn(cdp);
+      debug("pty spawned");
 
       const ctx = { cdp, debug };
 
@@ -672,6 +686,7 @@ export async function runWinE2e(options = {}) {
           state: app.state,
           debug,
         });
+        await waitForPtySpawn(cdp);
         record("restore", await assertRestore(cdp));
       }
 

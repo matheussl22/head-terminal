@@ -3,8 +3,7 @@ import { memo, useEffect, useMemo, useRef } from "react";
 import {
   collectPaneIds,
   collectPaneRects,
-  collectSplitDividers,
-} from "../../core/session-layout";
+  collectSplitDividers, resolvePaneCwd } from "../../core/session-layout";
 import { debounce } from "../../core/debounce";
 import { fitPanes } from "../../core/pane-fit-registry";
 import { useSessionStore } from "../../core/session-manager";
@@ -100,7 +99,7 @@ export const SessionWorkspace = memo(function SessionWorkspace({
               key={paneId}
               paneId={paneId}
               sessionId={session.id}
-              cwd={session.cwd}
+              cwd={resolvePaneCwd(session, paneId)}
               agentProfileId={session.agentProfileId}
               claudeAccountId={session.claudeAccountId}
               ollamaModel={session.ollamaModel}

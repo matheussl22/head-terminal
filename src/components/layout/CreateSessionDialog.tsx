@@ -11,6 +11,19 @@ import {
   sanitizeGgufPath,
 } from "../../config/agents";
 import {
+  WINDOWS_ORNITH_DEFAULT_GGUF,
+  WINDOWS_QWEN27_DEFAULT_GGUF,
+} from "../../config/agents-windows";
+import { isWindowsHost } from "../../core/platform-info";
+
+/** The conventional GGUF location, spelled for this host's shell. */
+function defaultGgufFor(agentId: string): string {
+  if (isWindowsHost()) {
+    return agentId === "ornith" ? WINDOWS_ORNITH_DEFAULT_GGUF : WINDOWS_QWEN27_DEFAULT_GGUF;
+  }
+  return agentId === "ornith" ? ORNITH_DEFAULT_GGUF : QWEN27_DEFAULT_GGUF;
+}
+import {
   DEFAULT_CLAUDE_ACCOUNT_ID,
   loadClaudeAccountProfiles,
   type ClaudeAccountProfile,
@@ -118,7 +131,7 @@ function LlamaGgufFields({
   downloadHint: string;
 }) {
   const placeholder =
-    agentId === "ornith" ? ORNITH_DEFAULT_GGUF : QWEN27_DEFAULT_GGUF;
+    defaultGgufFor(agentId);
 
   const browseGguf = async () => {
     const selected = await window.headTerminal.system.selectFile(
@@ -249,7 +262,7 @@ export function CreateSessionDialog({
       setGgufPath(
         isLlamaAgent(lastAgent)
           ? loadLastGgufPath(lastAgent) || (
-            lastAgent === "ornith" ? ORNITH_DEFAULT_GGUF : QWEN27_DEFAULT_GGUF
+            defaultGgufFor(lastAgent)
           )
           : "",
       );
@@ -521,9 +534,7 @@ export function CreateSessionDialog({
                     if (isLlamaAgent(profile.id)) {
                       setGgufPath(
                         loadLastGgufPath(profile.id)
-                          || (profile.id === "ornith"
-                            ? ORNITH_DEFAULT_GGUF
-                            : QWEN27_DEFAULT_GGUF),
+                          || (defaultGgufFor(profile.id)),
                       );
                     }
                   }}

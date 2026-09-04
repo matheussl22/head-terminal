@@ -1,3 +1,5 @@
+import { joinPath } from "./path-utils";
+
 const STORAGE_KEY = "head-terminal.claude-accounts";
 const DEFAULT_NAME_KEY = "head-terminal.claude-default-account-name";
 
@@ -82,7 +84,7 @@ export function createClaudeAccountProfile(
   const profile = {
     id,
     name: trimmedName,
-    configDir: `${home.replace(/\/+$/, "")}/.head-terminal/claude-profiles/${id}`,
+    configDir: joinPath(home, ".head-terminal", "claude-profiles", id),
   };
 
   localStorage.setItem(STORAGE_KEY, JSON.stringify([...profiles, profile]));

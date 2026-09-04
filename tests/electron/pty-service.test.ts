@@ -165,6 +165,35 @@ describe("PtyService", () => {
     expect(processes[0]?.resizes).toEqual([[100, 30]]);
   });
 
+  it("logs the geometry that actually reaches node-pty on spawn and resize", () => {
+    const logged: Array<[string, Record<string, unknown>]> = [];
+    const service = new PtyService({
+      env: {},
+      platform: "linux",
+      log: (event, meta) => logged.push([event, meta]),
+      spawn: () => new FakePty(),
+    });
+    service.spawn(1, { id: "pane-1", command: "bash", cwd: "/tmp", cols: 132 });
+    service.resize(1, "pane-1", 100, 30);
+
+    expect(logged).toEqual([
+      [
+        "pty.spawned",
+        expect.objectContaining({
+          id: "pane-1",
+          cols: 132,
+          rows: 24,
+          requestedCols: 132,
+          requestedRows: undefined,
+          cwd: "/tmp",
+          requestedCwd: "/tmp",
+          file: "bash",
+        }),
+      ],
+      ["pty.resized", { id: "pane-1", cols: 100, rows: 30 }],
+    ]);
+  });
+
   it("forwards terminal output unchanged, including OSC and escape sequences", () => {
     vi.useFakeTimers();
     try {
@@ -328,41 +357,35 @@ describe("PtyService", () => {
   });
 });
 
-describe("PtyService in WSL mode", () => {
-  const ZSH_ARGS = ["-l", "-c", "cd /home/m/repo && exec claude"];
+describe("PtyService on Windows", () => {
+  const PWSH = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+  const SHELL_ARGS = ["-NoLogo", "-NoExit", "-EncodedCommand", "AAA="];
 
-  function wslHarness(options?: { hangReap?: boolean }) {
-    const killed: string[] = [];
+  function windowsHarness(options?: { existing?: string[]; hangKill?: boolean }) {
+    const killed: number[] = [];
     const processes: FakePty[] = [];
     const calls: Array<{
       file: string;
       args: string[];
       options: NodePtySpawnOptions;
     }> = [];
+    const existing = new Set(options?.existing ?? ["C:\\Users\\m\\repo", "C:\\Users\\m"]);
     const service = new PtyService({
+      platform: "win32",
       env: { PATH: "C:\\Windows" },
       windowsHome: "C:\\Users\\m",
-      wsl: {
-        isWslMode: () => true,
-        wrap: (command, args, cwd) => ({
-          file: "wsl.exe",
-          args: ["-d", "Ubuntu", "--cd", cwd, "--exec", command, ...args],
-        }),
-        spawnCwd: (_posix, fallback) => fallback,
-        toPosixPath: (windows) => windows.replaceAll("\\", "/"),
-        resolvePaneCwd: (posix) => posix,
-        sanitizeLocaleEnv: (env) => ({ ...env }),
-        killPaneTree: async (marker) => {
-          killed.push(marker);
-          if (options?.hangReap) {
-            await new Promise(() => {
-              // Never settles: kill/dispose must time out instead of hanging.
-            });
-          }
-        },
+      windowsShell: PWSH,
+      pathExists: (path) => existing.has(path),
+      killWindowsTree: async (pid) => {
+        killed.push(pid);
+        if (options?.hangKill) {
+          await new Promise(() => {
+            // Never settles: kill/dispose must time out instead of hanging.
+          });
+        }
       },
-      spawn: (file, args, options) => {
-        calls.push({ file, args, options });
+      spawn: (file, args, spawnOptions) => {
+        calls.push({ file, args, options: spawnOptions });
         const processPty = new FakePty();
         processes.push(processPty);
         return processPty;
@@ -371,141 +394,87 @@ describe("PtyService in WSL mode", () => {
     return { service, calls, processes, killed };
   }
 
-  it("wraps the argv into wsl.exe without touching the agent command", () => {
-    const { service, calls } = wslHarness();
+  it("resolves the abstract powershell command to the installed executable", () => {
+    const { service, calls } = windowsHarness();
 
     service.spawn(7, {
       id: "pane-1",
-      command: "/usr/bin/zsh",
-      args: ZSH_ARGS,
-      cwd: "/home/m/repo",
+      command: "powershell",
+      args: SHELL_ARGS,
+      cwd: "C:\\Users\\m\\repo",
     });
 
-    expect(calls[0].file).toBe("wsl.exe");
-    expect(calls[0].args).toEqual([
-      "-d", "Ubuntu", "--cd", "/home/m/repo", "--exec", "/usr/bin/zsh", ...ZSH_ARGS,
+    expect(calls[0].file).toBe(PWSH);
+    expect(calls[0].args).toEqual(SHELL_ARGS);
+    expect(calls[0].options.cwd).toBe("C:\\Users\\m\\repo");
+  });
+
+  it("leaves an explicit executable alone", () => {
+    const { service, calls } = windowsHarness();
+
+    service.spawn(7, {
+      id: "pane-1",
+      command: "C:\\Tools\\nu.exe",
+      cwd: "C:\\Users\\m\\repo",
+    });
+
+    expect(calls[0].file).toBe("C:\\Tools\\nu.exe");
+  });
+
+  it("translates a cwd persisted by the WSL-era app", () => {
+    const { service, calls } = windowsHarness();
+
+    service.spawn(7, {
+      id: "pane-1",
+      command: "powershell",
+      cwd: "/mnt/c/Users/m/repo",
+    });
+
+    expect(calls[0].options.cwd).toBe("C:\\Users\\m\\repo");
+  });
+
+  it("opens in the home when the cwd is gone or has no Windows equivalent", () => {
+    const { service, calls } = windowsHarness();
+
+    service.spawn(7, { id: "pane-1", command: "powershell", cwd: "/home/m/repo" });
+    service.spawn(7, { id: "pane-2", command: "powershell", cwd: "C:\\Users\\m\\gone" });
+
+    expect(calls.map((call) => call.options.cwd)).toEqual([
+      "C:\\Users\\m",
+      "C:\\Users\\m",
     ]);
-    // CreateProcess cannot start a process in a UNC directory; `--cd` is what
-    // decides where the Linux side actually lands.
-    expect(calls[0].options.cwd).toBe("C:\\Users\\m");
   });
 
-  it("carries the pane environment across the boundary through WSLENV", () => {
-    const { service, calls } = wslHarness();
+  it("kills the whole process tree on close, not just the shell", async () => {
+    const { service, processes, killed } = windowsHarness();
 
-    service.spawn(7, {
-      id: "pane-1",
-      command: "/usr/bin/zsh",
-      args: ZSH_ARGS,
-      cwd: "/home/m/repo",
-      env: { CLAUDE_CONFIG_DIR: "/home/m/.head-terminal/claude-profiles/a" },
-    });
-
-    const env = calls[0].options.env;
-    const forwarded = env.WSLENV.split(":");
-    expect(forwarded).toContain("CLAUDE_CONFIG_DIR");
-    expect(forwarded).toContain("TERM");
-    expect(forwarded).toContain("HEAD_TERMINAL_PANE");
-    expect(env.CLAUDE_CONFIG_DIR).toBe("/home/m/.head-terminal/claude-profiles/a");
-    expect(env.HEAD_TERMINAL_PANE).toMatch(/^[0-9a-f-]{36}$/u);
-  });
-
-  it("kills the Linux tree by marker, since the pid is only wsl.exe", async () => {
-    const { service, calls, killed } = wslHarness();
-
-    service.spawn(7, {
-      id: "pane-1",
-      command: "/usr/bin/zsh",
-      args: ZSH_ARGS,
-      cwd: "/home/m/repo",
-    });
+    service.spawn(7, { id: "pane-1", command: "powershell", cwd: "C:\\Users\\m" });
     await expect(service.kill(7, "pane-1")).resolves.toBe(true);
 
-    expect(killed).toEqual([calls[0].options.env.HEAD_TERMINAL_PANE]);
+    expect(killed).toEqual([processes[0]!.pid]);
+    expect(processes[0]?.killed).toBe(1);
   });
 
-  it("reaps the Linux tree on natural exit, not only on kill", () => {
-    const { service, calls, processes, killed } = wslHarness();
+  it("does not taskkill a tree that already exited on its own", () => {
+    const { service, processes, killed } = windowsHarness();
 
-    service.spawn(7, {
-      id: "pane-1",
-      command: "/usr/bin/zsh",
-      args: ZSH_ARGS,
-      cwd: "/home/m/repo",
-    });
+    service.spawn(7, { id: "pane-1", command: "powershell", cwd: "C:\\Users\\m" });
     processes[0]?.exit(0);
 
     expect(service.has(7, "pane-1")).toBe(false);
-    expect(killed).toEqual([calls[0].options.env.HEAD_TERMINAL_PANE]);
+    expect(killed).toEqual([]);
   });
 
-  it("gives up on a hung WSL reap so dispose cannot block forever", async () => {
+  it("gives up on a hung tree kill so dispose cannot block forever", async () => {
     vi.useFakeTimers();
     try {
-      const { service } = wslHarness({ hangReap: true });
-      service.spawn(7, {
-        id: "pane-1",
-        command: "/usr/bin/zsh",
-        args: ZSH_ARGS,
-        cwd: "/home/m/repo",
-      });
+      const { service } = windowsHarness({ hangKill: true });
+      service.spawn(7, { id: "pane-1", command: "powershell", cwd: "C:\\Users\\m" });
       const disposed = service.dispose();
       await vi.advanceTimersByTimeAsync(5_000);
       await expect(disposed).resolves.toBe(1);
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("gives each pane its own marker", () => {
-    const { service, calls } = wslHarness();
-
-    service.spawn(7, { id: "pane-1", command: "/usr/bin/zsh", cwd: "/home/m" });
-    service.spawn(7, { id: "pane-2", command: "/usr/bin/zsh", cwd: "/home/m" });
-
-    expect(calls[0].options.env.HEAD_TERMINAL_PANE)
-      .not.toBe(calls[1].options.env.HEAD_TERMINAL_PANE);
-  });
-});
-
-describe("PtyService on Windows without WSL", () => {
-  const GIT_BASH = "C:\\Program Files\\Git\\bin\\bash.exe";
-
-  it("spawns Git Bash instead of requiring WSL", () => {
-    const calls: Array<{ file: string; args: string[] }> = [];
-    const service = new PtyService({
-      platform: "win32",
-      windowsShell: GIT_BASH,
-      spawn: (file, args) => {
-        calls.push({ file, args });
-        return new FakePty();
-      },
-    });
-
-    service.spawn(7, {
-      id: "pane-1",
-      command: "/usr/bin/zsh",
-      args: ["-l", "-c", "claude; exec zsh -l"],
-      cwd: "C:\\Users\\m\\repo",
-    });
-
-    expect(calls[0].file).toBe(GIT_BASH);
-    expect(calls[0].args).toEqual(["-l", "-c", "claude; exec bash -l"]);
-  });
-
-  it("still errors when neither WSL nor a Windows shell is available", () => {
-    const service = new PtyService({
-      platform: "win32",
-      windowsShell: "",
-      spawn: () => new FakePty(),
-    });
-
-    expect(() =>
-      service.spawn(7, {
-        id: "pane-1",
-        command: "/usr/bin/zsh",
-        cwd: "C:\\Users\\m",
-      }),
-    ).toThrow(/WSL2/);
   });
 });
