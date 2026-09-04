@@ -9,7 +9,7 @@ Desktop terminal for working with several AI coding agents in parallel. The appl
 - lazy spawn, per-pane restart and scrollback preservation;
 - the agent conversation a pane is on is shown in its header, renamable by hand, and the name also applies in the resume list;
 - Antigravity, Cursor Agent, Claude Code, Codex and shell profiles;
-- multiple Claude accounts and optional `agent-N` Git worktrees;
+- multiple Claude accounts, each in its own `~/.head-terminal/claude-profiles/<id>` (the user's own `~/.claude` is never used by a pane, so logging in inside the app never changes the account of a terminal opened outside it), and optional `agent-N` Git worktrees;
 - search, zoom, links, clipboard and WebGL rendering with fallback;
 - activity detection, remaining context, crashes and shell fallback;
 - Git context, watcher and diff, including untracked files;
@@ -82,8 +82,8 @@ On Windows the application runs natively: each pane is a ConPTY (`node-pty`)
 hosting PowerShell — PowerShell 7 when installed, Windows PowerShell 5.1
 otherwise — and the agents are their Windows builds on `PATH`. Repositories are
 ordinary `C:\...` folders; `git`, the watcher (`fs.watch`) and the transcript
-lookup under `%USERPROFILE%\.claude` all run on the Windows side. WSL is not
-involved.
+lookup under `%USERPROFILE%\.head-terminal\claude-profiles\<id>` all run on the
+Windows side. WSL is not involved.
 
 Requirements:
 

@@ -167,16 +167,21 @@ export function usePtyProcess({
       });
 
       try {
+        // A Claude pane always runs on one of the app's own profile dirs —
+        // a session without an account id is on the default profile, never
+        // on the user's global ~/.claude (see claude-accounts.ts).
+        const claudeConfigDir =
+          agentProfileId === "claude"
+            ? resolveClaudeConfigDir(claudeAccountId)
+            : undefined;
         const profile = getAgentProfile(agentProfileId, {
           continueConversation,
           resumeSessionId,
           ollamaModel,
           ollamaThinkOff,
           ggufPath,
+          claudeConfigDir,
         });
-        const claudeConfigDir = claudeAccountId
-          ? resolveClaudeConfigDir(claudeAccountId)
-          : undefined;
         const startsNewConversation =
           !continueConversation || Boolean(resumeSessionId);
         const existingSessionIds =

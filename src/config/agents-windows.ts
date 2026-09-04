@@ -13,6 +13,7 @@ import {
   QWEN27_HF_FILE,
   RESUME_FAILURE_WINDOW_SECONDS,
   WINDOWS_SHELL_COMMAND,
+  sanitizeClaudeConfigDir,
   sanitizeOllamaModel,
   sanitizeResumeSessionId,
   type AgentProfile,
@@ -115,14 +116,24 @@ const AGY_HINT = "Instale o Antigravity para Windows.";
 const OLLAMA_HINT = "Instale em ollama.com/download.";
 const LLAMA_HINT = "Instale o llama.cpp e crie a sessao de novo.";
 
-function claudeArgs(continueConversation: boolean, resumeSessionId?: string): string[] {
+function claudeArgs(
+  continueConversation: boolean,
+  resumeSessionId?: string,
+  claudeConfigDir?: string,
+): string[] {
   const id = sanitizeResumeSessionId(resumeSessionId);
   const command = id
     ? withResumeFallback(`claude --resume ${id}`, "claude")
     : continueConversation
       ? "claude --continue"
       : "claude";
-  return withShellFallback(whenInstalled("claude", command, CLAUDE_HINT));
+  // Set in the script — i.e. after `$PROFILE` — and left set, so a `claude`
+  // typed on the fallback shell later still lands on the pane's account.
+  const configDir = sanitizeClaudeConfigDir(claudeConfigDir);
+  const pinAccount = configDir ? `$env:CLAUDE_CONFIG_DIR = ${psQuote(configDir)}; ` : "";
+  return withShellFallback(
+    `${pinAccount}${whenInstalled("claude", command, CLAUDE_HINT)}`,
+  );
 }
 
 function cursorArgs(continueConversation: boolean, resumeSessionId?: string): string[] {
@@ -250,7 +261,10 @@ export function buildWindowsAgentProfiles(
   return {
     antigravity: profile("antigravity", antigravityArgs()),
     cursor: profile("cursor", cursorArgs(continueConversation, resumeSessionId)),
-    claude: profile("claude", claudeArgs(continueConversation, resumeSessionId)),
+    claude: profile(
+      "claude",
+      claudeArgs(continueConversation, resumeSessionId, options.claudeConfigDir),
+    ),
     codex: profile("codex", codexArgs(resumeSessionId)),
     ollama: profile("ollama", ollamaArgs(options.ollamaModel, options.ollamaThinkOff)),
     ornith: profile("ornith", ornithArgs(options.ggufPath)),

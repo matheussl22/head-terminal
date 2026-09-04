@@ -395,7 +395,10 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                 <div className="settings-section__header settings-section__header--action">
                   <div>
                     <h3>Perfis Claude</h3>
-                    <p>Cada perfil mantém login, histórico e configurações separados.</p>
+                    <p>
+                      Cada perfil mantém login, histórico e configurações separados —
+                      e nada aqui toca o ~/.claude dos terminais abertos fora do Head Terminal.
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -506,7 +509,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                           </div>
                           <span className="settings-profile-card__detail">
                             {isDefault
-                              ? "Usa a configuração global ~/.claude"
+                              ? "Perfil inicial das sessões Claude; login e histórico só neste perfil"
                               : "Login e histórico reutilizados apenas neste perfil"}
                           </span>
                           {linked > 0 && (

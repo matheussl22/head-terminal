@@ -59,6 +59,43 @@ describe("agent profiles continue flag", () => {
   });
 });
 
+describe("claude account pinning", () => {
+  it("exports the pane's CLAUDE_CONFIG_DIR from the script, after the rc files", () => {
+    const dir = "/home/me/.head-terminal/claude-profiles/default";
+    const script = buildAgentProfiles({ claudeConfigDir: dir }).claude.args.join(" ");
+    expect(script).toContain(`export CLAUDE_CONFIG_DIR='${dir}'; claude;`);
+    // Exported before `exec zsh -l`, so the fallback shell keeps the account.
+    expect(script.indexOf("export CLAUDE_CONFIG_DIR")).toBeLessThan(
+      script.indexOf("exec zsh -l"),
+    );
+    expect(buildAgentProfiles().claude.args.join(" ")).not.toContain("CLAUDE_CONFIG_DIR");
+    expect(buildAgentProfiles({ claudeConfigDir: dir }).codex.args.join(" ")).not.toContain(
+      "CLAUDE_CONFIG_DIR",
+    );
+  });
+
+  it("keeps the pin together with --continue and --resume", () => {
+    const dir = "/home/me/.head-terminal/claude-profiles/x";
+    expect(
+      buildAgentProfiles({ claudeConfigDir: dir, continueConversation: true }).claude.args.join(" "),
+    ).toContain(`export CLAUDE_CONFIG_DIR='${dir}'; claude --continue;`);
+    expect(
+      buildAgentProfiles({
+        claudeConfigDir: dir,
+        resumeSessionId: "c8654eb2-0d87-42c0-a670-c5037d25b1e0",
+      }).claude.args.join(" "),
+    ).toMatch(/export CLAUDE_CONFIG_DIR='[^']+'; __ht_resume_start=\$SECONDS; claude --resume/u);
+  });
+
+  it("single-quotes a hostile dir and drops one with control characters", () => {
+    const quoted = buildAgentProfiles({ claudeConfigDir: "/tmp/it's; rm -rf /" }).claude.args.join(" ");
+    expect(quoted).toContain(`export CLAUDE_CONFIG_DIR='/tmp/it'\\''s; rm -rf /'; claude;`);
+    const dropped = buildAgentProfiles({ claudeConfigDir: "/tmp/x\nrm -rf /" }).claude.args.join(" ");
+    expect(dropped).not.toContain("CLAUDE_CONFIG_DIR");
+    expect(dropped).not.toContain("rm -rf");
+  });
+});
+
 describe("agent profiles resume flag", () => {
   const SESSION_ID = "c8654eb2-0d87-42c0-a670-c5037d25b1e0";
 

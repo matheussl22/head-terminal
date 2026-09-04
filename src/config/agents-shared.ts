@@ -24,6 +24,20 @@ export interface AgentProfileOptions {
   ollamaThinkOff?: boolean;
   /** GGUF on this machine for Ornith / Qwen. Ignored by every other profile. */
   ggufPath?: string;
+  /** `CLAUDE_CONFIG_DIR` of the pane's Claude account. The PTY already gets
+   * it as an environment variable; the `claude` script sets it again *after*
+   * the user's shell profile ran, so a `$PROFILE` / `.zshrc` that exports its
+   * own value cannot silently move the pane onto another account. */
+  claudeConfigDir?: string;
+}
+
+/** A config dir is a path the pane's shell will single-quote; a control
+ * character in it means something went wrong upstream, not a real folder. */
+export function sanitizeClaudeConfigDir(dir?: string): string | undefined {
+  const trimmed = dir?.trim();
+  return trimmed && trimmed.length <= 4_096 && !/[\0\n\r]/.test(trimmed)
+    ? trimmed
+    : undefined;
 }
 
 export const DEFAULT_AGENT_PROFILE_ID = "cursor";

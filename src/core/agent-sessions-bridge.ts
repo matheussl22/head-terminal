@@ -22,12 +22,12 @@ export async function fetchResumableSessions(
     return [];
   }
 
-  // Isolated Claude profiles keep their own CLAUDE_CONFIG_DIR (see
-  // claude-accounts.ts) — without this the lookup always reads the default
-  // account's transcripts, so picking a conversation for a work/company
-  // profile either shows the wrong list or an id that --resume can't find.
+  // Every Claude profile, the default included, keeps its own
+  // CLAUDE_CONFIG_DIR (see claude-accounts.ts) — without this the lookup
+  // would read the user's global ~/.claude, so picking a conversation either
+  // shows another account's list or an id that --resume can't find.
   let claudeConfigDir: string | undefined;
-  if (agentProfileId === "claude" && claudeAccountId) {
+  if (agentProfileId === "claude") {
     try {
       claudeConfigDir = resolveClaudeConfigDir(claudeAccountId);
     } catch {

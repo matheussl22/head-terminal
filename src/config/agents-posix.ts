@@ -12,6 +12,7 @@ import {
   QWEN27_FLAGS,
   QWEN27_HF_FILE,
   RESUME_FAILURE_WINDOW_SECONDS,
+  sanitizeClaudeConfigDir,
   sanitizeOllamaModel,
   sanitizeResumeSessionId,
   type AgentProfile,
@@ -85,15 +86,21 @@ function cursorWithFallbackArgs(
 function claudeWithFallbackArgs(
   continueConversation: boolean,
   resumeSessionId?: string,
+  claudeConfigDir?: string,
 ): string[] {
   const id = sanitizeResumeSessionId(resumeSessionId);
-  return withShellFallback(
-    id
-      ? withResumeFallback(`claude --resume ${id}`, "claude")
-      : continueConversation
-        ? "claude --continue"
-        : "claude",
-  );
+  const command = id
+    ? withResumeFallback(`claude --resume ${id}`, "claude")
+    : continueConversation
+      ? "claude --continue"
+      : "claude";
+  // Exported from the `-c` script, so it runs after the login rc files and
+  // survives the `exec zsh -l` fallback: the pane stays on its own account.
+  const configDir = sanitizeClaudeConfigDir(claudeConfigDir);
+  const pinAccount = configDir
+    ? `export CLAUDE_CONFIG_DIR=${shellSingleQuote(configDir)}; `
+    : "";
+  return withShellFallback(`${pinAccount}${command}`);
 }
 
 function codexWithFallbackArgs(resumeSessionId?: string): string[] {
@@ -217,7 +224,10 @@ export function buildPosixAgentProfiles(
   return {
     antigravity: profile("antigravity", antigravityWithFallbackArgs()),
     cursor: profile("cursor", cursorWithFallbackArgs(continueConversation, resumeSessionId)),
-    claude: profile("claude", claudeWithFallbackArgs(continueConversation, resumeSessionId)),
+    claude: profile(
+      "claude",
+      claudeWithFallbackArgs(continueConversation, resumeSessionId, options.claudeConfigDir),
+    ),
     codex: profile("codex", codexWithFallbackArgs(resumeSessionId)),
     ollama: profile("ollama", ollamaWithFallbackArgs(options.ollamaModel, options.ollamaThinkOff)),
     ornith: profile("ornith", ornithWithFallbackArgs(options.ggufPath)),

@@ -8,6 +8,7 @@ import {
   workspaceFromStore,
 } from "./session-persistence";
 import { anchorPaneResumeSession } from "./pane-resume-anchor";
+import { setCachedPlatformInfoForTests } from "./platform-info";
 
 const listResumable = vi.fn();
 const workspaceSave = vi.fn().mockResolvedValue(undefined);
@@ -47,12 +48,18 @@ describe("conversation save lifecycle", () => {
       },
     });
     useSessionStore.setState(useSessionStore.getInitialState(), true);
+    // A Claude lookup needs the home to resolve the pane's profile dir.
+    setCachedPlatformInfoForTests({
+      platform: "linux",
+      homeDir: "/home/test",
+    } as unknown as Parameters<typeof setCachedPlatformInfoForTests>[0]);
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    setCachedPlatformInfoForTests(null);
   });
 
   it("names a new chat from the first typed message and keeps that id after a restart", async () => {

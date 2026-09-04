@@ -74,6 +74,33 @@ describe("Windows agent profiles", () => {
     expect(scriptOf(profiles.cursor.args)).toContain(`cursor-agent --resume ${id}`);
   });
 
+  it("pins the pane's Claude account after the user's $PROFILE ran", () => {
+    const dir = "C:\\Users\\me\\.head-terminal\\claude-profiles\\default";
+    const claude = scriptOf(buildWindowsAgentProfiles({ claudeConfigDir: dir }).claude.args);
+    // Set inside the script (i.e. after $PROFILE) and before the CLI runs, so
+    // a profile that exports its own CLAUDE_CONFIG_DIR can't move the pane.
+    expect(claude).toMatch(
+      /\$env:CLAUDE_CONFIG_DIR = 'C:\\Users\\me\\\.head-terminal\\claude-profiles\\default'; if \(Get-Command claude/u,
+    );
+    expect(scriptOf(buildWindowsAgentProfiles({}).claude.args)).not.toContain("CLAUDE_CONFIG_DIR");
+    // Other agents never see it; the PTY env already carries it for them.
+    expect(scriptOf(buildWindowsAgentProfiles({ claudeConfigDir: dir }).codex.args)).not.toContain(
+      "CLAUDE_CONFIG_DIR",
+    );
+  });
+
+  it("quotes a hostile config dir and drops one with control characters", () => {
+    const quoted = scriptOf(
+      buildWindowsAgentProfiles({ claudeConfigDir: "C:\\it's\\here" }).claude.args,
+    );
+    expect(quoted).toContain("$env:CLAUDE_CONFIG_DIR = 'C:\\it''s\\here'");
+    const dropped = scriptOf(
+      buildWindowsAgentProfiles({ claudeConfigDir: "C:\\x\nRemove-Item" }).claude.args,
+    );
+    expect(dropped).not.toContain("CLAUDE_CONFIG_DIR");
+    expect(dropped).not.toContain("Remove-Item");
+  });
+
   it("ignores an implausible resume id", () => {
     const profiles = buildWindowsAgentProfiles({ resumeSessionId: "x; Remove-Item -Recurse" });
     expect(scriptOf(profiles.claude.args)).not.toContain("Remove-Item");

@@ -19,6 +19,7 @@ vi.mock("./session-manager", () => ({
 }));
 
 import { anchorPaneResumeSession, hasTranscriptTitle } from "./pane-resume-anchor";
+import { setCachedPlatformInfoForTests } from "./platform-info";
 
 describe("anchorPaneResumeSession", () => {
   beforeEach(() => {
@@ -30,12 +31,18 @@ describe("anchorPaneResumeSession", () => {
     vi.stubGlobal("window", {
       headTerminal: { sessions: { listResumable } },
     });
+    // A Claude lookup needs the home to resolve the pane's profile dir.
+    setCachedPlatformInfoForTests({
+      platform: "linux",
+      homeDir: "/home/test",
+    } as unknown as Parameters<typeof setCachedPlatformInfoForTests>[0]);
     vi.useFakeTimers();
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    setCachedPlatformInfoForTests(null);
   });
 
   it("skips non-resumable agents entirely", async () => {

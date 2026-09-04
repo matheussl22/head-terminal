@@ -639,7 +639,7 @@ export function CreateSessionDialog({
                   <span>{account.name}</span>
                   <small>
                     {account.id === DEFAULT_CLAUDE_ACCOUNT_ID
-                      ? "Conta padrão"
+                      ? "Perfil inicial (isolado)"
                       : "Ambiente isolado"}
                   </small>
                 </button>
