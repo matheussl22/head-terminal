@@ -16,8 +16,6 @@ import {
   getSessionActivity,
 } from "../../core/activity-utils";
 import { flipAnimate } from "../../core/flip-animate";
-import { basenamePath } from "../../core/path-utils";
-import { pickGitContextForSession } from "../../core/git-context-utils";
 import { collectPaneIds } from "../../core/session-layout";
 import { useSessionStore } from "../../core/session-manager";
 import {
@@ -30,7 +28,6 @@ import {
   type PaneActivity,
 } from "../../types/activity";
 import type { AgentSession } from "../../types/session";
-import { GitBranchBadge } from "../ui/GitBranchBadge";
 import {
   IconActivity,
   IconAgentClaude,
@@ -41,7 +38,6 @@ import {
   IconAgentCursor,
   IconAgentShell,
   IconClose,
-  IconFolder,
   IconPencil,
   IconPlus,
   IconSidebarCollapse,
@@ -127,7 +123,6 @@ interface SessionListItemProps {
   onSelectPane: (paneId: string) => void;
   onRename: (title: string) => void;
   onRemove: () => void;
-  onCwdChange: (cwd: string) => void;
   onRenameComplete: () => void;
   onContextMenu: (event: React.MouseEvent, session: AgentSession) => void;
   onDragStart: (index: number) => void;
@@ -147,7 +142,6 @@ const SessionListItem = memo(function SessionListItem({
   onSelectPane,
   onRename,
   onRemove,
-  onCwdChange,
   onRenameComplete,
   onContextMenu,
   onDragStart,
@@ -157,10 +151,6 @@ const SessionListItem = memo(function SessionListItem({
 }: SessionListItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(session.title);
-  const [draftCwd, setDraftCwd] = useState(session.cwd);
-  // A pasta só vira campo editável a pedido, na sessão ativa — o card mostra
-  // uma linha só (nome da pasta), o caminho completo fica no tooltip.
-  const [isEditingCwd, setIsEditingCwd] = useState(false);
   // Fechar sessão exige dois cliques: um clique perdido não pode matar uma sessão.
   const [confirmRemove, setConfirmRemove] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -182,18 +172,6 @@ const SessionListItem = memo(function SessionListItem({
     paneDotsKey(paneIds, state.paneRuntime),
   );
   const paneActivities = dotsKey.split("|") as PaneActivity[];
-  const gitContext = useSessionStore((state) =>
-    pickGitContextForSession(
-      session.id,
-      paneIds,
-      state.paneGitContext,
-      state.sessionGitContext,
-      {
-        activePaneId: state.activePaneId,
-        isActiveSession: session.id === state.activeSessionId,
-      },
-    ),
-  );
 
   useEffect(() => {
     if (forceRename) {
@@ -206,16 +184,6 @@ const SessionListItem = memo(function SessionListItem({
       setDraftTitle(session.title);
     }
   }, [isEditing, session.title]);
-
-  useEffect(() => {
-    setDraftCwd(session.cwd);
-  }, [session.cwd]);
-
-  useEffect(() => {
-    if (!isActive) {
-      setIsEditingCwd(false);
-    }
-  }, [isActive]);
 
   useEffect(() => {
     if (isEditing) {
@@ -233,23 +201,6 @@ const SessionListItem = memo(function SessionListItem({
     }
     setIsEditing(false);
     onRenameComplete();
-  };
-
-  const commitCwd = () => {
-    const nextCwd = draftCwd.trim();
-    if (nextCwd && nextCwd !== session.cwd) {
-      if (
-        window.confirm(
-          "Alterar a pasta reinicia os terminais da sessão. Continuar?",
-        )
-      ) {
-        onCwdChange(nextCwd);
-      } else {
-        setDraftCwd(session.cwd);
-      }
-    } else {
-      setDraftCwd(session.cwd);
-    }
   };
 
   if (collapsed) {
@@ -272,7 +223,7 @@ const SessionListItem = memo(function SessionListItem({
               ? "session-sidebar__compact-item session-sidebar__compact-item--active"
               : "session-sidebar__compact-item") + ringClass
           }
-          title={`${session.title}${claudeAccountName ? ` — ${claudeAccountName}` : ""} — ${ACTIVITY_LABEL[activity]}${gitContext?.branch ? ` — ${gitContext.branch}` : ""}`}
+          title={`${session.title}${claudeAccountName ? ` — ${claudeAccountName}` : ""} — ${ACTIVITY_LABEL[activity]}`}
           aria-label={session.title}
           onClick={onSelect}
           onContextMenu={(event) => onContextMenu(event, session)}
@@ -371,63 +322,6 @@ const SessionListItem = memo(function SessionListItem({
             )}
           </div>
 
-          {isEditingCwd ? (
-            <input
-              className="session-sidebar__cwd-input"
-              autoFocus
-              value={draftCwd}
-              spellCheck={false}
-              onChange={(event) => setDraftCwd(event.target.value)}
-              onBlur={() => {
-                commitCwd();
-                setIsEditingCwd(false);
-              }}
-              onKeyDown={(event) => {
-                event.stopPropagation();
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  commitCwd();
-                  setIsEditingCwd(false);
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setDraftCwd(session.cwd);
-                  setIsEditingCwd(false);
-                }
-              }}
-              onClick={(event) => event.stopPropagation()}
-            />
-          ) : (
-            <button
-              type="button"
-              className={
-                isActive
-                  ? "session-sidebar__meta session-sidebar__meta--editable"
-                  : "session-sidebar__meta"
-              }
-              tabIndex={isActive ? 0 : -1}
-              title={
-                isActive
-                  ? `${session.cwd} — clique para alterar a pasta`
-                  : session.cwd
-              }
-              onClick={(event) => {
-                // On an inactive card the click just selects the session.
-                if (!isActive) return;
-                event.stopPropagation();
-                setIsEditingCwd(true);
-              }}
-            >
-              <IconFolder size={11} className="session-sidebar__meta-icon" />
-              <span className="session-sidebar__meta-text">
-                {basenamePath(session.cwd, session.cwd)}
-              </span>
-            </button>
-          )}
-          <GitBranchBadge
-            context={gitContext}
-            className="session-sidebar__git-badge"
-          />
           <span
             className={
               NEEDS_ATTENTION.has(activity) || activity === "working"
@@ -640,7 +534,6 @@ export function SessionSidebar({
             onSelectPane={(paneId) => focusSessionPane(session.id, paneId)}
             onRename={(title) => renameSession(session.id, title)}
             onRemove={() => removeSession(session.id)}
-            onCwdChange={(cwd) => updateSessionCwd(session.id, cwd)}
             onRenameComplete={onRenameComplete}
             onContextMenu={handleContextMenu}
             onDragStart={setDragFrom}
@@ -683,6 +576,25 @@ export function SessionSidebar({
           onTogglePin={() => {
             togglePinSession(contextMenu.session.id);
             setContextMenu(null);
+          }}
+          onChangeFolder={() => {
+            const { session } = contextMenu;
+            setContextMenu(null);
+            void window.headTerminal.system
+              .selectDirectory(session.cwd)
+              .then((selected) => {
+                if (typeof selected !== "string" || !selected || selected === session.cwd) {
+                  return;
+                }
+                if (
+                  window.confirm(
+                    "Alterar a pasta reinicia os terminais da sessão. Continuar?",
+                  )
+                ) {
+                  updateSessionCwd(session.id, selected);
+                }
+              })
+              .catch(() => undefined);
           }}
           onDuplicate={() => {
             addSession(

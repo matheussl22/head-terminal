@@ -6,6 +6,7 @@ interface SessionContextMenuProps {
   pinned: boolean;
   onRename: () => void;
   onTogglePin: () => void;
+  onChangeFolder: () => void;
   onDuplicate: () => void;
   onClose: () => void;
   onDismiss: () => void;
@@ -17,6 +18,7 @@ export function SessionContextMenu({
   pinned,
   onRename,
   onTogglePin,
+  onChangeFolder,
   onDuplicate,
   onClose,
   onDismiss,
@@ -56,6 +58,9 @@ export function SessionContextMenu({
       </button>
       <button type="button" onClick={onTogglePin}>
         {pinned ? "Desafixar" : "Fixar"}
+      </button>
+      <button type="button" onClick={onChangeFolder}>
+        Alterar pasta…
       </button>
       <button type="button" onClick={onDuplicate}>
         Duplicar
