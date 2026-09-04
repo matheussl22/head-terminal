@@ -6,21 +6,12 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  font-size: var(--font-md);
   background: var(--surface-window);
   color: var(--text-primary);
 
-  /* Hyper palette — shared with xterm in src/config/theme.ts */
-  --hyper-bg: #000000;
-  --hyper-fg: #e8e8ec;
-  --hyper-accent: var(--accent);
-  --hyper-accent-muted: var(--accent-muted);
-  --hyper-enabled: var(--status-working);
-  --hyper-enabled-muted: rgba(103, 248, 111, 0.2);
-  --hyper-border: var(--border-default);
-  --hyper-green: #5af78e;
-  --hyper-light-green: #7ffa8a;
-  --hyper-light-magenta: #fd7cfc;
-  --hyper-terminal-padding: 12px 14px;
+  /* Terminal padding shared with the xterm container */
+  --terminal-padding: 10px 12px;
 }
 
 * {
@@ -29,11 +20,11 @@
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 ::selection {
-  background: rgba(34, 211, 238, 0.28);
+  background: var(--accent-muted);
 }
 
 html,
@@ -55,6 +46,19 @@ button {
   box-shadow: var(--focus-ring);
 }
 
+kbd {
+  display: inline-block;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 15px;
+}
+
 /* App shell */
 
 .app-shell {
@@ -62,14 +66,14 @@ button {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #000000;
+  background: var(--surface-window);
 }
 
 .app-shell__body {
   display: flex;
   flex: 1;
   min-height: 0;
-  background: #000000;
+  background: var(--surface-window);
 }
 
 .app-shell__main {
@@ -78,7 +82,7 @@ button {
   min-width: 0;
   min-height: 0;
   padding: 0;
-  background: var(--ambient-canvas);
+  background: var(--surface-window);
   /* Inactive sessions are parked off-screen (see .session-workspace--hidden)
      — they must never widen this area or produce a scrollbar. */
   overflow: hidden;
@@ -120,13 +124,10 @@ button {
 
 .boot-screen__title {
   margin: 0;
+  color: var(--text-primary);
   font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  background: var(--gradient-brand);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 .boot-screen__subtitle {
@@ -160,14 +161,14 @@ button {
   height: 3px;
   margin-top: 8px;
   border-radius: 999px;
-  background: var(--border-subtle);
+  background: var(--border-default);
   overflow: hidden;
 }
 
 .boot-screen__progress-bar {
   width: 40%;
   height: 100%;
-  background: var(--gradient-brand);
+  background: var(--accent);
   border-radius: 999px;
 }
 
@@ -175,7 +176,7 @@ button {
   margin: 4px 0 0;
   font-size: var(--font-xs);
   color: var(--text-muted);
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 
 .boot-screen__actions {
@@ -200,12 +201,10 @@ button {
   height: 8px;
   border-radius: 999px;
   flex: 0 0 auto;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 10px currentColor;
 }
 
 .status-dot--exited {
   background-color: transparent;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55);
   border: 1.5px solid currentColor;
 }
 
@@ -219,39 +218,31 @@ button {
   letter-spacing: 0.02em;
 }
 
-.status-badge--starting {
-  color: var(--status-starting);
-  background: rgba(106, 118, 251, 0.15);
-}
-
-.status-badge--idle {
-  color: var(--status-idle);
-  background: rgba(104, 104, 104, 0.2);
+.status-badge--starting,
+.status-badge--idle,
+.status-badge--exited {
+  color: var(--text-secondary);
+  background: var(--status-idle-subtle);
 }
 
 .status-badge--working {
   color: var(--status-working);
-  background: rgba(103, 248, 111, 0.15);
+  background: var(--status-working-subtle);
 }
 
 .status-badge--waiting {
   color: var(--status-waiting);
-  background: rgba(255, 250, 114, 0.12);
+  background: var(--status-waiting-subtle);
 }
 
 .status-badge--fallback {
   color: var(--status-fallback);
-  background: rgba(255, 169, 77, 0.15);
+  background: var(--status-fallback-subtle);
 }
 
 .status-badge--error {
   color: var(--status-error);
-  background: rgba(253, 111, 107, 0.15);
-}
-
-.status-badge--exited {
-  color: var(--status-exited);
-  background: rgba(104, 104, 104, 0.2);
+  background: var(--status-error-subtle);
 }
 
 /* Tooltip */
@@ -271,7 +262,7 @@ button {
   border-radius: var(--radius-sm);
   background: var(--surface-elevated);
   border: 1px solid var(--border-default);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-size: var(--font-xs);
   max-width: 240px;
   white-space: normal;
@@ -281,6 +272,7 @@ button {
   opacity: 0;
   transition: opacity var(--transition-fast);
   z-index: var(--z-tooltip);
+  box-shadow: var(--shadow-menu);
 }
 
 .tooltip--below::after {
@@ -303,9 +295,9 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-family: Menlo, "DejaVu Sans Mono", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: var(--font-xs);
-  color: var(--accent);
+  color: var(--text-secondary);
 }
 
 .git-branch-badge__icon {
@@ -328,10 +320,10 @@ button {
   gap: 8px;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.8);
+  background: var(--surface-elevated);
   border: 1px solid var(--border-default);
   font-size: 10px;
-  font-family: monospace;
-  color: rgba(255, 255, 255, 0.6);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
   pointer-events: none;
 }

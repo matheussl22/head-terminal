@@ -2,12 +2,10 @@
   0%,
   100% {
     opacity: 1;
-    transform: scale(1);
   }
 
   50% {
-    opacity: 0.55;
-    transform: scale(0.92);
+    opacity: 0.45;
   }
 }
 
@@ -44,7 +42,7 @@
 }
 
 .status-dot--pulse {
-  animation: status-pulse 1.5s ease-in-out infinite;
+  animation: status-pulse 1.6s ease-in-out infinite;
 }
 
 .boot-screen__progress-bar {
@@ -58,7 +56,7 @@
 @keyframes dialog-pop {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.97);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
@@ -66,18 +64,10 @@
   }
 }
 
-@keyframes status-shimmer {
-  from {
-    background-position: 150% 0;
-  }
-  to {
-    background-position: -50% 0;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .status-dot--pulse,
   .session-sidebar__compact-item--ring-working,
+  .session-sidebar__pane-dot--working,
   .terminal-pane-header__context--critical {
     animation: none;
   }

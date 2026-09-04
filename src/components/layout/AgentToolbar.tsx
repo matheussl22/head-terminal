@@ -1,12 +1,7 @@
 import { COMMAND_PALETTE_SHORTCUT } from "../../config/toolbar";
 import { countWorkingSessions } from "../../core/activity-utils";
 import { useSessionStore } from "../../core/session-manager";
-import {
-  IconCommand,
-  IconSettings,
-  IconSplitHorizontal,
-  IconSplitVertical,
-} from "../ui/Icons";
+import { IconCommand, IconSettings } from "../ui/Icons";
 import { StatusDot } from "../ui/StatusDot";
 import { Tooltip } from "../ui/Tooltip";
 
@@ -19,7 +14,6 @@ export function AgentToolbar({
   onOpenCommandPalette,
   onOpenSettings,
 }: AgentToolbarProps) {
-  const splitActivePane = useSessionStore((state) => state.splitActivePane);
   // Narrow selector: a primitive, so activity ticks elsewhere in the store
   // don't re-render the toolbar.
   const workingCount = useSessionStore((state) =>
@@ -44,47 +38,27 @@ export function AgentToolbar({
       </div>
 
       <div className="agent-toolbar__actions">
-        <Tooltip content="Dividir verticalmente (Ctrl+\\)" below>
-          <button
-            type="button"
-            className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
-            aria-label="Dividir verticalmente"
-            onClick={() => splitActivePane("vertical")}
-          >
-            <IconSplitVertical />
-          </button>
-        </Tooltip>
-
-        <Tooltip content="Dividir horizontalmente (Ctrl+Shift+\\)" below>
-          <button
-            type="button"
-            className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
-            aria-label="Dividir horizontalmente"
-            onClick={() => splitActivePane("horizontal")}
-          >
-            <IconSplitHorizontal />
-          </button>
-        </Tooltip>
-
         <Tooltip content={`Paleta de comandos (${COMMAND_PALETTE_SHORTCUT})`} below>
           <button
             type="button"
-            className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
+            className="agent-toolbar__button agent-toolbar__button--ghost"
             aria-label="Paleta de comandos"
             onClick={onOpenCommandPalette}
           >
             <IconCommand />
+            <span className="agent-toolbar__label">Comandos</span>
           </button>
         </Tooltip>
 
         <Tooltip content="Configurações" below>
           <button
             type="button"
-            className="agent-toolbar__button agent-toolbar__button--ghost agent-toolbar__button--icon"
+            className="agent-toolbar__button agent-toolbar__button--ghost"
             aria-label="Configurações"
             onClick={onOpenSettings}
           >
             <IconSettings />
+            <span className="agent-toolbar__label">Configurações</span>
           </button>
         </Tooltip>
       </div>

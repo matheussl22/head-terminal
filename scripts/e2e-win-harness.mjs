@@ -387,10 +387,10 @@ export async function snapshot(cdp) {
       },
       nova: Boolean(document.querySelector(".session-sidebar__new")),
       splitVertical: Boolean(
-        document.querySelector('[aria-label="Dividir verticalmente"]'),
+        document.querySelector('.session-workspace--visible [aria-label="Dividir verticalmente"]'),
       ),
       splitHorizontal: Boolean(
-        document.querySelector('[aria-label="Dividir horizontalmente"]'),
+        document.querySelector('.session-workspace--visible [aria-label="Dividir horizontalmente"]'),
       ),
     }))()`,
   );

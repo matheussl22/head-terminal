@@ -1,17 +1,15 @@
-/* Sidebar — execution information center */
+/* Sidebar — session list */
 
 .session-sidebar {
   width: var(--sidebar-width);
   flex: 0 0 var(--sidebar-width);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(180deg, rgba(10, 8, 18, 0.98) 0%, rgba(0, 0, 0, 1) 40%);
+  border-right: 1px solid var(--border-subtle);
+  background: var(--surface-sidebar);
   display: flex;
   flex-direction: column;
   transition:
     width var(--transition-normal),
     flex-basis var(--transition-normal);
-  box-shadow: inset -1px 0 0 rgba(248, 28, 229, 0.06);
 }
 
 .session-sidebar--collapsed {
@@ -25,10 +23,13 @@
   justify-content: space-between;
   gap: var(--space-2);
   min-height: 44px;
-  padding: 8px 10px 8px 12px;
+  padding: 8px 8px 8px 14px;
   border-bottom: 1px solid var(--border-subtle);
-  font-size: var(--font-sm);
-  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .session-sidebar__header-title {
@@ -45,10 +46,11 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: rgba(103, 248, 111, 0.2);
+  background: var(--status-working-subtle);
   color: var(--status-working);
   font-size: 10px;
   font-weight: 700;
+  letter-spacing: 0;
 }
 
 .session-sidebar--collapsed .session-sidebar__header {
@@ -59,7 +61,7 @@
 .session-sidebar__header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .session-sidebar--collapsed .session-sidebar__header-actions {
@@ -74,12 +76,18 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  border: 1px solid var(--button-border);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-primary);
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .session-sidebar__toggle {
@@ -88,27 +96,26 @@
   padding: 0 6px;
 }
 
-.session-sidebar__toggle:hover,
-.session-sidebar__new:hover {
-  background: var(--button-hover);
+.session-sidebar__toggle:hover {
+  background: var(--bg-3);
+  border-color: var(--border-default);
+  color: var(--text-primary);
 }
 
+/* The one primary action in the sidebar */
 .session-sidebar__new {
   min-height: 28px;
-  padding: 4px 9px;
-  border-color: rgba(248, 28, 229, 0.4);
-  background: linear-gradient(
-    135deg,
-    rgba(248, 28, 229, 0.2),
-    rgba(34, 211, 238, 0.08)
-  );
+  padding: 4px 10px 4px 8px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
   font-size: var(--font-sm);
-  box-shadow: 0 0 16px rgba(248, 28, 229, 0.18);
+  font-weight: 600;
 }
 
 .session-sidebar__new:hover {
-  border-color: rgba(248, 28, 229, 0.6);
-  box-shadow: 0 0 22px rgba(248, 28, 229, 0.3);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .session-sidebar__list {
@@ -117,7 +124,7 @@
   padding: var(--space-2);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
   overflow-y: auto;
   flex: 1;
 }
@@ -133,7 +140,7 @@
   justify-content: center;
 }
 
-/* Collapsed rail: initial chip with activity status ring */
+/* Collapsed rail: agent icon with activity ring */
 
 .session-sidebar__compact-new,
 .session-sidebar__compact-item {
@@ -143,10 +150,10 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.88);
+  border: 2px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-3);
+  color: var(--text-secondary);
   font-size: var(--font-md);
   font-weight: 600;
   cursor: pointer;
@@ -154,12 +161,13 @@
 }
 
 .session-sidebar__compact-item--active {
-  background: var(--accent-subtle);
+  border-color: var(--accent);
+  color: var(--text-primary);
 }
 
 .session-sidebar__compact-item--ring-working {
   border-color: var(--status-working);
-  animation: status-pulse 1.5s ease-in-out infinite;
+  animation: status-pulse 1.6s ease-in-out infinite;
 }
 
 .session-sidebar__compact-item--ring-waiting_input {
@@ -176,57 +184,39 @@
 
 .session-sidebar__compact-new:hover,
 .session-sidebar__compact-item:hover {
-  background: var(--button-hover);
+  background: var(--bg-4);
+  color: var(--text-primary);
 }
 
 /* Session card */
-
-.session-sidebar__action--confirm {
-  background: var(--status-error);
-  color: #fff;
-  border-radius: var(--radius-sm);
-}
-
-.session-sidebar__item--glow-waiting_input {
-  border-color: rgba(255, 250, 114, 0.42);
-}
-
-.session-sidebar__item--glow-error,
-.session-sidebar__item--glow-agent_fallback {
-  border-color: rgba(253, 111, 107, 0.46);
-}
 
 .session-sidebar__item {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-left: 2px solid transparent;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.03);
+  background: transparent;
   transition:
     background var(--transition-fast),
-    border-color var(--transition-fast),
-    box-shadow var(--transition-fast);
+    border-color var(--transition-fast);
 }
 
 .session-sidebar__item:hover {
-  background: rgba(255, 255, 255, 0.055);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.03);
 }
 
-.session-sidebar__item--active {
-  border-color: rgba(248, 28, 229, 0.35);
+/* Selection is the left rail and only the left rail: nothing else in the
+   list draws one, so "which session am I on" has exactly one answer.
+   Attention states (waiting, error, agent down) speak through the status
+   line's color below the title, never through the rail. */
+.session-sidebar__item--active,
+.session-sidebar__item--active:hover {
+  border-color: var(--border-default);
   border-left-color: var(--accent);
-  background: linear-gradient(
-    135deg,
-    rgba(248, 28, 229, 0.14),
-    rgba(34, 211, 238, 0.05)
-  );
-  box-shadow:
-    0 0 0 1px rgba(248, 28, 229, 0.12),
-    0 0 22px rgba(248, 28, 229, 0.18);
+  background: var(--bg-3);
 }
 
 .session-sidebar__title-row {
@@ -249,6 +239,7 @@
   white-space: nowrap;
   font-size: var(--font-md);
   font-weight: 600;
+  color: var(--text-primary);
 }
 
 .session-sidebar__agent-chip {
@@ -260,19 +251,19 @@
   height: 20px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-default);
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-2);
   color: var(--text-secondary);
 }
 
 .session-sidebar__account-chip {
   max-width: 92px;
   overflow: hidden;
-  padding: 2px 5px;
+  padding: 1px 6px;
   border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--bg-2);
   color: var(--text-secondary);
-  font-size: 9px;
+  font-size: 10px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -281,9 +272,11 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   width: 100%;
-  padding: 9px 52px 9px 10px;
+  /* Right padding reserves the corner where rename/close appear on hover,
+     so the agent chip in the title row never sits under them. */
+  padding: 9px 58px 9px 9px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -291,6 +284,8 @@
   cursor: pointer;
 }
 
+/* Rename + close live in the top-right corner; they only show up when the
+   card is hovered, focused or active, so the list stays quiet. */
 .session-sidebar__actions {
   position: absolute;
   top: 6px;
@@ -298,7 +293,10 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  opacity: 0.55;
+  padding: 1px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+  opacity: 0;
   transition: opacity var(--transition-fast);
 }
 
@@ -318,39 +316,87 @@
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 .session-sidebar__action:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-4);
 }
 
 .session-sidebar__action--remove:hover {
   color: var(--status-error);
-  background: rgba(253, 111, 107, 0.15);
+  background: var(--status-error-subtle);
 }
 
-.session-sidebar__rename-input {
-  width: 100%;
-  padding: 2px 4px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+.session-sidebar__action--confirm {
+  background: var(--status-error);
+  color: #fff;
   border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.5);
+}
+
+.session-sidebar__rename-input,
+.session-sidebar__cwd-input {
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input);
   color: var(--text-primary);
   font: inherit;
   font-size: var(--font-sm);
+  outline: none;
+}
+
+.session-sidebar__rename-input {
   font-weight: 600;
 }
 
-.session-sidebar__meta {
-  font-family: Menlo, "DejaVu Sans Mono", Consolas, monospace;
+.session-sidebar__cwd-input {
+  font-family: var(--font-mono);
   font-size: var(--font-xs);
+}
+
+/* Folder: one line, basename only, full path in the tooltip. On the active
+   card a click turns it into the editable path. */
+.session-sidebar__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: var(--font-xs);
+  text-align: left;
+  cursor: inherit;
+}
+
+.session-sidebar__meta-icon {
+  flex: 0 0 auto;
   color: var(--text-muted);
+}
+
+.session-sidebar__meta-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.session-sidebar__meta--editable {
+  cursor: text;
+  border-radius: 4px;
+}
+
+.session-sidebar__meta--editable:hover {
+  color: var(--text-primary);
+  text-decoration: underline dotted var(--text-muted);
+  text-underline-offset: 3px;
 }
 
 .session-sidebar__status {
@@ -363,6 +409,22 @@
   white-space: nowrap;
 }
 
+.session-sidebar__status--working {
+  color: var(--status-working);
+}
+
+.session-sidebar__status--waiting_input {
+  color: var(--status-waiting);
+}
+
+.session-sidebar__status--error {
+  color: var(--status-error);
+}
+
+.session-sidebar__status--agent_fallback {
+  color: var(--status-fallback);
+}
+
 .session-sidebar__pane-dots {
   display: inline-flex;
   align-items: center;
@@ -371,23 +433,22 @@
 }
 
 .session-sidebar__pane-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 6px;
   padding: 0;
   border: 0;
   border-radius: 2px;
   cursor: pointer;
-  opacity: 0.85;
 }
 
 .session-sidebar__pane-dot--starting,
 .session-sidebar__pane-dot--idle {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--border-strong);
 }
 
 .session-sidebar__pane-dot--working {
   background: var(--status-working);
-  animation: status-pulse 1.5s ease-in-out infinite;
+  animation: status-pulse 1.6s ease-in-out infinite;
 }
 
 .session-sidebar__pane-dot--waiting_input {
@@ -410,29 +471,10 @@
 
 .session-sidebar__git-badge {
   display: block;
-  margin-top: 2px;
   font-size: var(--font-xs);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.session-sidebar__settings {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 0 10px 8px;
-}
-
-.session-sidebar__cwd-input {
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.5);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: var(--font-sm);
 }
 
 /* Context menu (right-click on a session) */
@@ -445,7 +487,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   background: var(--surface-elevated);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-menu);
 }
 
 .session-context-menu button {
@@ -456,12 +498,13 @@
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-primary);
+  font-size: var(--font-sm);
   text-align: left;
   cursor: pointer;
 }
 
 .session-context-menu button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-4);
 }
 
 .session-context-menu__danger {

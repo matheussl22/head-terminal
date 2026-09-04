@@ -81,6 +81,8 @@ interface AgentCliStatus {
   ornith: boolean;
 }
 
+const INSTALLABLE_AGENTS = ["claude", "codex", "cursor"] as const;
+
 let cliStatusCache: AgentCliStatus | null = null;
 // `ollama list` starts the daemon on a cold machine, so the answer is kept
 // for the app's lifetime like the CLI probe above.
@@ -346,6 +348,30 @@ export function CreateSessionDialog({
   }
 
   const profiles = Object.values(buildAgentProfiles());
+  const profileLabel = (id: string): string =>
+    profiles.find((profile) => profile.id === id)?.label ?? id;
+
+  // Only the CLIs `ensureAgentClis` knows how to install; Ollama, llama.cpp
+  // and Antigravity stay "not installed" with their own hints.
+  const missingInstallable = cliStatus
+    ? INSTALLABLE_AGENTS.filter((id) => !cliAvailable(cliStatus, id))
+    : [];
+
+  const retryInstall = async () => {
+    if (ensuringClis) {
+      return;
+    }
+    setEnsuringClis(true);
+    try {
+      const result = await window.headTerminal.system.ensureAgentClis();
+      cliStatusCache = result.status;
+      setCliStatus(result.status);
+    } catch {
+      // The row stays; the user can try again.
+    } finally {
+      setEnsuringClis(false);
+    }
+  };
 
   const isAgentAvailable = (id: string): boolean => {
     if (id === "shell") {
@@ -518,15 +544,19 @@ export function CreateSessionDialog({
                 && profile.id !== "shell"
                 && profile.id !== "antigravity"
                 && !available;
+              const cardClass = [
+                "create-session-dialog__agent",
+                profile.id === agentProfileId && "create-session-dialog__agent--active",
+                !available && !installing && "create-session-dialog__agent--unavailable",
+                installing && "create-session-dialog__agent--installing",
+              ]
+                .filter(Boolean)
+                .join(" ");
               return (
                 <button
                   key={profile.id}
                   type="button"
-                  className={
-                    profile.id === agentProfileId
-                      ? "create-session-dialog__agent create-session-dialog__agent--active"
-                      : "create-session-dialog__agent"
-                  }
+                  className={cardClass}
                   disabled={!available}
                   aria-pressed={profile.id === agentProfileId}
                   onClick={() => {
@@ -547,6 +577,24 @@ export function CreateSessionDialog({
               );
             })}
           </div>
+          {missingInstallable.length > 0 && (
+            <div className="create-session-dialog__install">
+              <span>
+                {ensuringClis
+                  ? "Instalando CLIs que faltam…"
+                  : `Não instalado: ${missingInstallable
+                      .map((id) => profileLabel(id))
+                      .join(", ")}`}
+              </span>
+              <button
+                type="button"
+                disabled={ensuringClis}
+                onClick={() => void retryInstall()}
+              >
+                {ensuringClis ? "Instalando…" : "Instalar agora"}
+              </button>
+            </div>
+          )}
         </fieldset>
 
         {agentProfileId === "ollama" && (

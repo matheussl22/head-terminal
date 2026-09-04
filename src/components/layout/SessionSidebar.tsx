@@ -16,6 +16,7 @@ import {
   getSessionActivity,
 } from "../../core/activity-utils";
 import { flipAnimate } from "../../core/flip-animate";
+import { basenamePath } from "../../core/path-utils";
 import { pickGitContextForSession } from "../../core/git-context-utils";
 import { collectPaneIds } from "../../core/session-layout";
 import { useSessionStore } from "../../core/session-manager";
@@ -40,6 +41,7 @@ import {
   IconAgentCursor,
   IconAgentShell,
   IconClose,
+  IconFolder,
   IconPencil,
   IconPlus,
   IconSidebarCollapse,
@@ -156,6 +158,9 @@ const SessionListItem = memo(function SessionListItem({
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(session.title);
   const [draftCwd, setDraftCwd] = useState(session.cwd);
+  // A pasta só vira campo editável a pedido, na sessão ativa — o card mostra
+  // uma linha só (nome da pasta), o caminho completo fica no tooltip.
+  const [isEditingCwd, setIsEditingCwd] = useState(false);
   // Fechar sessão exige dois cliques: um clique perdido não pode matar uma sessão.
   const [confirmRemove, setConfirmRemove] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -205,6 +210,12 @@ const SessionListItem = memo(function SessionListItem({
   useEffect(() => {
     setDraftCwd(session.cwd);
   }, [session.cwd]);
+
+  useEffect(() => {
+    if (!isActive) {
+      setIsEditingCwd(false);
+    }
+  }, [isActive]);
 
   useEffect(() => {
     if (isEditing) {
@@ -286,9 +297,7 @@ const SessionListItem = memo(function SessionListItem({
           (isActive
             ? "session-sidebar__item session-sidebar__item--active"
             : "session-sidebar__item") +
-          (NEEDS_ATTENTION.has(activity)
-            ? ` session-sidebar__item--glow-${activity}`
-            : "")
+          ""
         }
         onContextMenu={(event) => onContextMenu(event, session)}
         onMouseLeave={() => setConfirmRemove(false)}
@@ -362,12 +371,70 @@ const SessionListItem = memo(function SessionListItem({
             )}
           </div>
 
-          <span className="session-sidebar__meta">{session.cwd}</span>
+          {isEditingCwd ? (
+            <input
+              className="session-sidebar__cwd-input"
+              autoFocus
+              value={draftCwd}
+              spellCheck={false}
+              onChange={(event) => setDraftCwd(event.target.value)}
+              onBlur={() => {
+                commitCwd();
+                setIsEditingCwd(false);
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation();
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commitCwd();
+                  setIsEditingCwd(false);
+                }
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  setDraftCwd(session.cwd);
+                  setIsEditingCwd(false);
+                }
+              }}
+              onClick={(event) => event.stopPropagation()}
+            />
+          ) : (
+            <button
+              type="button"
+              className={
+                isActive
+                  ? "session-sidebar__meta session-sidebar__meta--editable"
+                  : "session-sidebar__meta"
+              }
+              tabIndex={isActive ? 0 : -1}
+              title={
+                isActive
+                  ? `${session.cwd} — clique para alterar a pasta`
+                  : session.cwd
+              }
+              onClick={(event) => {
+                // On an inactive card the click just selects the session.
+                if (!isActive) return;
+                event.stopPropagation();
+                setIsEditingCwd(true);
+              }}
+            >
+              <IconFolder size={11} className="session-sidebar__meta-icon" />
+              <span className="session-sidebar__meta-text">
+                {basenamePath(session.cwd, session.cwd)}
+              </span>
+            </button>
+          )}
           <GitBranchBadge
             context={gitContext}
             className="session-sidebar__git-badge"
           />
-          <span className="session-sidebar__status">
+          <span
+            className={
+              NEEDS_ATTENTION.has(activity) || activity === "working"
+                ? `session-sidebar__status session-sidebar__status--${activity}`
+                : "session-sidebar__status"
+            }
+          >
             <span className="session-sidebar__pane-dots" aria-hidden>
               {paneActivities.map((paneActivity, index) => (
                 <button
@@ -385,24 +452,6 @@ const SessionListItem = memo(function SessionListItem({
             <SessionStatusLine activity={activity} activitySince={activitySince} />
           </span>
         </div>
-
-        {isActive && (
-          <div className="session-sidebar__settings">
-            <input
-              className="session-sidebar__cwd-input"
-              value={draftCwd}
-              onChange={(event) => setDraftCwd(event.target.value)}
-              onBlur={commitCwd}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  commitCwd();
-                }
-              }}
-              onClick={(event) => event.stopPropagation()}
-            />
-          </div>
-        )}
 
         {!isEditing && (
           <div className="session-sidebar__actions">
@@ -468,7 +517,7 @@ export function SessionSidebar({
     countWorkingSessions(state.sessions, state.paneRuntime),
   );
   // A ordem é sempre a do store (pin + drag manual) — sem reordenação
-  // automática; quem precisa de atenção sinaliza por cor/glow, não por posição.
+  // automática; quem precisa de atenção sinaliza pela cor do status, não por posição.
   const listRef = useRef<HTMLUListElement | null>(null);
   const listTops = useRef<Map<string, number>>(new Map());
   // Sem deps, isso rodava (getBoundingClientRect em cada sessão = reflow

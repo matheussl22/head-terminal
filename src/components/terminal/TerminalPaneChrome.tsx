@@ -34,6 +34,8 @@ import {
   IconPencil,
   IconFolder,
   IconRefresh,
+  IconSplitHorizontal,
+  IconSplitVertical,
 } from "../ui/Icons";
 import { ResumeSessionMenu } from "./ResumeSessionMenu";
 import { VoiceInputButton } from "./VoiceInputButton";
@@ -354,6 +356,7 @@ export function TerminalPaneHeader({
     (state) => state.paneRuntime[paneId]?.activity ?? "starting",
   );
   const restartPane = useSessionStore((state) => state.restartPane);
+  const splitPane = useSessionStore((state) => state.splitPane);
   const gitContext = useSessionStore((state) => state.paneGitContext[paneId]);
   const contextPercent = useSessionStore(
     (state) => state.paneRuntime[paneId]?.contextPercent,
@@ -440,6 +443,32 @@ export function TerminalPaneHeader({
           </button>
         )}
         <VoiceInputButton paneId={paneId} />
+        <button
+          type="button"
+          className="terminal-pane-header__action"
+          title="Dividir abaixo (Ctrl+\)"
+          aria-label="Dividir verticalmente"
+          onClick={(event) => {
+            event.stopPropagation();
+            onFocus();
+            splitPane(paneId, "vertical");
+          }}
+        >
+          <IconSplitVertical size={13} />
+        </button>
+        <button
+          type="button"
+          className="terminal-pane-header__action"
+          title="Dividir ao lado (Ctrl+Shift+\)"
+          aria-label="Dividir horizontalmente"
+          onClick={(event) => {
+            event.stopPropagation();
+            onFocus();
+            splitPane(paneId, "horizontal");
+          }}
+        >
+          <IconSplitHorizontal size={13} />
+        </button>
         <button
           type="button"
           className="terminal-pane-header__action"

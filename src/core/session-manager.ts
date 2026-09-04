@@ -115,6 +115,10 @@ interface SessionStore {
   reorderSessions: (fromIndex: number, toIndex: number) => void;
   togglePinSession: (sessionId: string) => void;
   splitActivePane: (direction: SplitDirection) => void;
+  /** Split this exact pane, whichever session it belongs to. The pane header
+   * offers it so the user divides the terminal under the cursor, not
+   * whichever one happens to hold focus. */
+  splitPane: (paneId: string, direction: SplitDirection) => void;
   closePane: (paneId: string) => void;
   updateSplitRatio: (
     sessionId: string,
@@ -791,13 +795,19 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       return { paneRestartKeys, paneRuntime };
     }),
 
-  splitActivePane: (direction) =>
+  splitActivePane: (direction) => {
+    const { activePaneId } = get();
+    if (activePaneId) {
+      get().splitPane(activePaneId, direction);
+    }
+  },
+
+  splitPane: (targetPaneId, direction) =>
     set((state) => {
       const session =
-        state.sessions.find((item) => item.id === state.activeSessionId) ?? null;
-      const targetPaneId = state.activePaneId;
+        state.sessions.find((item) => sessionHasPane(item, targetPaneId)) ?? null;
 
-      if (!session || !targetPaneId) {
+      if (!session) {
         return state;
       }
 

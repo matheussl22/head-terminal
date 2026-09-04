@@ -1,4 +1,4 @@
-/* Toolbar — brand glow + lit controls */
+/* Toolbar — flat chrome, labelled actions */
 
 .agent-toolbar {
   display: flex;
@@ -6,46 +6,31 @@
   justify-content: space-between;
   gap: var(--space-4);
   min-height: var(--toolbar-height);
-  padding: 0 16px;
-  border-bottom: 1px solid transparent;
-  border-image: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(248, 28, 229, 0.35) 20%,
-      rgba(34, 211, 238, 0.25) 55%,
-      transparent 100%
-    )
-    1;
-  background:
-    linear-gradient(180deg, rgba(14, 12, 22, 0.98), rgba(4, 4, 8, 0.98));
-  box-shadow: 0 8px 28px rgba(248, 28, 229, 0.06);
+  padding: 0 12px 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-toolbar);
 }
 
 .agent-toolbar__brand {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 10px;
   min-width: 0;
 }
 
 .agent-toolbar__dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: var(--gradient-brand);
-  box-shadow: 0 0 14px rgba(248, 28, 229, 0.55), 0 0 4px rgba(34, 211, 238, 0.4);
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--accent);
 }
 
 .agent-toolbar__title {
   font-size: var(--font-md);
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-weight: 650;
+  letter-spacing: 0.01em;
   white-space: nowrap;
-  background: var(--gradient-brand);
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 10px rgba(248, 28, 229, 0.35));
+  color: var(--text-primary);
 }
 
 .agent-toolbar__git-badge {
@@ -61,20 +46,19 @@
   align-items: center;
   gap: 6px;
   margin-left: var(--space-2);
-  padding: 3px 10px;
+  padding: 2px 8px 2px 6px;
   border-radius: 999px;
-  border: 1px solid rgba(103, 248, 111, 0.35);
-  background: rgba(103, 248, 111, 0.1);
+  border: 1px solid var(--border-default);
+  background: var(--status-working-subtle);
   font-size: var(--font-xs);
   color: var(--status-working);
   white-space: nowrap;
-  box-shadow: 0 0 14px rgba(103, 248, 111, 0.2);
 }
 
 .agent-toolbar__actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -83,23 +67,23 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
+  height: 30px;
+  padding: 0 10px;
   border: 1px solid var(--button-border);
   border-radius: var(--radius-sm);
   background: var(--button-bg);
   color: var(--text-primary);
+  font-size: var(--font-sm);
   cursor: pointer;
   transition:
     background var(--transition-fast),
     border-color var(--transition-fast),
-    box-shadow var(--transition-fast),
     color var(--transition-fast);
 }
 
 .agent-toolbar__button:hover:not(:disabled) {
-  background: rgba(248, 28, 229, 0.12);
-  border-color: rgba(248, 28, 229, 0.35);
-  box-shadow: 0 0 16px rgba(248, 28, 229, 0.2);
+  background: var(--button-hover);
+  border-color: var(--border-strong);
 }
 
 .agent-toolbar__button:disabled {
@@ -115,11 +99,37 @@
 
 .agent-toolbar__button--ghost:hover:not(:disabled) {
   color: var(--text-primary);
+  background: var(--bg-3);
+  border-color: var(--border-default);
 }
 
 .agent-toolbar__button--icon {
-  width: 32px;
-  height: 32px;
+  width: 30px;
   padding: 0;
   justify-content: center;
+}
+
+.agent-toolbar__label {
+  white-space: nowrap;
+}
+
+.agent-toolbar__sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border-default);
+}
+
+/* Labels are the first thing to go when the window gets narrow; the
+   tooltip still names the action. */
+@media (max-width: 900px) {
+  .agent-toolbar__label {
+    display: none;
+  }
+
+  .agent-toolbar__button {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
 }

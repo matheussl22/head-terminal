@@ -3,45 +3,45 @@ import type { ITerminalOptions, ITheme } from "@xterm/xterm";
 import { loadFontSize } from "../core/ui-preferences";
 import { getCachedPlatformInfo } from "../core/platform-info";
 
-// Hyper-inspired, but with ANSI colors that actually read on pure black.
-// (Stock Hyper blue #0A2FC4 is nearly invisible on #000.)
+// Graphite terminal: near-black ground, soft white text, amber cursor. ANSI
+// colors are tuned to read on #0b0c0e without going neon — the chrome around
+// the terminal is deliberately quiet, so the terminal's own colors carry the
+// information.
 export const HYPER_THEME = {
   fontFamily:
-    'Menlo, "DejaVu Sans Mono", Consolas, "Lucida Console", monospace',
+    'Menlo, "Cascadia Mono", "DejaVu Sans Mono", Consolas, "Lucida Console", monospace',
   fontSize: 12,
   lineHeight: 1,
   letterSpacing: 0,
-  // Slightly soft default fg so bright ANSI (green/cyan/magenta) pops more
-  // than body text — avoids the "everything is flat white" feel.
-  foreground: "#E8E8EC",
-  background: "#000000",
-  cursor: "rgba(248, 28, 229, 0.85)",
-  cursorAccent: "#000000",
-  selection: "rgba(248, 28, 229, 0.32)",
-  accent: "#f81ce5",
-  accentMuted: "rgba(248, 28, 229, 0.35)",
-  enabled: "#67f86f",
-  enabledMuted: "rgba(103, 248, 111, 0.2)",
-  terminalPadding: "12px 14px",
+  foreground: "#e6e7ea",
+  background: "#0b0c0e",
+  cursor: "rgba(240, 168, 50, 0.9)",
+  cursorAccent: "#0b0c0e",
+  selection: "rgba(240, 168, 50, 0.28)",
+  accent: "#f0a832",
+  accentMuted: "rgba(240, 168, 50, 0.45)",
+  enabled: "#3fb950",
+  enabledMuted: "rgba(63, 185, 80, 0.2)",
+  terminalPadding: "10px 12px",
   colors: {
-    black: "#0C0C0C",
-    red: "#FF6B6B",
-    green: "#5AF78E",
-    yellow: "#F3F99D",
-    blue: "#6A76FB",
-    magenta: "#FF6AC1",
-    cyan: "#6AE4FF",
-    white: "#F1F1F0",
-    lightBlack: "#7A7A7A",
-    lightRed: "#FF8E8A",
-    lightGreen: "#7FFA8A",
-    lightYellow: "#FFFFA5",
-    lightBlue: "#8B95FF",
-    lightMagenta: "#FD7CFC",
-    lightCyan: "#9AFEFF",
-    lightWhite: "#FFFFFF",
-    limeGreen: "#32CD32",
-    lightCoral: "#F08080",
+    black: "#1b1e23",
+    red: "#ff6b6b",
+    green: "#56d364",
+    yellow: "#e3b341",
+    blue: "#58a6ff",
+    magenta: "#d98cd6",
+    cyan: "#56d4dd",
+    white: "#d6d9de",
+    lightBlack: "#7d838c",
+    lightRed: "#ff8e8a",
+    lightGreen: "#7ee787",
+    lightYellow: "#f2cc60",
+    lightBlue: "#79c0ff",
+    lightMagenta: "#e8a9e5",
+    lightCyan: "#8ae6ee",
+    lightWhite: "#ffffff",
+    limeGreen: "#56d364",
+    lightCoral: "#ff8e8a",
   },
 } as const;
 
@@ -49,11 +49,11 @@ export const HEAD_THEME = {
   background: HYPER_THEME.background,
   foreground: HYPER_THEME.foreground,
   cursor: HYPER_THEME.cursor,
-  header: "#0a0a0a",
-  border: "#333333",
-  buttonBg: "rgba(255, 255, 255, 0.06)",
-  buttonBorder: "rgba(255, 255, 255, 0.15)",
-  buttonHover: "rgba(255, 255, 255, 0.14)",
+  header: "#15171b",
+  border: "#2a2d33",
+  buttonBg: "#1b1e23",
+  buttonBorder: "#2a2d33",
+  buttonHover: "#22262c",
   fontFamily: HYPER_THEME.fontFamily,
   fontSize: HYPER_THEME.fontSize,
 } as const;

@@ -340,16 +340,16 @@ async function scenarioSplit({ cdp, debug }) {
 
   const splitVertical = await evaluate(
     cdp,
-    `Boolean(document.querySelector('[aria-label="Dividir verticalmente"]'))`,
+    `Boolean(document.querySelector('.session-workspace--visible [aria-label="Dividir verticalmente"]'))`,
   );
   if (!splitVertical) {
     return {
       skipped: true,
-      reason: "toolbar missing aria-label=\"Dividir verticalmente\"",
+      reason: "pane header missing aria-label=\"Dividir verticalmente\"",
     };
   }
 
-  await click(cdp, '[aria-label="Dividir verticalmente"]');
+  await click(cdp, '.session-workspace--visible [aria-label="Dividir verticalmente"]');
   await poll(
     cdp,
     `document.querySelectorAll(".session-workspace--visible .terminal-pane-shell").length`,
@@ -402,10 +402,10 @@ async function scenarioSplit({ cdp, debug }) {
 
   const splitHorizontal = await evaluate(
     cdp,
-    `Boolean(document.querySelector('[aria-label="Dividir horizontalmente"]'))`,
+    `Boolean(document.querySelector('.session-workspace--visible [aria-label="Dividir horizontalmente"]'))`,
   );
   if (splitHorizontal) {
-    await click(cdp, '[aria-label="Dividir horizontalmente"]');
+    await click(cdp, '.session-workspace--visible [aria-label="Dividir horizontalmente"]');
     await poll(
       cdp,
       `document.querySelectorAll(".session-workspace--visible .terminal-pane-shell").length`,
@@ -583,10 +583,10 @@ async function prepareRestoreMarker(cdp, debug) {
   await renameActiveSession(cdp, "E2E Restore", debug);
   const splitExists = await evaluate(
     cdp,
-    `Boolean(document.querySelector('[aria-label="Dividir verticalmente"]'))`,
+    `Boolean(document.querySelector('.session-workspace--visible [aria-label="Dividir verticalmente"]'))`,
   );
   if (splitExists) {
-    await click(cdp, '[aria-label="Dividir verticalmente"]');
+    await click(cdp, '.session-workspace--visible [aria-label="Dividir verticalmente"]');
     await poll(
       cdp,
       `document.querySelectorAll(".session-workspace--visible .terminal-pane-shell").length >= 2`,

@@ -1,115 +1,96 @@
 :root {
-  /* Black void with lifted chrome layers */
-  --bg-0: #000000;
-  --bg-1: #07070b;
-  --bg-2: #0e0e16;
-  --bg-3: #161622;
+  /* Graphite surfaces. The terminal is the darkest layer; chrome (toolbar,
+     sidebar, pane headers) sits one step lighter so panes read as windows
+     cut into the app, not as cards floating over a void. */
+  --bg-0: #0b0c0e;
+  --bg-1: #111316;
+  --bg-2: #15171b;
+  --bg-3: #1b1e23;
+  --bg-4: #22262c;
 
-  /* Surfaces — terminal stays absolute black; chrome lifts off it */
-  --surface-terminal: #000000;
-  --surface-window: #000000;
-  --surface-sidebar: #050508;
-  --surface-toolbar: #06060a;
-  --surface-elevated: #161622;
-  --surface-overlay: rgba(0, 0, 0, 0.78);
-  --surface-pane: #010103;
-  --surface-pane-header: linear-gradient(
-    180deg,
-    rgba(28, 26, 40, 0.98) 0%,
-    rgba(10, 10, 16, 0.96) 100%
-  );
+  --surface-terminal: var(--bg-0);
+  --surface-window: var(--bg-1);
+  --surface-sidebar: var(--bg-2);
+  --surface-toolbar: var(--bg-2);
+  --surface-pane: var(--bg-0);
+  --surface-pane-header: var(--bg-2);
+  --surface-elevated: var(--bg-3);
+  --surface-input: #0e1013;
+  --surface-overlay: rgba(11, 12, 14, 0.82);
 
-  /* Borders — luminous hairlines */
-  --border-subtle: rgba(255, 255, 255, 0.1);
-  --border-default: rgba(255, 255, 255, 0.16);
-  --border-active: rgba(248, 28, 229, 0.55);
-  --border-lit: rgba(255, 255, 255, 0.2);
+  /* Borders — flat hairlines, no glow */
+  --border-subtle: #23262c;
+  --border-default: #2a2d33;
+  --border-strong: #3a3e46;
+  --border-active: var(--accent);
 
   /* Text */
-  --text-primary: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.78);
-  --text-muted: rgba(255, 255, 255, 0.5);
+  --text-primary: #e6e7ea;
+  --text-secondary: #a9adb5;
+  --text-muted: #757a83;
 
-  /* Identity: Hyper magenta + electric cyan */
-  --accent: #f81ce5;
-  --accent-muted: rgba(248, 28, 229, 0.4);
-  --accent-subtle: rgba(248, 28, 229, 0.14);
-  --accent-2: #22d3ee;
-  --accent-2-muted: rgba(34, 211, 238, 0.4);
-  --accent-2-subtle: rgba(34, 211, 238, 0.14);
-  --gradient-brand: linear-gradient(135deg, var(--accent), var(--accent-2));
-  --gradient-pane-edge: linear-gradient(
-    135deg,
-    rgba(248, 28, 229, 0.65),
-    rgba(34, 211, 238, 0.35)
-  );
+  /* One accent, used only for the thing that matters right now: the active
+     pane, the active session, the primary action, keyboard focus. */
+  --accent: #f0a832;
+  --accent-hover: #f7b94f;
+  --accent-fg: #1a1200;
+  --accent-subtle: rgba(240, 168, 50, 0.12);
+  --accent-muted: rgba(240, 168, 50, 0.45);
 
-  /* Glow — visible bloom so cards feel alive */
-  --glow-accent: 0 0 18px rgba(248, 28, 229, 0.45);
-  --glow-working: 0 0 10px rgba(103, 248, 111, 0.55);
-  --glow-pane:
-    0 0 0 1px rgba(255, 255, 255, 0.05),
-    0 0 24px rgba(248, 28, 229, 0.06),
-    0 18px 48px rgba(0, 0, 0, 0.7),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  --glow-pane-active:
-    0 0 0 1px rgba(248, 28, 229, 0.28),
-    0 0 36px rgba(248, 28, 229, 0.28),
-    0 0 64px rgba(34, 211, 238, 0.08),
-    0 22px 56px rgba(0, 0, 0, 0.75),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  /* Activity states — semantic, never decorative */
+  --status-idle: #8b9099;
+  --status-working: #3fb950;
+  --status-waiting: #58a6ff;
+  --status-error: #f85149;
+  --status-fallback: #e8845c;
+  --status-starting: #8b9099;
+  --status-exited: #5c6069;
 
-  /* Ambient washes for the void behind cards */
-  --ambient-canvas:
-    radial-gradient(ellipse 70% 55% at 72% 38%, rgba(248, 28, 229, 0.1), transparent 58%),
-    radial-gradient(ellipse 55% 45% at 18% 78%, rgba(34, 211, 238, 0.07), transparent 55%),
-    radial-gradient(ellipse 40% 30% at 50% 100%, rgba(248, 28, 229, 0.05), transparent 60%),
-    #000000;
-
-  /* Activity states */
-  --status-idle: #7a7a7a;
-  --status-working: #67f86f;
-  --status-waiting: #fffa72;
-  --status-error: #fd6f6b;
-  --status-fallback: #ffa94d;
-  --status-starting: #8b95ff;
-  --status-exited: #5c5c66;
+  --status-working-subtle: rgba(63, 185, 80, 0.14);
+  --status-waiting-subtle: rgba(88, 166, 255, 0.14);
+  --status-error-subtle: rgba(248, 81, 73, 0.14);
+  --status-fallback-subtle: rgba(232, 132, 92, 0.16);
+  --status-idle-subtle: rgba(139, 144, 153, 0.14);
 
   /* Buttons */
-  --button-bg: rgba(255, 255, 255, 0.06);
-  --button-border: rgba(255, 255, 255, 0.14);
-  --button-hover: rgba(255, 255, 255, 0.11);
+  --button-bg: var(--bg-3);
+  --button-border: var(--border-default);
+  --button-hover: var(--bg-4);
+
+  /* Shadows: only where something actually floats (menus, dialogs) */
+  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-dialog: 0 24px 64px rgba(0, 0, 0, 0.6);
 
   /* Scales */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
-  --radius-sm: 7px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-pane: 16px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pane: 8px;
   --font-xs: 11px;
   --font-sm: 12px;
   --font-md: 13px;
   --font-lg: 15px;
+  --font-mono: Menlo, "Cascadia Mono", "DejaVu Sans Mono", Consolas, monospace;
   --z-divider: 2;
   --z-overlay: 3;
   --z-tooltip: 20;
   --z-menu: 50;
   --z-modal: 100;
 
-  /* Focus ring (cyan for interactives) */
-  --focus-ring: 0 0 0 2px rgba(34, 211, 238, 0.45);
+  --focus-ring: 0 0 0 2px var(--accent-muted);
 
   /* Layout */
   --sidebar-width: 256px;
   --sidebar-collapsed-width: 56px;
-  --toolbar-height: 46px;
-  --pane-header-height: 40px;
-  --pane-gap: 8px;
+  --toolbar-height: 44px;
+  --pane-header-height: 36px;
+  --pane-gap: 6px;
 
   /* Motion */
-  --transition-fast: 140ms ease;
-  --transition-normal: 180ms ease;
+  --transition-fast: 120ms ease;
+  --transition-normal: 160ms ease;
 }
