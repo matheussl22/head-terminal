@@ -1,0 +1,77 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-13
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # A tag manda no nome do artefato, entao ela tem que bater com o
+      # package.json, senao o zip anuncia uma versao que o app nao tem.
+      - name: Check tag against package.json
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          [ "$tag" = "$pkg" ] || {
+            echo "tag $tag != package.json $pkg" >&2
+            exit 1
+          }
+
+
+      - run: npm run make
+
+      # O ZIP do MakerZIP sai com espaco no nome ("Head Terminal-darwin-...").
+      # Renomeia para um asset estavel, sem espaco, que o cask do Homebrew
+      # consegue referenciar sem URL-encoding.
+      - name: Rename artifact and checksum
+        id: asset
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          dir="out/make/zip/darwin/${{ matrix.arch }}"
+          name="head-terminal-darwin-${{ matrix.arch }}-${version}.zip"
+          built="$(ls "$dir"/*.zip)"
+          [ "$built" = "$dir/$name" ] || mv "$built" "$dir/$name"
+          # O .sha256 guarda so o basename para que `shasum -c` funcione ao lado do zip.
+          (cd "$dir" && shasum -a 256 "$name" > "$name.sha256" && cat "$name.sha256")
+          echo "path=$dir/$name" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(cut -d' ' -f1 "$dir/$name.sha256")" >> "$GITHUB_OUTPUT"
+
+      # As duas jobs da matriz correm juntas: a primeira cria a release, a
+      # segunda recebe 422 e segue para o upload.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes || true
+          gh release upload "$GITHUB_REF_NAME" \
+            "${{ steps.asset.outputs.path }}" \
+            "${{ steps.asset.outputs.path }}.sha256" --clobber
+
+      - name: Cask sha256
+        run: echo "${{ matrix.arch }} -> ${{ steps.asset.outputs.sha256 }}" >> "$GITHUB_STEP_SUMMARY"

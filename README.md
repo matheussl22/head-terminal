@@ -155,6 +155,23 @@ machine that built it, or clear the flag with `xattr -dr com.apple.quarantine
 "Head Terminal.app"`. Public distribution still requires signing, hardened
 runtime, entitlements and notarization.
 
+#### Install with Homebrew
+
+Once the tap exists, a tagged release installs with:
+
+```bash
+brew install --cask matheussl22/tap/head-terminal
+```
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds the ZIP on
+arm64 and x64 runners and attaches both to the GitHub release along with their
+checksums. The tag has to match the `package.json` version, because the cask
+builds its download URL from both; the workflow fails early when they diverge. The cask itself lives in `packaging/homebrew/head-terminal.rb`; it has
+to be copied into a `homebrew-tap` repository, because Homebrew only loads casks
+from a tap. Since the app is not signed, the cask strips the quarantine
+attribute after install; that workaround goes away once notarization is in
+place.
+
 ## Commands
 
 ```bash
