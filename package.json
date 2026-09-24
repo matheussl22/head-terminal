@@ -67,5 +67,8 @@
     "electron-winstaller@5.4.4": true,
     "esbuild@0.25.12": true,
     "node-pty@1.1.0": true
+  },
+  "overrides": {
+    "yauzl": "^3.4.0"
   }
 }
