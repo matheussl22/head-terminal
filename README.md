@@ -34,30 +34,6 @@
 - notifications, logs, checkpoints and diagnostic export;
 - single instance and confirmation before closing working agents.
 
-## Architecture
-
-The application uses Electron with a React UI, one independent native PTY per pane and a narrow API between the renderer and the operating system.
-
-```text
-React 19 + xterm.js + Zustand
-              │
-              ▼
-window.headTerminal (typed preload)
-              │ named, validated IPC
-              ▼
-Electron main ── node-pty / Git / filesystem / safeStorage / voice
-```
-
-The renderer has no access to Node or to `ipcRenderer`. The window uses `contextIsolation`, sandbox, CSP and `nodeIntegration: false`. Main and preload are bundled by Vite; Electron Forge rebuilds and unpacks `node-pty` inside the package.
-
-| Area | Technology |
-|---|---|
-| Desktop | Electron 41 + Electron Forge |
-| UI | React 19 + TypeScript + Vite |
-| Terminal | xterm.js + node-pty |
-| State | Zustand + versioned JSON workspace |
-| Tests | Vitest + Electron/X11 smoke |
-
 ## License
 
 Head Terminal is free for personal and other non-commercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Commercial use is not allowed without the author's permission.
