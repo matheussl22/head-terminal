@@ -46,6 +46,20 @@ const config: ForgeConfig = {
       NSMicrophoneUsageDescription:
         "O Head Terminal usa o microfone para o ditado por voz e para o brainstorm por voz com os agentes.",
     },
+    // Sem certificado ainda, mas assinar mesmo assim (ad-hoc) importa: o
+    // pacote cru herda a assinatura genérica do Electron, com identificador
+    // com.github.Electron, e o macOS passa a tratar o app como qualquer outro
+    // Electron sem assinatura na hora de decidir sobre o microfone. Assinar
+    // aqui grava o appBundleId no código.
+    // O hardened runtime fica desligado: com assinatura ad-hoc não há Team ID,
+    // e a validação de bibliotecas que ele liga recusa o Electron Framework
+    // ("mapped file have different Team IDs") — o app nem abre. Ao trocar
+    // `identity` por um Developer ID, religar o hardened runtime e notarizar.
+    osxSign: {
+      identity: "-",
+      identityValidation: false,
+      optionsForFile: () => ({ hardenedRuntime: false }),
+    },
   },
   rebuildConfig: HAS_NODE_PTY_PREBUILD ? { onlyModules: [] } : {},
   makers: [
