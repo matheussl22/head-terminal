@@ -4,6 +4,8 @@ import {
   cpuPercentBetween,
   createResourceUsageReader,
   diskUsageFrom,
+  memoryFromMeminfo,
+  memoryFromVmStat,
   sampleCpuTimes,
   volumeLabel,
 } from "./resource-usage-service";
@@ -87,6 +89,15 @@ describe("resource-usage-service", () => {
     });
   });
 
+  it("accepts an async memory reader", async () => {
+    const read = createResourceUsageReader({
+      sampleCpu: () => ({ idle: 0, total: 0 }),
+      readMemory: async () => ({ free: 4_000, total: 16_000 }),
+      readDisk: NO_DISK,
+    });
+    await expect(read().then((usage) => usage.memory.percent)).resolves.toBe(75);
+  });
+
   it("never divides by a zero total", async () => {
     const read = createResourceUsageReader({
       sampleCpu: () => ({ idle: 0, total: 0 }),
@@ -97,6 +108,87 @@ describe("resource-usage-service", () => {
       usedBytes: 0,
       totalBytes: 0,
       percent: 0,
+    });
+  });
+
+  describe("macOS vm_stat", () => {
+    // 16 KiB pages; a 32 GiB machine sitting mostly in file cache.
+    const VM_STAT = `Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                     9436.
+Pages active:                                 774260.
+Pages inactive:                               915780.
+Pages speculative:                              1639.
+Pages throttled:                                   0.
+Pages wired down:                             184732.
+Pages purgeable:                               22877.
+"Translation faults":                       37287533.
+Pages copy-on-write:                         5732353.
+File-backed pages:                           1021174.
+Anonymous pages:                              670505.
+Pages stored in compressor:                   371034.
+Pages occupied by compressor:                 167682.
+Swapouts:                                          0.
+`;
+    const TOTAL = 34_359_738_368;
+
+    it("reports Activity Monitor's used figure, not the strictly free pool", () => {
+      // wired + (anonymous - purgeable) + compressor = 1_000_042 pages.
+      const used = 1_000_042 * 16_384;
+      expect(memoryFromVmStat(VM_STAT, TOTAL)).toEqual({
+        free: TOTAL - used,
+        total: TOTAL,
+      });
+      // Through freemem() this same machine would read 99.6% used.
+      expect((used / TOTAL) * 100).toBeCloseTo(47.7, 1);
+    });
+
+    it("never reports negative free memory", () => {
+      expect(memoryFromVmStat(VM_STAT, 1_000)).toEqual({ free: 0, total: 1_000 });
+    });
+
+    it("rejects output missing a counter it needs", () => {
+      const withoutAnonymous = VM_STAT.replace(/Anonymous pages:.*\n/u, "");
+      expect(memoryFromVmStat(withoutAnonymous, TOTAL)).toBeNull();
+      expect(memoryFromVmStat("", TOTAL)).toBeNull();
+    });
+  });
+
+  describe("Linux /proc/meminfo", () => {
+    it("prefers the kernel's MemAvailable estimate", () => {
+      const meminfo = `MemTotal:       16000000 kB
+MemFree:          500000 kB
+MemAvailable:   12000000 kB
+Buffers:          100000 kB
+Cached:          8000000 kB
+`;
+      expect(memoryFromMeminfo(meminfo, 16_000_000 * 1024)).toEqual({
+        free: 12_000_000 * 1024,
+        total: 16_000_000 * 1024,
+      });
+    });
+
+    it("approximates with free + buffers + cache on kernels without MemAvailable", () => {
+      const meminfo = `MemTotal:       16000000 kB
+MemFree:          500000 kB
+Buffers:          100000 kB
+Cached:          8000000 kB
+SReclaimable:     400000 kB
+`;
+      expect(memoryFromMeminfo(meminfo, 16_000_000 * 1024)).toEqual({
+        free: 9_000_000 * 1024,
+        total: 16_000_000 * 1024,
+      });
+    });
+
+    it("never reports more free than total", () => {
+      expect(
+        memoryFromMeminfo("MemTotal: 10 kB\nMemAvailable: 20 kB\n", 10 * 1024),
+      ).toEqual({ free: 10 * 1024, total: 10 * 1024 });
+    });
+
+    it("rejects output without a free counter", () => {
+      expect(memoryFromMeminfo("MemTotal: 10 kB\n", 10 * 1024)).toBeNull();
+      expect(memoryFromMeminfo("", 0)).toBeNull();
     });
   });
 

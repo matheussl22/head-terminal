@@ -1,5 +1,7 @@
-import { statfs } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { readFile, statfs } from "node:fs/promises";
 import { cpus, freemem, homedir, totalmem } from "node:os";
+import { promisify } from "node:util";
 
 import type { DiskUsage, ResourceUsage, UsageSample } from "../types/api";
 
@@ -110,17 +112,134 @@ async function statfsDisk(path: string): Promise<DiskUsage | null> {
   }
 }
 
+export interface MemorySample {
+  /** Bytes an application could take right now without evicting anything it would miss. */
+  free: number;
+  total: number;
+}
+
+/**
+ * Activity Monitor's "Memory Used" from `vm_stat`: wired + app memory
+ * (anonymous minus purgeable) + compressed. `os.freemem()` on macOS only
+ * counts the strictly free pool, which the kernel keeps near zero by design —
+ * file cache sits in "inactive" and is handed back on demand — so a healthy
+ * machine reads 99% used through it.
+ *
+ * null when the output lacks a counter this needs (an old macOS, a locale that
+ * renamed the labels), so the caller can fall back rather than mis-report.
+ */
+export function memoryFromVmStat(output: string, total: number): MemorySample | null {
+  const pageSizeMatch = /page size of (\d+) bytes/u.exec(output);
+  if (!pageSizeMatch) {
+    return null;
+  }
+  const pageSize = Number(pageSizeMatch[1]);
+
+  const pages = new Map<string, number>();
+  for (const line of output.split("\n")) {
+    const match = /^"?([^":]+)"?:\s+(\d+)\.?$/u.exec(line.trim());
+    if (match) {
+      pages.set(match[1], Number(match[2]));
+    }
+  }
+
+  const wired = pages.get("Pages wired down");
+  const anonymous = pages.get("Anonymous pages");
+  const purgeable = pages.get("Pages purgeable");
+  const compressed = pages.get("Pages occupied by compressor");
+  if (
+    wired === undefined ||
+    anonymous === undefined ||
+    purgeable === undefined ||
+    compressed === undefined
+  ) {
+    return null;
+  }
+
+  const used = (wired + Math.max(0, anonymous - purgeable) + compressed) * pageSize;
+  return { free: Math.max(0, total - used), total };
+}
+
+/**
+ * Linux `/proc/meminfo`. `MemAvailable` (kernel 3.14+) is the kernel's own
+ * estimate of what can be claimed without swapping; older kernels get the
+ * classic free + buffers + cache approximation. Older libuv builds backed
+ * `os.freemem()` with `MemFree`, which has the same cache blindness as macOS.
+ */
+export function memoryFromMeminfo(contents: string, total: number): MemorySample | null {
+  const fields = new Map<string, number>();
+  for (const line of contents.split("\n")) {
+    const match = /^(\w+):\s+(\d+)\s*kB$/u.exec(line.trim());
+    if (match) {
+      fields.set(match[1], Number(match[2]) * 1024);
+    }
+  }
+
+  const available = fields.get("MemAvailable");
+  if (available !== undefined) {
+    return { free: Math.min(total, available), total };
+  }
+
+  const free = fields.get("MemFree");
+  if (free === undefined) {
+    return null;
+  }
+  const buffers = fields.get("Buffers") ?? 0;
+  const cached = fields.get("Cached") ?? 0;
+  const reclaimable = fields.get("SReclaimable") ?? 0;
+  return { free: Math.min(total, free + buffers + cached + reclaimable), total };
+}
+
+const execFileAsync = promisify(execFile);
+
+/**
+ * Memory the way the platform's own monitor reports it. Windows' `freemem()`
+ * already comes from `GlobalMemoryStatusEx`, which counts standby cache as
+ * available, so it needs no help. Any failure — missing binary, timeout,
+ * unparseable output — degrades to `freemem()` rather than to no reading.
+ */
+export function createMemoryReader(
+  platform: NodeJS.Platform = process.platform,
+): () => Promise<MemorySample> {
+  const fallback = (): MemorySample => ({ free: freemem(), total: totalmem() });
+
+  if (platform === "darwin") {
+    return async () => {
+      try {
+        const { stdout } = await execFileAsync("vm_stat", [], { timeout: 1_000 });
+        return memoryFromVmStat(stdout, totalmem()) ?? fallback();
+      } catch {
+        return fallback();
+      }
+    };
+  }
+
+  if (platform === "linux") {
+    return async () => {
+      try {
+        const contents = await readFile("/proc/meminfo", "utf8");
+        return memoryFromMeminfo(contents, totalmem()) ?? fallback();
+      } catch {
+        return fallback();
+      }
+    };
+  }
+
+  return async () => fallback();
+}
+
 export interface ResourceUsageDeps {
   sampleCpu?: () => CpuTimesSample;
-  readMemory?: () => { free: number; total: number };
+  readMemory?: () => MemorySample | Promise<MemorySample>;
   readDisk?: () => Promise<DiskUsage | null>;
   now?: () => number;
 }
 
 /**
  * Reader over the whole machine — not this process: the sidebar meter answers
- * "how loaded is my computer", so it uses the host counters `node:os` and
- * `statfs` expose on every platform instead of Electron's process metrics.
+ * "how loaded is my computer", so it uses host counters — `node:os`,
+ * `statfs`, and each platform's own memory accounting — instead of Electron's
+ * process metrics.
  *
  * CPU only exists as a delta, so each call reports the window since the
  * previous one. The first call has no window and falls back to the since-boot
@@ -128,7 +247,7 @@ export interface ResourceUsageDeps {
  */
 export function createResourceUsageReader({
   sampleCpu = () => sampleCpuTimes(),
-  readMemory = () => ({ free: freemem(), total: totalmem() }),
+  readMemory = createMemoryReader(),
   // The home volume: where the agent sessions, repos and caches actually land.
   readDisk = () => statfsDisk(homedir()),
   now = Date.now,
@@ -143,7 +262,7 @@ export function createResourceUsageReader({
     const cpuPercent = cpuPercentBetween(previous, current);
     previous = current;
 
-    const { free, total } = readMemory();
+    const { free, total } = await readMemory();
 
     if (!disk || now() - disk.at >= DISK_TTL_MS) {
       disk = { at: now(), value: await readDisk() };
