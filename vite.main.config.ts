@@ -1,4 +1,4 @@
-import { cp, mkdir, rm } from "node:fs/promises";
+import { chmod, cp, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { defineConfig } from "vite";
@@ -49,6 +49,17 @@ export default defineConfig({
             path.join(destination, "prebuilds", `${process.platform}-${process.arch}`),
           ),
         ]);
+        // The npm tarball ships `spawn-helper` without the executable bit, so
+        // the copy inherits 0644 and `posix_spawnp` fails with EACCES inside
+        // the packaged app. Restore it here; Windows has no such file.
+        if (process.platform !== "win32") {
+          await chmod(
+            path.join(destination, "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper"),
+            0o755,
+          ).catch((error: NodeJS.ErrnoException) => {
+            if (error.code !== "ENOENT") throw error;
+          });
+        }
       },
     },
   ],

@@ -27,8 +27,12 @@ const config: ForgeConfig = {
     // `spawn-helper`, que fica ao lado do `.node`. O AutoUnpackNativesPlugin
     // só tira do ASAR o que termina em `.node`; um executável dentro do
     // arquivo não pode ser `exec`ado, e o pane morre com "posix_spawn failed".
+    // O módulo é copiado para dentro de `.vite/`, um diretório oculto, e `**`
+    // não atravessa nomes que começam com ponto: `**/spawn-helper` sozinho
+    // não casa nada e o binário fica preso no ASAR. A forma `{.**,**}` é a
+    // mesma que o AutoUnpackNativesPlugin usa para o `.node`.
     // No Windows não existe o arquivo, e o glob não muda nada lá.
-    asar: process.platform === "win32" ? true : { unpack: "**/spawn-helper" },
+    asar: process.platform === "win32" ? true : { unpack: "**/{.**,**}/**/spawn-helper" },
     appBundleId: "com.matheus.head-terminal",
     appCategoryType: "public.app-category.developer-tools",
     appCopyright: "Copyright © 2026 Matheus",
