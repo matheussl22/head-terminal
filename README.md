@@ -1,6 +1,16 @@
 # Head Terminal
 
-Desktop terminal for working with several AI coding agents in parallel. The application uses Electron with a React UI, one independent native PTY per pane and a narrow API between the renderer and the operating system.
+<p align="center">
+  <img src="docs/media/head-terminal-demo.gif" width="880" alt="Head Terminal demo: sessions on different Claude accounts, a new session on its own git worktree, three agents in split panes, and minimized panes whose cards light up when an agent needs approval or is done">
+</p>
+
+**Run several AI coding agents side by side, in one window.** Claude Code, Codex, Cursor Agent, Antigravity or a plain shell: each one gets its own terminal, and you can see at a glance what every agent is doing.
+
+- **Many agents at once.** Split the screen as many times as you like; every pane runs its own agent.
+- **Work and personal accounts.** Each session can use a different Claude account, and none of them touches the one you use outside the app.
+- **Minimize without stopping.** Tuck an agent away and it keeps working; its card lights up when it needs your approval or when it is done.
+- **No stepping on each other's toes.** A second session on the same repository can work in its own copy (a git worktree), so agents never overwrite each other.
+- **Windows, macOS and Linux.**
 
 ## Features
 
@@ -21,6 +31,8 @@ Desktop terminal for working with several AI coding agents in parallel. The appl
 - single instance and confirmation before closing working agents.
 
 ## Architecture
+
+The application uses Electron with a React UI, one independent native PTY per pane and a narrow API between the renderer and the operating system.
 
 ```text
 React 19 + xterm.js + Zustand
