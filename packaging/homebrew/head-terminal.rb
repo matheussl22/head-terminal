@@ -1,8 +1,8 @@
 # Cask do Homebrew para o Head Terminal.
 #
 # Este arquivo e um modelo. O workflow .github/workflows/release.yml troca os
-# marcadores __VERSION__, __SHA256_ARM64__, __SHA256_X64__ e __REPO__ pelos
-# valores da release e envia o resultado para Casks/head-terminal.rb no
+# marcadores de versao, sha256 (arm64 e x64) e repositorio pelos valores da
+# release e envia o resultado para Casks/head-terminal.rb no
 # repositorio do tap (<dono deste repo>/homebrew-tap, ou o que estiver na
 # variavel HOMEBREW_TAP_REPO). A instalacao fica:
 #
@@ -30,8 +30,9 @@ cask "head-terminal" do
   # bundle que o Homebrew acabou de colocar em quarentena. Isto so e aceitavel
   # em tap proprio; o homebrew-cask oficial recusa. Remova quando houver
   # Developer ID e notarizacao.
-  postflight_steps do
-    run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{appdir}}/Head Terminal.app"]
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-dr", "com.apple.quarantine", "#{appdir}/Head Terminal.app"]
   end
 
   zap trash: [
