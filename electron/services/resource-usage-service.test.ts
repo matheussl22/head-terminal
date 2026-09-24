@@ -1,9 +1,12 @@
+import { freemem, totalmem } from "node:os";
+
 import { describe, expect, it } from "vitest";
 
 import {
   cpuPercentBetween,
   createResourceUsageReader,
   diskUsageFrom,
+  createMemoryReader,
   memoryFromMeminfo,
   memoryFromVmStat,
   sampleCpuTimes,
@@ -249,5 +252,31 @@ SReclaimable:     400000 kB
     clock = 2_000;
     expect((await read()).disk).toEqual(disk);
     expect(reads).toBe(1);
+  });
+});
+
+describe("createMemoryReader", () => {
+  it("uses Node's own accounting on Windows, where freemem() is already right", async () => {
+    const sample = await createMemoryReader("win32")();
+    expect(sample.total).toBe(totalmem());
+    expect(sample.free).toBeGreaterThan(0);
+    expect(sample.free).toBeLessThanOrEqual(sample.total);
+  });
+
+  it("falls back to freemem() when the platform reader cannot run", async () => {
+    // /proc/meminfo does not exist off Linux, and vm_stat does not exist off
+    // macOS; either way the reader must still answer instead of throwing.
+    const foreign: NodeJS.Platform = process.platform === "linux" ? "darwin" : "linux";
+    const sample = await createMemoryReader(foreign)();
+    expect(sample.total).toBe(totalmem());
+    expect(Math.abs(sample.free - freemem())).toBeLessThan(2 * 1024 * 1024 * 1024);
+  });
+
+  it("reads the host's own monitor on macOS and Linux", async () => {
+    if (process.platform !== "darwin" && process.platform !== "linux") return;
+    const sample = await createMemoryReader()();
+    expect(sample.total).toBe(totalmem());
+    expect(sample.free).toBeGreaterThan(0);
+    expect(sample.free).toBeLessThanOrEqual(sample.total);
   });
 });
