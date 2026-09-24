@@ -1,90 +1,19 @@
-import type { ITerminalOptions, ITheme } from "@xterm/xterm";
+import type { ITerminalOptions } from "@xterm/xterm";
 
+import { getActiveTerminalTheme } from "../core/theme-manager";
 import { loadFontSize } from "../core/ui-preferences";
 import { getCachedPlatformInfo, isMacHost } from "../core/platform-info";
 
-// Graphite terminal: near-black ground, soft white text, amber cursor. ANSI
-// colors are tuned to read on #0b0c0e without going neon — the chrome around
-// the terminal is deliberately quiet, so the terminal's own colors carry the
-// information.
+// Fonte e métricas são iguais em todos os temas; as cores vêm do tema ativo
+// (src/config/themes.ts) e podem trocar em tempo de execução.
 export const HYPER_THEME = {
   fontFamily:
     'Menlo, "Cascadia Mono", "DejaVu Sans Mono", Consolas, "Lucida Console", monospace',
   fontSize: 12,
   lineHeight: 1,
   letterSpacing: 0,
-  foreground: "#e6e7ea",
-  background: "#0b0c0e",
-  cursor: "rgba(240, 168, 50, 0.9)",
-  cursorAccent: "#0b0c0e",
-  selection: "rgba(240, 168, 50, 0.28)",
-  accent: "#f0a832",
-  accentMuted: "rgba(240, 168, 50, 0.45)",
-  enabled: "#3fb950",
-  enabledMuted: "rgba(63, 185, 80, 0.2)",
   terminalPadding: "10px 12px",
-  colors: {
-    black: "#1b1e23",
-    red: "#ff6b6b",
-    green: "#56d364",
-    yellow: "#e3b341",
-    blue: "#58a6ff",
-    magenta: "#d98cd6",
-    cyan: "#56d4dd",
-    white: "#d6d9de",
-    lightBlack: "#7d838c",
-    lightRed: "#ff8e8a",
-    lightGreen: "#7ee787",
-    lightYellow: "#f2cc60",
-    lightBlue: "#79c0ff",
-    lightMagenta: "#e8a9e5",
-    lightCyan: "#8ae6ee",
-    lightWhite: "#ffffff",
-    limeGreen: "#56d364",
-    lightCoral: "#ff8e8a",
-  },
 } as const;
-
-export const HEAD_THEME = {
-  background: HYPER_THEME.background,
-  foreground: HYPER_THEME.foreground,
-  cursor: HYPER_THEME.cursor,
-  header: "#15171b",
-  border: "#2a2d33",
-  buttonBg: "#1b1e23",
-  buttonBorder: "#2a2d33",
-  buttonHover: "#22262c",
-  fontFamily: HYPER_THEME.fontFamily,
-  fontSize: HYPER_THEME.fontSize,
-} as const;
-
-function createXtermTheme(): ITheme {
-  const { colors } = HYPER_THEME;
-
-  return {
-    background: HYPER_THEME.background,
-    foreground: HYPER_THEME.foreground,
-    cursor: HYPER_THEME.cursor,
-    cursorAccent: HYPER_THEME.cursorAccent,
-    selectionBackground: HYPER_THEME.selection,
-    black: colors.black,
-    red: colors.red,
-    green: colors.green,
-    yellow: colors.yellow,
-    blue: colors.blue,
-    magenta: colors.magenta,
-    cyan: colors.cyan,
-    white: colors.white,
-    brightBlack: colors.lightBlack,
-    brightRed: colors.lightRed,
-    brightGreen: colors.lightGreen,
-    brightYellow: colors.lightYellow,
-    brightBlue: colors.lightBlue,
-    brightMagenta: colors.lightMagenta,
-    brightCyan: colors.lightCyan,
-    brightWhite: colors.lightWhite,
-  };
-}
 
 /**
  * Every Windows pane runs on ConPTY (node-pty). Without this, ConPTY's own
@@ -130,7 +59,7 @@ export function createTerminalOptions(): ITerminalOptions {
     drawBoldTextInBrightColors: true,
     // Lift near-black ANSI colors so they never vanish on #000.
     minimumContrastRatio: 4.5,
-    theme: createXtermTheme(),
+    theme: getActiveTerminalTheme(),
     windowsPty: resolveWindowsPty(),
     // On a Mac keyboard Option is the only Meta there is: without this,
     // ⌥B / ⌥F / ⌥Enter type accented characters into the shell instead of

@@ -1,4 +1,8 @@
 :root {
+  /* Valores do tema Grafite, o padrão. Cada tema em src/config/themes.ts
+     sobrescreve estes tokens de cor inline em <html>; o que fica só aqui
+     (espaçamento, raios, status) vale para todos os temas. */
+
   /* Graphite surfaces. The terminal is the darkest layer; chrome (toolbar,
      sidebar, pane headers) sits one step lighter so panes read as windows
      cut into the app, not as cards floating over a void. */
@@ -17,6 +21,7 @@
   --surface-elevated: var(--bg-3);
   --surface-input: #0e1013;
   --surface-overlay: rgba(11, 12, 14, 0.82);
+  --surface-hover: rgba(255, 255, 255, 0.03);
 
   /* Borders — flat hairlines, no glow */
   --border-subtle: #23262c;

@@ -329,7 +329,7 @@
   background:
     radial-gradient(
       ellipse 55% 45% at 50% 50%,
-      rgba(240, 168, 50, 0.04),
+      var(--accent-subtle),
       transparent 70%
     ),
     var(--surface-terminal);

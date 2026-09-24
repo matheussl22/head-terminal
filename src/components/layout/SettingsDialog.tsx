@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 
 
 import { buildAgentProfiles } from "../../config/agents";
+import {
+  getTheme,
+  resolveThemeId,
+  THEMES,
+  type AppTheme,
+  type ThemePreference,
+} from "../../config/themes";
 import { resolveDefaultCwd } from "../../core/agent-launcher";
 import {
   createClaudeAccountProfile,
@@ -18,10 +25,12 @@ import {
   hasOpenAiApiKey,
 } from "../../core/openai-credentials";
 import { useSessionStore } from "../../core/session-manager";
+import { setThemePreference } from "../../core/theme-manager";
 import {
   loadCopyOnSelect,
   loadFontSize,
   loadRendererPreference,
+  loadThemePreference,
   saveCopyOnSelect,
   saveFontSize,
   saveRendererPreference,
@@ -60,11 +69,70 @@ function statusClass(status: string): string {
 
 const AGENTS_WITH_MCP_SUPPORT = new Set(["claude", "cursor"]);
 
+function systemPrefersDark(): boolean {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+interface ThemeCardProps {
+  theme: AppTheme;
+  label: string;
+  hint?: string;
+  active: boolean;
+  onSelect: () => void;
+}
+
+function ThemeCard({ theme, label, hint, active, onSelect }: ThemeCardProps) {
+  const { terminal } = theme;
+  return (
+    <button
+      type="button"
+      className={
+        active
+          ? "settings-theme-card settings-theme-card--active"
+          : "settings-theme-card"
+      }
+      aria-pressed={active}
+      onClick={onSelect}
+    >
+      <span
+        className="settings-theme-card__preview"
+        style={{ background: terminal.background, color: terminal.foreground }}
+      >
+        <span>
+          <span style={{ color: terminal.green }}>$</span> head-terminal
+        </span>
+        <span className="settings-theme-card__swatches" aria-hidden="true">
+          {[
+            terminal.red,
+            terminal.yellow,
+            terminal.green,
+            terminal.cyan,
+            terminal.blue,
+            terminal.magenta,
+          ].map((color, index) => (
+            <span
+              key={index}
+              className="settings-theme-card__swatch"
+              style={{ background: color }}
+            />
+          ))}
+        </span>
+      </span>
+      <span className="settings-theme-card__label">
+        <span>{label}</span>
+        {hint && <small>{hint}</small>}
+      </span>
+    </button>
+  );
+}
+
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const sessions = useSessionStore((state) => state.sessions);
   const [activeSection, setActiveSection] =
     useState<SettingsSection>("profiles");
   const [fontSize, setFontSize] = useState(12);
+  const [themePreference, setThemePreferenceState] =
+    useState<ThemePreference>("graphite");
   const [renderer, setRenderer] = useState<TerminalRenderer>("auto");
   const [copyOnSelect, setCopyOnSelect] = useState(false);
   const [claudeAccounts, setClaudeAccounts] = useState<ClaudeAccountProfile[]>([]);
@@ -95,6 +163,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     if (!open) return;
 
     setFontSize(loadFontSize());
+    setThemePreferenceState(loadThemePreference());
     setRenderer(loadRendererPreference());
     setCopyOnSelect(loadCopyOnSelect());
     setNewClaudeAccountName("");
@@ -336,6 +405,41 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                   <p>Aparência e comportamento de todos os novos terminais.</p>
                 </div>
                 <div className="settings-card settings-card--rows">
+                  <div className="settings-row">
+                    <span>
+                      <strong>Tema</strong>
+                      <small>Vale para o app inteiro e para todos os terminais, na hora</small>
+                    </span>
+                  </div>
+                  <div
+                    className="settings-theme-grid"
+                    role="radiogroup"
+                    aria-label="Tema"
+                  >
+                    <ThemeCard
+                      theme={getTheme(resolveThemeId("system", systemPrefersDark()))}
+                      label="Automático"
+                      hint="segue o sistema"
+                      active={themePreference === "system"}
+                      onSelect={() => {
+                        setThemePreferenceState("system");
+                        setThemePreference("system");
+                      }}
+                    />
+                    {THEMES.map((theme) => (
+                      <ThemeCard
+                        key={theme.id}
+                        theme={theme}
+                        label={theme.name}
+                        hint={theme.kind === "light" ? "claro" : "escuro"}
+                        active={themePreference === theme.id}
+                        onSelect={() => {
+                          setThemePreferenceState(theme.id);
+                          setThemePreference(theme.id);
+                        }}
+                      />
+                    ))}
+                  </div>
                   <label className="settings-row">
                     <span>
                       <strong>Tamanho da fonte</strong>

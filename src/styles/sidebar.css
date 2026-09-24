@@ -303,7 +303,7 @@
 }
 
 .session-sidebar__item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-hover);
 }
 
 /* Selection is the left rail and only the left rail: nothing else in the

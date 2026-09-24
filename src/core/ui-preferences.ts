@@ -1,8 +1,11 @@
+import { isThemePreference, type ThemePreference } from "../config/themes";
+
 const SIDEBAR_COLLAPSED_KEY = "head-terminal.sidebar.collapsed";
 const RUN_EVERYTHING_KEY = "head-terminal.run-everything";
 const PANE_HEADERS_KEY = "head-terminal.pane-headers.enabled";
 const OPENAI_API_KEY_KEY = "head-terminal.openai-api-key";
 const FONT_SIZE_KEY = "head-terminal.font-size";
+const THEME_KEY = "head-terminal.theme";
 const RENDERER_KEY = "head-terminal.renderer";
 const COPY_ON_SELECT_KEY = "head-terminal.copy-on-select";
 const RECENT_CWDS_KEY = "head-terminal.recent-cwds";
@@ -20,6 +23,7 @@ const MIGRATABLE_KEYS = new Set([
   RUN_EVERYTHING_KEY,
   PANE_HEADERS_KEY,
   FONT_SIZE_KEY,
+  THEME_KEY,
   RENDERER_KEY,
   COPY_ON_SELECT_KEY,
   RECENT_CWDS_KEY,
@@ -124,6 +128,15 @@ export function loadFontSize(): number {
 export function saveFontSize(size: number): void {
   fontSizeCache = Math.min(FONT_MAX, Math.max(FONT_MIN, size));
   storageSet(FONT_SIZE_KEY, String(fontSizeCache));
+}
+
+export function loadThemePreference(): ThemePreference {
+  const raw = storageGet(THEME_KEY);
+  return isThemePreference(raw) ? raw : "graphite";
+}
+
+export function saveThemePreference(preference: ThemePreference): void {
+  storageSet(THEME_KEY, preference);
 }
 
 export function loadRendererPreference(): TerminalRenderer {
