@@ -1,77 +1,228 @@
+# Gera os zips do macOS, publica a release e atualiza o cask do Homebrew.
+#
+# Roda a cada push na main e tambem a mao (Actions > release > Run workflow).
+# E idempotente: le a versao do package.json e so constroi o que ainda nao
+# esta anexado a release v<versao>. Com os dois zips no lugar, so confere o
+# cask no tap e termina. Para lancar uma versao: suba a versao no
+# package.json e mergeie na main. Veja docs/RELEASING.md.
+#
+# Settings > Secrets and variables > Actions:
+#   HOMEBREW_TAP_TOKEN  secret: PAT com Contents read/write no repo do tap.
+#                       Sem ele a release sai normalmente e o cask nao e
+#                       atualizado (o run avisa).
+#   HOMEBREW_TAP_REPO   variable, opcional: repo do tap. Padrao
+#                       <dono deste repo>/homebrew-tap.
 name: release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  macos:
+  check:
+    name: What is missing
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      matrix: ${{ steps.check.outputs.matrix }}
+      needed: ${{ steps.check.outputs.needed }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag="v$version"
+
+          # "release not found" e o caso normal antes do primeiro build; outro
+          # erro (rede, API) nao pode virar um rebuild que sobrescreve assets.
+          if out="$(gh release view "$tag" --json assets --jq '.assets[].name' 2>&1)"; then
+            assets="$out"
+          elif grep -q "release not found" <<<"$out"; then
+            assets=""
+          else
+            echo "$out" >&2
+            exit 1
+          fi
+
+          matrix='[]'
+          for arch in arm64 x64; do
+            zip="head-terminal-darwin-$arch-$version.zip"
+            if grep -qx "$zip" <<<"$assets"; then
+              echo "$zip: already attached to $tag"
+              continue
+            fi
+            echo "$zip: missing, will build"
+            case "$arch" in
+              arm64) runner=macos-15 ;;
+              x64) runner=macos-15-intel ;;
+            esac
+            matrix="$(jq -c --arg r "$runner" --arg a "$arch" '. + [{runner: $r, arch: $a}]' <<<"$matrix")"
+          done
+
+          needed=true
+          [ "$matrix" != '[]' ] || needed=false
+          {
+            echo "version=$version"
+            echo "matrix=$matrix"
+            echo "needed=$needed"
+          } >>"$GITHUB_OUTPUT"
+          echo "$tag: build needed = $needed, matrix = $matrix" >>"$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: check
+    if: needs.check.outputs.needed == 'true'
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
+        include: ${{ fromJSON(needs.check.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
 
       - run: npm ci
 
-      # A tag manda no nome do artefato, entao ela tem que bater com o
-      # package.json, senao o zip anuncia uma versao que o app nao tem.
-      - name: Check tag against package.json
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME#v}"
-          pkg="$(node -p "require('./package.json').version")"
-          [ "$tag" = "$pkg" ] || {
-            echo "tag $tag != package.json $pkg" >&2
-            exit 1
-          }
-
-
       - run: npm run make
 
       # O ZIP do MakerZIP sai com espaco no nome ("Head Terminal-darwin-...").
-      # Renomeia para um asset estavel, sem espaco, que o cask do Homebrew
-      # consegue referenciar sem URL-encoding.
+      # Renomeia para um asset estavel, sem espaco, que o cask consegue
+      # referenciar sem URL-encoding.
       - name: Rename artifact and checksum
-        id: asset
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
           dir="out/make/zip/darwin/${{ matrix.arch }}"
-          name="head-terminal-darwin-${{ matrix.arch }}-${version}.zip"
+          name="head-terminal-darwin-${{ matrix.arch }}-$VERSION.zip"
           built="$(ls "$dir"/*.zip)"
           [ "$built" = "$dir/$name" ] || mv "$built" "$dir/$name"
           # O .sha256 guarda so o basename para que `shasum -c` funcione ao lado do zip.
-          (cd "$dir" && shasum -a 256 "$name" > "$name.sha256" && cat "$name.sha256")
-          echo "path=$dir/$name" >> "$GITHUB_OUTPUT"
-          echo "sha256=$(cut -d' ' -f1 "$dir/$name.sha256")" >> "$GITHUB_OUTPUT"
+          (cd "$dir" && shasum -a 256 "$name" >"$name.sha256" && cat "$name.sha256")
 
-      # As duas jobs da matriz correm juntas: a primeira cria a release, a
-      # segunda recebe 422 e segue para o upload.
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: head-terminal-darwin-${{ matrix.arch }}
+          path: out/make/zip/darwin/${{ matrix.arch }}/head-terminal-darwin-${{ matrix.arch }}-${{ env.VERSION }}.zip*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Release and tap
+    needs: [check, build]
+    # Roda mesmo sem build (so confere o cask) e mesmo se uma arquitetura
+    # falhou: o zip que deu certo sobe agora e o proximo run so refaz o que
+    # ainda falta.
+    if: always() && needs.check.result == 'success' && needs.build.result != 'cancelled'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.check.outputs.version }}
+      TAG: v${{ needs.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        if: needs.build.result != 'skipped'
+        with:
+          pattern: head-terminal-darwin-*
+          path: dist
+          merge-multiple: true
+
+      - name: Upload to the release
+        if: needs.build.result != 'skipped'
         run: |
           set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes || true
-          gh release upload "$GITHUB_REF_NAME" \
-            "${{ steps.asset.outputs.path }}" \
-            "${{ steps.asset.outputs.path }}.sha256" --clobber
+          if ! ls dist/*.zip >/dev/null 2>&1; then
+            echo "::error::No zip was built in this run."
+            exit 1
+          fi
+          (cd dist && sha256sum -c ./*.sha256)
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" dist/* --clobber
 
-      - name: Cask sha256
-        run: echo "${{ matrix.arch }} -> ${{ steps.asset.outputs.sha256 }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Render the cask
+        id: cask
+        run: |
+          set -euo pipefail
+          echo "complete=false" >>"$GITHUB_OUTPUT"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::warning::There is no release $TAG yet, so the cask was not rendered."
+            exit 0
+          fi
+          mkdir -p shas
+          gh release download "$TAG" --pattern '*.sha256' --dir shas --clobber
+          for arch in arm64 x64; do
+            if [ ! -f "shas/head-terminal-darwin-$arch-$VERSION.zip.sha256" ]; then
+              echo "::warning::$TAG is still missing the $arch zip, so the cask was not updated."
+              exit 0
+            fi
+          done
+          sha_arm64="$(cut -d' ' -f1 "shas/head-terminal-darwin-arm64-$VERSION.zip.sha256")"
+          sha_x64="$(cut -d' ' -f1 "shas/head-terminal-darwin-x64-$VERSION.zip.sha256")"
+          sed -e "s|__VERSION__|$VERSION|g" \
+              -e "s|__SHA256_ARM64__|$sha_arm64|g" \
+              -e "s|__SHA256_X64__|$sha_x64|g" \
+              -e "s|__REPO__|$GITHUB_REPOSITORY|g" \
+              packaging/homebrew/head-terminal.rb >head-terminal.rb
+          ruby -c head-terminal.rb
+          echo "complete=true" >>"$GITHUB_OUTPUT"
+          {
+            echo "## $TAG"
+            echo
+            echo '```sh'
+            echo "brew install --cask $GITHUB_REPOSITORY_OWNER/tap/head-terminal"
+            echo '```'
+            echo
+            echo "| arch | sha256 |"
+            echo "|---|---|"
+            echo "| arm64 | $sha_arm64 |"
+            echo "| x64 | $sha_x64 |"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Push the cask to the tap
+        if: steps.cask.outputs.complete == 'true'
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO }}
+        run: |
+          set -euo pipefail
+          tap_repo="${HOMEBREW_TAP_REPO:-$GITHUB_REPOSITORY_OWNER/homebrew-tap}"
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
+            echo "::warning::Secret HOMEBREW_TAP_TOKEN is not set, so $tap_repo was not updated. See docs/RELEASING.md."
+            exit 0
+          fi
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/$tap_repo.git" tap
+          cd tap
+          branch="$(git remote show origin | sed -n 's/.*HEAD branch: //p')"
+          case "$branch" in ""|"(unknown)") branch=main ;; esac
+          mkdir -p Casks
+          cp ../head-terminal.rb Casks/head-terminal.rb
+          git add Casks/head-terminal.rb
+          if git diff --cached --quiet; then
+            echo "$tap_repo already has the cask for $VERSION."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "head-terminal $VERSION"
+          git push origin "HEAD:$branch"
+          echo "Updated $tap_repo ($branch): Casks/head-terminal.rb -> $VERSION"

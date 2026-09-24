@@ -21,7 +21,7 @@
 macOS (Apple Silicon or Intel), via Homebrew:
 
 ```sh
-brew install --cask cristianobombazar/tap/head-terminal
+brew install --cask matheussl22/tap/head-terminal
 ```
 
 Or grab the `.zip` for your architecture from the [latest release](https://github.com/matheussl22/head-terminal/releases/latest) and drag `Head Terminal.app` into Applications. The app is not signed or notarized yet: the cask clears the quarantine flag for you, while a manual download needs `xattr -dr com.apple.quarantine "/Applications/Head Terminal.app"` before the first launch.
