@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Instala o pacote local em /Applications e reabre o app se ele estava aberto.
+# Instala o pacote local em /Applications e abre o app.
 # Uso: npm run install:mac            (empacota e instala)
 #      npm run install:mac:existing   (só instala o que já está em out/)
 set -euo pipefail
@@ -39,7 +39,5 @@ xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
 
 echo "Instalado em $TARGET ($(defaults read "$TARGET/Contents/Info.plist" CFBundleShortVersionString))"
 
-if [[ "$was_running" == "1" ]]; then
-  open "$TARGET"
-  echo "Reaberto."
-fi
+open "$TARGET"
+echo "Aberto."
