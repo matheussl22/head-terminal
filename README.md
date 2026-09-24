@@ -1,18 +1,22 @@
 # Head Terminal
 
 <p align="center">
-  <img src="docs/media/head-terminal-demo.gif" width="880" alt="Head Terminal demo: sessions on different Claude accounts, a new session on its own git worktree, three agents in split panes, and minimized panes whose cards light up when an agent needs approval or is done">
+  <strong>All your AI coding agents, side by side.</strong><br>
+  Claude Code, Codex, Cursor Agent and more, working at the same time in one window.
 </p>
 
-**Run several AI coding agents side by side, in one window.** Claude Code, Codex, Cursor Agent, Antigravity or a plain shell: each one gets its own terminal, and you can see at a glance what every agent is doing.
+<p align="center">
+  <img src="docs/media/head-terminal-demo.gif" width="880" alt="Head Terminal demo: sessions on different Claude accounts, three agents in split panes, and minimized agents whose cards light up when they need you or finish">
+</p>
 
-- **Many agents at once.** Split the screen as many times as you like; every pane runs its own agent.
-- **Work and personal accounts.** Each session can use a different Claude account, and none of them touches the one you use outside the app.
-- **Minimize without stopping.** Tuck an agent away and it keeps working; its card lights up when it needs your approval or when it is done.
-- **No stepping on each other's toes.** A second session on the same repository can work in its own copy (a git worktree), so agents never overwrite each other.
-- **Windows, macOS and Linux.**
+- 🚀 **A whole team of agents.** Split the screen and give every pane its own agent.
+- 👥 **Work and personal accounts.** Each session signs in to its own Claude account.
+- 💤 **Minimize, don't stop.** Agents keep working in the background and let you know when they need you or finish.
+- 🌳 **No collisions.** A second session on the same repo gets its own copy to work in.
 
-## Features
+<p align="center">Windows · macOS · Linux · Free for non-commercial use</p>
+
+## Feature details
 
 - persisted sessions, pinning, renaming, reordering and quick switching;
 - resizable horizontal and vertical splits, each with its own PTY;
@@ -340,3 +344,7 @@ npm run e2e -- stop
 ```
 
 Local launcher failures land in `~/.local/share/head-terminal/logs/`.
+
+## License
+
+Head Terminal is free for personal and other non-commercial use under the [PolyForm Noncommercial License 1.0.0](LICENSE.md). Commercial use is not allowed without the author's permission.

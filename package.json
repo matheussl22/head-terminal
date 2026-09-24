@@ -3,7 +3,7 @@
   "productName": "Head Terminal",
   "description": "Terminal desktop para AI coding agents",
   "author": "Matheus",
-  "license": "UNLICENSED",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
   "version": "0.1.1",
   "type": "commonjs",
