@@ -160,8 +160,6 @@ const SessionListItem = memo(function SessionListItem({
 }: SessionListItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(session.title);
-  // Fechar sessão exige dois cliques: um clique perdido não pode matar uma sessão.
-  const [confirmRemove, setConfirmRemove] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const paneIds = collectPaneIds(session.layout);
   const activity = useSessionStore((state) =>
@@ -256,7 +254,6 @@ const SessionListItem = memo(function SessionListItem({
           ""
         }
         onContextMenu={(event) => onContextMenu(event, session)}
-        onMouseLeave={() => setConfirmRemove(false)}
       >
         <div
           role="button"
@@ -382,22 +379,12 @@ const SessionListItem = memo(function SessionListItem({
             </button>
             <button
               type="button"
-              className={
-                confirmRemove
-                  ? "session-sidebar__action session-sidebar__action--remove session-sidebar__action--confirm"
-                  : "session-sidebar__action session-sidebar__action--remove"
-              }
-              title={
-                confirmRemove ? "Clique de novo para fechar" : "Fechar sessão"
-              }
+              className="session-sidebar__action session-sidebar__action--remove"
+              title="Fechar sessão"
               aria-label={`Fechar ${session.title}`}
               onClick={(event) => {
+                // Um clique só: a confirmação fica no diálogo que o fechamento abre.
                 event.stopPropagation();
-                if (!confirmRemove) {
-                  setConfirmRemove(true);
-                  window.setTimeout(() => setConfirmRemove(false), 3000);
-                  return;
-                }
                 onRemove();
               }}
             >

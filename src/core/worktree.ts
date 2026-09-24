@@ -1,3 +1,5 @@
+import { getSessionActivity } from "./activity-utils";
+import { confirmInApp } from "./confirm-dialog";
 import { logError, logEvent } from "./logger";
 import {
   collectPaneIds,
@@ -310,7 +312,27 @@ export async function closePaneWithWorktreeReview(
   await removeWorktrees(decision.remove);
 }
 
-/** Fecha a sessão depois de decidir o que fazer com as árvores criadas nela. */
+/** Pergunta antes de fechar: um clique perdido não pode matar uma sessão, e
+ * quem tem agent rodando precisa saber que o processo vai junto. */
+async function confirmSessionClose(session: AgentSession): Promise<boolean> {
+  const { paneRuntime } = useSessionStore.getState();
+  const working = getSessionActivity(session, paneRuntime) === "working";
+  return confirmInApp({
+    title: `Fechar “${session.title}”?`,
+    message: working
+      ? "Um agent ainda está executando nesta sessão."
+      : "Os terminais desta sessão serão encerrados.",
+    detail: working
+      ? "Fechar encerra o processo e o que ele estava fazendo."
+      : undefined,
+    confirmLabel: "Fechar sessão",
+    cancelLabel: "Cancelar",
+    danger: true,
+  });
+}
+
+/** Fecha a sessão depois de confirmar e de decidir o que fazer com as árvores
+ * criadas nela. */
 export async function closeSessionWithWorktreeReview(
   sessionId: string,
 ): Promise<void> {
@@ -318,6 +340,10 @@ export async function closeSessionWithWorktreeReview(
     .getState()
     .sessions.find((item) => item.id === sessionId);
   if (!session) {
+    return;
+  }
+
+  if (!(await confirmSessionClose(session))) {
     return;
   }
 

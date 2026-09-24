@@ -17,6 +17,7 @@ import { AppShell } from "./components/layout/AppShell";
 import { CreateSessionDialog } from "./components/layout/CreateSessionDialog";
 import { BootScreen } from "./components/BootScreen";
 import { BrainstormPanel } from "./components/brainstorm/BrainstormPanel";
+import { ConfirmDialog } from "./components/ui/ConfirmDialog";
 import { checkpoint, logError } from "./core/logger";
 import { prewarmOpenAiApiKey } from "./core/voice-input";
 import {
@@ -203,6 +204,7 @@ function App() {
         onCreate={handleCreateConfirm}
       />
       <BrainstormPanel />
+      <ConfirmDialog />
     </>
   );
 }

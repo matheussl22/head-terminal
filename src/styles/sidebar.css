@@ -428,12 +428,6 @@
   background: var(--status-error-subtle);
 }
 
-.session-sidebar__action--confirm {
-  background: var(--status-error);
-  color: #fff;
-  border-radius: var(--radius-sm);
-}
-
 .session-sidebar__rename-input {
   width: 100%;
   padding: 3px 6px;

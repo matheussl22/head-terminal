@@ -709,6 +709,100 @@
   accent-color: var(--accent);
 }
 
+/* Confirm: a small centered card, the in-app stand-in for the native
+   message box. One question, two buttons, nothing else. */
+
+.confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--z-modal) + 1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  animation: fade-in var(--transition-fast);
+}
+
+.confirm-dialog {
+  width: min(400px, 100%);
+  padding: 20px 20px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--bg-2);
+  box-shadow: var(--shadow-dialog);
+  animation: dialog-pop 0.16s ease-out both;
+}
+
+.confirm-dialog__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+  font-weight: 650;
+}
+
+.confirm-dialog__message {
+  margin: 8px 0 0;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.confirm-dialog__detail {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
+.confirm-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.confirm-dialog__actions button {
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.confirm-dialog__actions button:hover {
+  background: var(--bg-4);
+  color: var(--text-primary);
+}
+
+.confirm-dialog__actions .confirm-dialog__confirm {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 650;
+}
+
+.confirm-dialog__actions .confirm-dialog__confirm:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--accent-fg);
+}
+
+.confirm-dialog__actions .confirm-dialog__confirm--danger {
+  border-color: var(--status-error);
+  background: var(--status-error);
+  color: #fff;
+}
+
+.confirm-dialog__actions .confirm-dialog__confirm--danger:hover {
+  border-color: var(--status-error);
+  background: var(--status-error);
+  color: #fff;
+  filter: brightness(1.1);
+}
+
 /* Theme picker: one card per theme, each painted in its own colors so the
    choice is visible before it is made. */
 
