@@ -1,4 +1,4 @@
-import { getSessionActivity } from "./activity-utils";
+import { getSessionHasWorkingPane } from "./activity-utils";
 import { confirmInApp } from "./confirm-dialog";
 import { logError, logEvent } from "./logger";
 import {
@@ -316,7 +316,7 @@ export async function closePaneWithWorktreeReview(
  * quem tem agent rodando precisa saber que o processo vai junto. */
 async function confirmSessionClose(session: AgentSession): Promise<boolean> {
   const { paneRuntime } = useSessionStore.getState();
-  const working = getSessionActivity(session, paneRuntime) === "working";
+  const working = getSessionHasWorkingPane(session, paneRuntime);
   return confirmInApp({
     title: `Fechar “${session.title}”?`,
     message: working

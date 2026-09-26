@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_FALLBACK_OSC,
   AGENT_RESUME_FALLBACK_OSC,
+  CODEX_TITLE_OVERRIDE,
   WINDOWS_SHELL_COMMAND,
   WSL_SHELL_COMMAND,
 } from "./agents-shared";
@@ -71,8 +72,55 @@ describe("Windows agent profiles", () => {
     expect(claude).not.toContain("--continue");
     expect(claude).toContain(`__ht_osc ${AGENT_RESUME_FALLBACK_OSC} "resume-failed:$__ht_c"; claude }`);
     expect(claude).toContain("-lt 30");
-    expect(scriptOf(profiles.codex.args)).toContain(`codex resume ${id}`);
+    expect(scriptOf(profiles.codex.args)).toContain(`${CODEX_TITLE_OVERRIDE} resume ${id}`);
     expect(scriptOf(profiles.cursor.args)).toContain(`cursor-agent --resume ${id}`);
+  });
+
+  it("launches every claude with the status hooks settings, fallback included", () => {
+    const path = "C:\\Users\\me\\AppData\\Roaming\\Head Terminal\\agent-hooks\\claude-status-hooks.json";
+    const id = "33c584af-842d-4f34-914e-103047398416";
+    const settings = `--settings '${path}'`;
+
+    expect(scriptOf(buildWindowsAgentProfiles({ claudeSettingsPath: path }).claude.args))
+      .toContain(`{ claude ${settings} }`);
+    expect(
+      scriptOf(
+        buildWindowsAgentProfiles({ claudeSettingsPath: path, continueConversation: true }).claude.args,
+      ),
+    ).toContain(`{ claude --continue ${settings} }`);
+    const resumed = scriptOf(
+      buildWindowsAgentProfiles({ claudeSettingsPath: path, resumeSessionId: id }).claude.args,
+    );
+    expect(resumed).toContain(`claude --resume ${id} ${settings};`);
+    expect(resumed).toContain(`"resume-failed:$__ht_c"; claude ${settings} }`);
+    // Only Claude takes them, and nothing changes without them.
+    expect(scriptOf(buildWindowsAgentProfiles({ claudeSettingsPath: path }).codex.args))
+      .not.toContain("--settings");
+    expect(scriptOf(buildWindowsAgentProfiles({}).claude.args)).not.toContain("--settings");
+  });
+
+  it("quotes a settings path for PowerShell and drops one with control characters", () => {
+    const quoted = scriptOf(
+      buildWindowsAgentProfiles({ claudeSettingsPath: "C:\\it's $here\\hooks.json" }).claude.args,
+    );
+    expect(quoted).toContain("claude --settings 'C:\\it''s $here\\hooks.json'");
+    const dropped = scriptOf(
+      buildWindowsAgentProfiles({ claudeSettingsPath: "C:\\x.json\nRemove-Item" }).claude.args,
+    );
+    expect(dropped).not.toContain("--settings");
+    expect(dropped).not.toContain("Remove-Item");
+  });
+
+  it("pins codex's run-state title on every launch, fallback included", () => {
+    const id = "33c584af-842d-4f34-914e-103047398416";
+    expect(CODEX_TITLE_OVERRIDE).toBe(`-c "tui.terminal_title=['activity','run-state']"`);
+    expect(scriptOf(buildWindowsAgentProfiles({}).codex.args))
+      .toContain(`{ codex ${CODEX_TITLE_OVERRIDE} }`);
+    const resumed = scriptOf(buildWindowsAgentProfiles({ resumeSessionId: id }).codex.args);
+    // The override goes before the subcommand: that spelling was verified
+    // against codex 0.155.1 to apply on resume.
+    expect(resumed).toContain(`codex ${CODEX_TITLE_OVERRIDE} resume ${id};`);
+    expect(resumed).toContain(`"resume-failed:$__ht_c"; codex ${CODEX_TITLE_OVERRIDE} }`);
   });
 
   it("pins the pane's Claude account after the user's $PROFILE ran", () => {

@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
 
-import { getSessionActivity } from "../core/activity-utils";
 import { fitPanes } from "../core/pane-fit-registry";
+import { collectPaneIds } from "../core/session-layout";
 import { useSessionStore } from "../core/session-manager";
 import { closePaneWithWorktreeReview } from "../core/worktree";
-import { notifySessionAttention } from "../core/notifications";
-import { toggleActivePaneMinimized } from "../core/pane-minimize";
+import {
+  notifyPaneDone,
+  notifySessionStatus,
+  paneDoneNotifications,
+  pruneSessionNotifications,
+  sessionNotification,
+} from "../core/notifications";
+import { revealPane, toggleActivePaneMinimized } from "../core/pane-minimize";
 import { hasPrimaryModifier } from "../core/shortcuts";
 import { forEachTerminal } from "../core/terminal-registry";
 import {
@@ -15,6 +21,10 @@ import {
 import { toggleVoiceInput } from "../core/voice-input";
 
 const NOTIFY_DEBOUNCE_MS = 300;
+/** How long coming back to the window waits before reading the focused pane
+ * as seen: a notification click may be what brought it back, and it names
+ * another pane (see onActivated below). */
+const SEEN_ON_RETURN_DELAY_MS = 250;
 
 export function useActivityNotifications(): void {
   useEffect(() => {
@@ -22,17 +32,59 @@ export function useActivityNotifications(): void {
 
     const check = () => {
       timer = null;
-      const { sessions, activeSessionId, paneRuntime } =
+      const { sessions, activeSessionId, paneRuntime, spawnedSessionIds } =
         useSessionStore.getState();
+      const windowFocused = document.hasFocus();
+      const finishedPaneIds = new Set<string>();
       for (const session of sessions) {
-        if (session.id === activeSessionId && document.hasFocus()) {
-          continue;
+        const paneIds = collectPaneIds(session.layout);
+        const options = { spawned: Boolean(spawnedSessionIds[session.id]) };
+        const notification = sessionNotification(
+          session.title,
+          paneIds,
+          paneRuntime,
+          options,
+        );
+        notifySessionStatus(session.id, notification, {
+          sessionActive: session.id === activeSessionId,
+          windowFocused,
+        });
+        // Every finished turn is its own news: a sibling still working (or
+        // waiting) no longer holds back "api: cc3 concluiu".
+        for (const done of paneDoneNotifications(session, paneIds, paneRuntime, options)) {
+          finishedPaneIds.add(done.paneId);
+          notifyPaneDone(session.id, done, { windowFocused });
         }
+      }
+      pruneSessionNotifications(
+        new Set(sessions.map((session) => session.id)),
+        finishedPaneIds,
+      );
+    };
 
-        const activity = getSessionActivity(session, paneRuntime);
-        void notifySessionAttention(session.title, activity, session.id);
+    // Coming back to the window is looking at the pane it left focused: a
+    // turn that ended there meanwhile is no longer news. The store checks it
+    // is really in view — the window in front, the pane not in the dock nor
+    // parked behind a zoomed sibling. Not right away, though: a click on a
+    // notification brings the window back before it says which pane it is
+    // about (macOS activates the app first), and the pane that was focused
+    // until then — maybe in another session — was never looked at.
+    let seenTimer: ReturnType<typeof setTimeout> | null = null;
+    const cancelMarkSeen = () => {
+      if (seenTimer !== null) {
+        clearTimeout(seenTimer);
+        seenTimer = null;
       }
     };
+    const markActivePaneSeen = () => {
+      cancelMarkSeen();
+      seenTimer = setTimeout(() => {
+        seenTimer = null;
+        useSessionStore.getState().markActivePaneSeen();
+      }, SEEN_ON_RETURN_DELAY_MS);
+    };
+    window.addEventListener("focus", markActivePaneSeen);
+    document.addEventListener("visibilitychange", markActivePaneSeen);
 
     // Store subscription instead of a React render dependency: activity
     // ticks are frequent and shouldn't re-render the shell tree.
@@ -46,9 +98,21 @@ export function useActivityNotifications(): void {
       timer = setTimeout(check, NOTIFY_DEBOUNCE_MS);
     });
     const unsubscribeActivation = window.headTerminal.notifications.onActivated(
-      (sessionId) => {
+      ({ sessionId, paneId }) => {
         const state = useSessionStore.getState();
-        if (state.sessions.some((session) => session.id === sessionId)) {
+        const session = state.sessions.find((candidate) => candidate.id === sessionId);
+        if (!session) {
+          return;
+        }
+        // What the user looks at now is what the click brings on screen, and
+        // that pane's "Concluído" is read as it is shown — not the one the
+        // window had focused before.
+        cancelMarkSeen();
+        // "cc3 concluiu" should land on cc3 — out of the dock or from behind a
+        // zoomed sibling if need be — not just somewhere in its session.
+        if (paneId && collectPaneIds(session.layout).includes(paneId)) {
+          revealPane(paneId);
+        } else {
           state.setActiveSessionId(sessionId);
         }
       },
@@ -57,6 +121,9 @@ export function useActivityNotifications(): void {
     return () => {
       unsubscribe();
       unsubscribeActivation();
+      window.removeEventListener("focus", markActivePaneSeen);
+      document.removeEventListener("visibilitychange", markActivePaneSeen);
+      cancelMarkSeen();
       if (timer !== null) {
         clearTimeout(timer);
       }

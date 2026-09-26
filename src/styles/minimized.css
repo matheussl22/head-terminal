@@ -76,9 +76,10 @@
   --tone-subtle: var(--status-waiting-subtle);
 }
 
+/* Same violet as "Concluído" in the pane header and the sidebar. */
 .minimized-card--done {
-  --tone: var(--accent);
-  --tone-subtle: var(--accent-subtle);
+  --tone: var(--status-done);
+  --tone-subtle: var(--status-done-subtle);
 }
 
 .minimized-card--error {
@@ -222,8 +223,8 @@
 
 /* Finished: the one answer the user minimized it to wait for — solid. */
 .minimized-card--done .minimized-card__status {
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: var(--status-done);
+  color: var(--surface-terminal);
 }
 
 .minimized-card--done .minimized-card__time {

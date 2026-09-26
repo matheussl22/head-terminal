@@ -249,15 +249,56 @@ function concatChunks(chunks: Uint8Array[], bytes: number): Uint8Array {
   return merged;
 }
 
+/** A scheduled animation frame that has not run by then is not coming (the
+ * window is minimized or fully covered): a timer flushes instead. */
+const RAF_FALLBACK_MS = 100;
+/** Batching interval while the page is hidden and rAF is known to be off. */
+const HIDDEN_FLUSH_MS = 16;
+
+function pageHidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
 export function createRafPtyWriter(
   terminal: Terminal,
   onFrameText?: (text: string) => void,
 ): (data: Uint8Array) => void {
   const pending: Uint8Array[] = [];
   let rafId: number | null = null;
+  let timerId: ReturnType<typeof setTimeout> | null = null;
+
+  // Paint-aligned flushes come from requestAnimationFrame, which Chromium
+  // stops for a minimized or occluded window. Output then piled up unparsed:
+  // no titles, no screen, no status — the pane looked frozen in whatever
+  // state it had and never notified the user who had stepped away. Every
+  // flush is armed on both a frame and a timer; whichever fires first takes
+  // the batch and disarms the other, so nothing is written twice.
+  const schedule = () => {
+    if (rafId !== null || timerId !== null) {
+      return;
+    }
+    const hidden = pageHidden();
+    if (!hidden && typeof requestAnimationFrame === "function") {
+      rafId = requestAnimationFrame(run);
+    }
+    timerId = setTimeout(run, hidden ? HIDDEN_FLUSH_MS : RAF_FALLBACK_MS);
+  };
+
+  const run = () => {
+    if (rafId !== null) {
+      if (typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(rafId);
+      }
+      rafId = null;
+    }
+    if (timerId !== null) {
+      clearTimeout(timerId);
+      timerId = null;
+    }
+    flush();
+  };
 
   const flush = () => {
-    rafId = null;
     if (pending.length === 0) {
       return;
     }
@@ -286,14 +327,11 @@ export function createRafPtyWriter(
     // onto an already-correct, already-scrolled screen instead of replaying
     // a backlog.
     //
-    // The detectors run for hidden panes too. Skipping them while a pane
-    // was off-screen starved its ActivityDetector of output: its idle timer
-    // kept running, decided the agent had gone quiet and demoted a session
-    // that was still working to "waiting_input" a few seconds after the
-    // user switched away — the sidebar dot lied for every background
-    // session. It also blinded the folder-trust auto-accept, the context
-    // meter and the workspace detector for anything not on screen. The
-    // callback fires after xterm parsed the frame, so it never delays paint.
+    // The detectors run for hidden panes too: the status of a background
+    // session, the folder-trust auto-accept, the context meter and the
+    // workspace detector all read what the pane shows, whether or not it is
+    // on screen. The callback fires after xterm parsed the frame, so it
+    // never delays paint.
     if (onFrameText) {
       const text = frameTextDecoder.decode(merged);
       terminal.write(merged, () => onFrameText(text));
@@ -301,8 +339,8 @@ export function createRafPtyWriter(
       terminal.write(merged);
     }
 
-    if (pending.length > 0 && rafId === null) {
-      rafId = requestAnimationFrame(flush);
+    if (pending.length > 0) {
+      schedule();
     }
   };
 
@@ -312,9 +350,6 @@ export function createRafPtyWriter(
     }
 
     pending.push(data);
-
-    if (rafId === null) {
-      rafId = requestAnimationFrame(flush);
-    }
+    schedule();
   };
 }

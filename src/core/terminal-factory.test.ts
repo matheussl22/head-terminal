@@ -74,6 +74,83 @@ describe("createRafPtyWriter", () => {
     expect(onFrame).toHaveBeenCalledWith("⠋ Running tests");
   });
 
+  it("flushes through a timer when no frame comes (minimized or covered window)", () => {
+    // Timers only: the animation frame stays the hand-driven stub above.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const writes: unknown[] = [];
+      const onFrame = vi.fn();
+      const terminal = {
+        write: (data: unknown, callback?: () => void) => {
+          writes.push(data);
+          callback?.();
+        },
+      } as Pick<Terminal, "write">;
+
+      const write = createRafPtyWriter(terminal as Terminal, onFrame);
+      write(encode("◐ title"));
+      vi.advanceTimersByTime(99);
+      expect(writes).toHaveLength(0);
+
+      vi.advanceTimersByTime(1);
+      expect(writes).toHaveLength(1);
+      expect(onFrame).toHaveBeenCalledWith("◐ title");
+
+      // The frame that finally runs finds nothing left to write.
+      flushRaf();
+      expect(writes).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never writes a batch twice when the frame wins", () => {
+    // Timers only: the animation frame stays the hand-driven stub above.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const writes: unknown[] = [];
+      const terminal = {
+        write: (data: unknown, callback?: () => void) => {
+          writes.push(data);
+          callback?.();
+        },
+      } as Pick<Terminal, "write">;
+
+      const write = createRafPtyWriter(terminal as Terminal);
+      write(encode("abc"));
+      flushRaf();
+      vi.advanceTimersByTime(500);
+      expect(writes).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("batches on a short timer while the page is hidden", () => {
+    // Timers only: the animation frame stays the hand-driven stub above.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    vi.stubGlobal("document", { visibilityState: "hidden" });
+    try {
+      const writes: unknown[] = [];
+      const terminal = {
+        write: (data: unknown, callback?: () => void) => {
+          writes.push(data);
+          callback?.();
+        },
+      } as Pick<Terminal, "write">;
+
+      const write = createRafPtyWriter(terminal as Terminal);
+      write(encode("a"));
+      write(encode("b"));
+      expect(rafQueue).toHaveLength(0);
+      vi.advanceTimersByTime(16);
+      expect(writes).toHaveLength(1);
+      expect(new TextDecoder().decode(writes[0] as Uint8Array)).toBe("ab");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("caps a frame and continues on the next rAF", () => {
     const writes: unknown[] = [];
     const terminal = {

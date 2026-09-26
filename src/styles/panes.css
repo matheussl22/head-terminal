@@ -49,14 +49,61 @@
   border-radius: var(--radius-pane);
   overflow: hidden;
   background: var(--surface-pane);
-  container-type: inline-size;
-  transition: border-color var(--transition-normal);
+  /* Named, so the header's queries always measure its own pane. */
+  container: pane / inline-size;
+  transition:
+    border-color var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 /* Inactive panes step back: dimmer header text, hairline border. The active
    one gets the accent on its border and a solid rail under its header. */
 .terminal-pane-shell--active {
   border-color: var(--border-strong);
+}
+
+/* A pane that needs the user says so with its whole frame, so it can be
+   picked out of a grid of ten even when its header is down to a dot — or
+   hidden. Waiting (an answer is owed) is the loudest: tinted border, a soft
+   glow into the gap and a tinted header with a line along its top. Done and
+   error only tint. */
+.terminal-pane-shell--tone-waiting {
+  border-color: color-mix(in srgb, var(--status-waiting) 70%, var(--border-default));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--status-waiting) 30%, transparent),
+    0 0 18px -6px color-mix(in srgb, var(--status-waiting) 65%, transparent);
+}
+
+.terminal-pane-shell--tone-waiting .terminal-pane-header {
+  background:
+    linear-gradient(var(--status-waiting-tint), var(--status-waiting-tint)),
+    var(--surface-pane-header);
+  border-bottom-color: color-mix(in srgb, var(--status-waiting) 35%, var(--border-subtle));
+  box-shadow: inset 0 2px 0 var(--status-waiting);
+}
+
+.terminal-pane-shell--tone-done {
+  border-color: color-mix(in srgb, var(--status-done) 45%, var(--border-default));
+}
+
+.terminal-pane-shell--tone-done .terminal-pane-header {
+  background:
+    linear-gradient(var(--status-done-tint), var(--status-done-tint)),
+    var(--surface-pane-header);
+}
+
+.terminal-pane-shell--tone-error {
+  border-color: color-mix(in srgb, var(--status-error) 55%, var(--border-default));
+}
+
+.terminal-pane-shell--tone-error .terminal-pane-header {
+  background:
+    linear-gradient(var(--status-error-tint), var(--status-error-tint)),
+    var(--surface-pane-header);
+}
+
+.terminal-pane-shell--tone-fallback {
+  border-color: color-mix(in srgb, var(--status-fallback) 45%, var(--border-default));
 }
 
 .terminal-pane-shell__body {
@@ -172,6 +219,7 @@
 }
 
 .terminal-pane-header__name {
+  flex-shrink: 0;
   font-family: var(--font-mono);
   font-weight: 600;
   font-size: var(--font-sm);
@@ -179,12 +227,15 @@
   white-space: nowrap;
 }
 
+/* Folder and branch pills shrink with an ellipsis down to a readable stub,
+   never to a sliver; below that the container queries take them off the
+   header (they stay in the status tooltip and at the top of the "⋯"). */
 .terminal-pane-header__cwd {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 3 auto;
+  min-width: 56px;
   max-width: 180px;
   padding: 2px 6px;
   border: 1px solid transparent;
@@ -216,7 +267,56 @@
   white-space: nowrap;
 }
 
+/* The branch as a pill. The text sits in its own block span: an ellipsis
+   only applies to text directly inside the element that clips it, which the
+   old inline-flex badge never was ("⎇ mi" cut dead, no "…"). */
+.terminal-pane-header__branch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 6 auto;
+  min-width: 56px;
+  max-width: 160px;
+  height: 20px;
+  padding: 0 8px 0 7px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.terminal-pane-header__branch-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.terminal-pane-header__branch-text {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Conversation name (+ its history chevron). It takes whatever the header
+   has left — the first thing that grows back when the pane widens — and is
+   the last to give way: the pills around it shrink faster (flex-shrink). */
+.terminal-pane-header__conversation-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.terminal-pane-header__conversation-group:empty {
+  display: none;
+}
+
 .terminal-pane-header__conversation {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -235,7 +335,9 @@
     border-color var(--transition-fast);
 }
 
-.terminal-pane-header__conversation:hover {
+.terminal-pane-header__conversation:hover,
+.terminal-pane-header__conversation:focus-visible {
+  padding-right: 24px;
   color: var(--text-primary);
   background: var(--bg-3);
   border-color: var(--border-default);
@@ -258,8 +360,13 @@
   white-space: nowrap;
 }
 
+/* Drawn over the padding the hover adds, so the hidden pencil doesn't eat
+   17px of the name in a crowded header. */
 .terminal-pane-header__conversation-pencil {
-  flex-shrink: 0;
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  translate: 0 -50%;
   opacity: 0;
   transition: opacity var(--transition-fast);
 }
@@ -269,9 +376,14 @@
   opacity: 1;
 }
 
+/* Fills the room it has instead of a fixed 240px that ran out of a narrow
+   pane. It asks for a comfortable width first, so renaming in place in a
+   crowded header squeezes the folder and branch pills (they shrink faster)
+   before the field. */
 .terminal-pane-header__conversation-input {
-  width: 240px;
-  max-width: 40vw;
+  flex: 1 1 200px;
+  min-width: 48px;
+  max-width: 260px;
   padding: 3px 8px;
   border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
@@ -288,133 +400,99 @@
   opacity: 0.6;
 }
 
-.terminal-pane-header__branch {
-  display: inline-flex;
-  align-items: center;
-  max-width: 160px;
-  min-width: 0;
-  flex-shrink: 4;
-  padding: 2px 8px;
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  background: var(--bg-3);
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.terminal-pane-header__branch .git-branch-badge {
-  color: inherit;
-  font-size: 10px;
-}
-
-.terminal-pane-header__branch .git-branch-badge__icon {
-  color: var(--text-muted);
-}
-
 .terminal-pane-header__context {
+  flex-shrink: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .terminal-pane-header__context--critical {
   animation: status-pulse 1.2s ease-in-out infinite;
 }
 
-/* Status: a dot in the state's color plus the word. The dot alone survives
-   in a narrow pane (see the container query). */
+/* Status chip: the tone's glyph (StatusDot) plus its word, on the tone's
+   tint. The minimum width is the widest word, so the header doesn't jump
+   by 20px every time a pane flips between "Executando" and "Pronto". */
 .terminal-pane-header__status {
+  --tone: var(--text-secondary);
+  --tone-bg: var(--bg-3);
+  --tone-border: var(--border-default);
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 8px 2px 7px;
+  justify-content: center;
+  gap: 5px;
+  flex-shrink: 0;
+  min-width: 90px;
+  height: 20px;
+  padding: 0 9px 0 6px;
+  border: 1px solid var(--tone-border);
   border-radius: 999px;
-  border: 1px solid var(--border-default);
-  background: var(--bg-3);
-  color: var(--text-secondary);
+  background: var(--tone-bg);
+  color: var(--tone);
   font-weight: 600;
   font-size: 10px;
   letter-spacing: 0.02em;
-}
-
-.terminal-pane-header__status::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: var(--status-idle);
+  white-space: nowrap;
+  transition:
+    color var(--transition-normal),
+    background var(--transition-normal),
+    border-color var(--transition-normal);
 }
 
 .terminal-pane-header__status--working {
-  color: var(--status-working);
-  background: var(--status-working-subtle);
-  border-color: transparent;
+  --tone: var(--status-working);
+  --tone-bg: var(--status-working-subtle);
+  --tone-border: transparent;
 }
 
-.terminal-pane-header__status--working::before {
-  background: var(--status-working);
-  animation: status-pulse 1.6s ease-in-out infinite;
+.terminal-pane-header__status--waiting {
+  --tone: var(--status-waiting);
+  --tone-bg: var(--status-waiting-strong);
+  --tone-border: color-mix(in srgb, var(--status-waiting) 45%, transparent);
 }
 
-.terminal-pane-header__status--waiting_input {
-  color: var(--status-waiting);
-  background: var(--status-waiting-subtle);
-  border-color: transparent;
-}
-
-.terminal-pane-header__status--waiting_input::before {
-  background: var(--status-waiting);
+.terminal-pane-header__status--done {
+  --tone: var(--status-done);
+  --tone-bg: var(--status-done-subtle);
+  --tone-border: transparent;
 }
 
 .terminal-pane-header__status--error {
-  color: var(--status-error);
-  background: var(--status-error-subtle);
-  border-color: transparent;
+  --tone: var(--status-error);
+  --tone-bg: var(--status-error-subtle);
+  --tone-border: transparent;
 }
 
-.terminal-pane-header__status--error::before {
-  background: var(--status-error);
+.terminal-pane-header__status--fallback {
+  --tone: var(--status-fallback);
+  --tone-bg: var(--status-fallback-subtle);
+  --tone-border: transparent;
 }
 
-.terminal-pane-header__status--starting {
-  color: var(--text-secondary);
+.terminal-pane-header__status--exited {
+  --tone: var(--text-muted);
 }
 
-.terminal-pane-header__status--starting::before {
-  width: 8px;
-  height: 8px;
-  background: transparent;
-  border: 1.5px solid var(--border-strong);
-  border-top-color: var(--text-secondary);
-  animation: spin 0.8s linear infinite;
-}
-
-.terminal-pane-header__status--exited::before {
-  background: transparent;
-  border: 1.5px solid var(--status-exited);
-}
-
-.terminal-pane-header__status--agent_fallback {
-  color: var(--status-fallback);
-  background: var(--status-fallback-subtle);
-  border-color: transparent;
-}
-
-.terminal-pane-header__status--agent_fallback::before {
-  background: var(--status-fallback);
-}
-
+/* Agent down: restart it. Text in a roomy header, the icon alone in a
+   narrow one (see the container queries). */
 .terminal-pane-header__restart-agent {
-  padding: 2px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 9px;
   border: 1px solid var(--status-fallback);
   border-radius: 999px;
   background: transparent;
   color: var(--status-fallback);
   font-size: 10px;
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -422,6 +500,13 @@
   background: var(--status-fallback-subtle);
 }
 
+.terminal-pane-header__restart-agent-icon {
+  display: none;
+  flex-shrink: 0;
+}
+
+/* Never shrinks: the container queries below guarantee that what is shown
+   here fits, so no button is ever cut off by the pane's edge. */
 .terminal-pane-header__right {
   display: inline-flex;
   align-items: center;
@@ -429,23 +514,12 @@
   flex-shrink: 0;
 }
 
-@container (max-width: 520px) {
-  .terminal-pane-header__status {
-    gap: 0;
-    padding: 0;
-    width: 12px;
-    height: 12px;
-    justify-content: center;
-    font-size: 0;
-    line-height: 0;
-    border-color: transparent;
-    background: transparent;
-  }
+.terminal-pane-header__mic-slot {
+  display: inline-flex;
+}
 
-  .terminal-pane-header__branch {
-    flex-shrink: 1;
-    min-width: 0;
-  }
+.terminal-pane-header__mic-slot:empty {
+  display: none;
 }
 
 .terminal-pane-header__action,
@@ -496,6 +570,10 @@
   border-color: var(--border-default);
 }
 
+.terminal-pane-header__action:disabled {
+  cursor: progress;
+}
+
 /* Zoom on: the toggle stays lit without hover so it is obvious that the
    session has more terminals than the one on screen. */
 .terminal-pane-header__action--on,
@@ -510,6 +588,177 @@
   color: var(--status-error);
   background: var(--status-error-subtle);
   border-color: transparent;
+}
+
+/* "⋯": only there when the header hid something. It is the way in to
+   everything a narrow pane can do, so it is less faint than the others. */
+.terminal-pane-header__more {
+  display: none;
+}
+
+.terminal-pane-header__action.terminal-pane-header__more {
+  opacity: 0.7;
+}
+
+.terminal-pane-header__action.terminal-pane-header__more--open {
+  opacity: 1;
+  color: var(--text-primary);
+  background: var(--bg-4);
+  border-color: var(--border-strong);
+}
+
+/* Renaming from the "⋯" menu in a narrow pane: the field takes the room
+   of the folder and branch, and shows up even where the name was hidden.
+   Only from the menu — clicking the name in a wide pane edits it in place,
+   with the pills left where they were. */
+.terminal-pane-header--renaming-menu .terminal-pane-header__cwd,
+.terminal-pane-header--renaming-menu .terminal-pane-header__branch {
+  display: none;
+}
+
+/* Responsive header. The pane shell is a size container ("pane"), so each
+   pane lays out its own header for its own width — a 10-column grid and a
+   single wide pane side by side each get what fits. Widths are the pane's
+   inner width (its box minus the 1px border on each side):
+     ≥ 800  everything inline, as it always was; no "⋯"
+     < 800  isolate / split / restart / minimize move to "⋯"
+     < 700  the branch pill leaves (tooltip + menu header)
+     < 560  folder and history leave; the status keeps its word only when it
+            asks for the user; "ctx 42%" becomes "42%"
+     < 380  status is the glyph alone (the frame still tints for waiting)
+     < 300  expand and ctx leave; tighter spacing
+     < 240  close leaves (it is the last item of "⋯")
+     < 180  the conversation name leaves
+   Down to ~120px the agent chip, the short label, the status glyph and the
+   "⋯" always fit. */
+@container pane (width < 800px) {
+  .terminal-pane-header [data-pane-action="isolate"],
+  .terminal-pane-header [data-pane-action="split-v"],
+  .terminal-pane-header [data-pane-action="split-h"],
+  .terminal-pane-header [data-pane-action="restart"],
+  .terminal-pane-header [data-pane-action="minimize"] {
+    display: none;
+  }
+
+  .terminal-pane-header__more {
+    display: inline-flex;
+  }
+
+  .terminal-pane-header__cwd {
+    max-width: 150px;
+  }
+}
+
+@container pane (width < 700px) {
+  .terminal-pane-header__branch {
+    display: none;
+  }
+}
+
+@container pane (width < 560px) {
+  .terminal-pane-header__cwd,
+  .terminal-pane-header [data-pane-action="history"],
+  .terminal-pane-header__mic-slot:not(:has(.terminal-pane-header__mic--recording, .terminal-pane-header__mic--transcribing)) {
+    display: none;
+  }
+
+  .terminal-pane-header__context-prefix {
+    display: none;
+  }
+
+  .terminal-pane-header__restart-agent {
+    width: 22px;
+    padding: 0;
+  }
+
+  .terminal-pane-header__restart-agent-icon {
+    display: block;
+  }
+
+  .terminal-pane-header__restart-agent-text {
+    display: none;
+  }
+
+  .terminal-pane-header__status--attention {
+    min-width: 0;
+  }
+
+  .terminal-pane-header__status:not(.terminal-pane-header__status--attention) {
+    min-width: 0;
+    width: 20px;
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .terminal-pane-header__status:not(.terminal-pane-header__status--attention)
+    .terminal-pane-header__status-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
+@container pane (width < 380px) {
+  .terminal-pane-header .terminal-pane-header__status {
+    min-width: 0;
+    width: 20px;
+    padding: 0;
+    border-color: transparent;
+    background: transparent;
+  }
+
+  .terminal-pane-header .terminal-pane-header__status-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
+@container pane (width < 300px) {
+  .terminal-pane-header {
+    gap: 6px;
+    padding: 0 4px 0 6px;
+  }
+
+  .terminal-pane-header__title {
+    gap: 6px;
+  }
+
+  .terminal-pane-header__right {
+    gap: 2px;
+  }
+
+  .terminal-pane-header [data-pane-action="maximize"],
+  .terminal-pane-header__context,
+  .terminal-pane-header--renaming .terminal-pane-header__agent {
+    display: none;
+  }
+}
+
+@container pane (width < 240px) {
+  .terminal-pane-header [data-pane-action="close"] {
+    display: none;
+  }
+}
+
+/* Out of the flow rather than display:none — the history list opened from
+   "⋯" is a fixed popup inside this group and has to stay renderable. */
+@container pane (width < 180px) {
+  .terminal-pane-header:not(.terminal-pane-header--renaming)
+    .terminal-pane-header__conversation-group {
+    position: absolute;
+  }
+
+  .terminal-pane-header:not(.terminal-pane-header--renaming)
+    .terminal-pane-header__conversation-group
+    > :not(.resume-session-menu) {
+    display: none;
+  }
 }
 
 /* Resume-session dropdown (chevron next to restart) */
@@ -625,6 +874,223 @@
   color: var(--text-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+}
+
+/* Pane actions menu ("⋯"): same surface as the resume list, fixed so it
+   escapes the pane's overflow; placed and flipped by resolveMenuPosition. */
+
+.pane-actions-menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  width: max-content;
+  min-width: 236px;
+  max-width: min(320px, calc(100vw - 24px));
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-menu);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  cursor: default;
+  animation: menu-pop 120ms ease-out;
+}
+
+/* Focused only as a fallback (a click between items), so no ring: the item
+   highlight is what shows where the keyboard is. */
+.pane-actions-menu:focus {
+  outline: none;
+}
+
+/* Where this terminal is and what it is doing — the header had no room for
+   it, which is usually why the menu got opened. */
+.pane-actions-menu__header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -4px -4px 4px;
+  padding: 9px 12px 9px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: var(--bg-2);
+}
+
+.pane-actions-menu__status {
+  --tone: var(--text-secondary);
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: var(--tone);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.pane-actions-menu__status .status-dot {
+  margin-top: 1px;
+}
+
+.pane-actions-menu__status--working {
+  --tone: var(--status-working);
+}
+
+.pane-actions-menu__status--waiting {
+  --tone: var(--status-waiting);
+}
+
+.pane-actions-menu__status--done {
+  --tone: var(--status-done);
+}
+
+.pane-actions-menu__status--error {
+  --tone: var(--status-error);
+}
+
+.pane-actions-menu__status--fallback {
+  --tone: var(--status-fallback);
+}
+
+/* The conversation's name, when the header had no room for it either. */
+.pane-actions-menu__conversation {
+  padding-left: 19px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-actions-menu__conversation-name {
+  color: var(--text-primary);
+}
+
+.pane-actions-menu__conversation-name--empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.pane-actions-menu__context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding-left: 19px;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.pane-actions-menu__context-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.pane-actions-menu__context-item svg {
+  flex-shrink: 0;
+}
+
+.pane-actions-menu__context-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-actions-menu__context-item--ctx {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.pane-actions-menu__separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border-subtle);
+}
+
+.pane-actions-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 30px;
+  padding: 5px 10px 5px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Hover moves focus onto the item, so pointer and arrows share one
+   highlight. */
+.pane-actions-menu__item:focus {
+  outline: none;
+  background: var(--bg-4);
+}
+
+.pane-actions-menu__item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.pane-actions-menu__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  color: var(--text-muted);
+}
+
+.pane-actions-menu__item:focus .pane-actions-menu__icon {
+  color: var(--text-secondary);
+}
+
+.pane-actions-menu__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pane-actions-menu__label,
+.pane-actions-menu__hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-actions-menu__hint {
+  color: var(--text-muted);
+  font-size: 10.5px;
+}
+
+.pane-actions-menu__shortcut {
+  flex-shrink: 0;
+  margin-left: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.pane-actions-menu__item--danger,
+.pane-actions-menu__item--danger .pane-actions-menu__icon,
+.pane-actions-menu__item--danger:focus .pane-actions-menu__icon {
+  color: var(--status-error);
+}
+
+.pane-actions-menu__item--danger:focus {
+  background: var(--status-error-subtle);
 }
 
 /* Voice mic button */

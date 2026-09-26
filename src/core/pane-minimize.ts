@@ -1,4 +1,5 @@
 import { useSessionStore } from "./session-manager";
+import { getTerminal } from "./terminal-registry";
 
 /**
  * Minimizing and restoring a terminal, with a bit of motion: a bare outline
@@ -65,6 +66,28 @@ export function minimizePaneWithMotion(paneId: string): void {
 export function restorePaneWithMotion(paneId: string): void {
   noteOrigin(paneId, "restore", minimizedCardElement(paneId));
   useSessionStore.getState().restorePane(paneId);
+}
+
+/**
+ * Brings a terminal to the front wherever it is — another session, the dock,
+ * parked behind a zoomed sibling — and hands it the keyboard. The toolbar
+ * chips and the sidebar's pane dots jump through here, so "1 aguardando"
+ * always ends on the pane asking, not on one hiding it. Its "Concluído" is
+ * read only because the pane is then on screen.
+ *
+ * The focus is given again on the next frame even when the pane already was
+ * the active one: activePaneId does not change then, AppShell does not
+ * refocus, and the keyboard would stay on the chip that was clicked (Enter
+ * would click it again instead of answering the agent).
+ */
+export function revealPane(paneId: string): void {
+  const state = useSessionStore.getState();
+  if (state.minimizedPanes[paneId]) {
+    restorePaneWithMotion(paneId);
+  } else {
+    state.restorePane(paneId);
+  }
+  requestAnimationFrame(() => getTerminal(paneId)?.terminal.focus());
 }
 
 /** Minimizes the active terminal, or brings it back when it is the one

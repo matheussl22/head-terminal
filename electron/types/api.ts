@@ -9,6 +9,24 @@ export type { WorktreeEntry, WorktreeInfo, WorktreePlan, WorktreeStatus };
 
 export type Unsubscribe = () => void;
 
+/** Trimmed agent lifecycle event routed to one pane (see src/types/agent-hooks.ts). */
+export interface AgentHookEventPayload {
+  paneId: string;
+  source: "claude";
+  event: string;
+  notificationType?: string;
+  toolName?: string;
+  agentType?: string;
+  error?: string;
+  sessionId?: string;
+  receivedAt: number;
+}
+
+export interface ClaudeHookSettings {
+  /** `--settings` file with the status hooks of one pane. */
+  settingsPath: string;
+}
+
 export type AllowedSecretKey = "openai-api-key";
 export type SupportedAgent = "claude" | "cursor";
 export type ResumableAgent = "claude" | "codex" | "cursor";
@@ -253,10 +271,19 @@ export interface ResumableSessionEntry {
   fromTranscript: boolean;
 }
 
+/** What a clicked notification points at. */
+export interface NotificationTarget {
+  sessionId: string;
+  paneId?: string;
+}
+
 export interface NotificationInput {
   title: string;
   body: string;
   sessionId?: string;
+  /** The terminal the notification is about: a click brings that pane on
+   * screen, not just its session. */
+  paneId?: string;
   silent?: boolean;
 }
 
@@ -407,7 +434,16 @@ export interface HeadTerminalApi {
   };
   notifications: {
     show(input: NotificationInput): Promise<void>;
-    onActivated(callback: (sessionId: string) => void): Unsubscribe;
+    onActivated(callback: (target: NotificationTarget) => void): Unsubscribe;
+  };
+  agentHooks: {
+    /** Settings file for ONE pane: the pane id is written into it literally
+     * (not read from an inherited env var), so a Claude background session
+     * launched from that pane keeps reporting as that pane. Null when the
+     * hook server is not running or the installed Claude Code cannot take
+     * HTTP hooks — the pane then relies on its title/screen. */
+    getClaudeSettings(paneId: string): Promise<ClaudeHookSettings | null>;
+    onEvent(callback: (event: AgentHookEventPayload) => void): Unsubscribe;
   };
   diagnostics: {
     appendEvent(line: string): void;

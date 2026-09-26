@@ -3,20 +3,26 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentType,
 } from "react";
 
-import { formatSessionStatusLine } from "../../core/activity-duration";
-import { getClaudeAccountProfile } from "../../core/claude-accounts";
 import {
-  countWorkingSessions,
-  getSessionActivity,
-  getSessionActivitySince,
-} from "../../core/activity-utils";
+  describePaneStatus,
+  describeSessionStatus,
+  formatStatusDetail,
+  formatStatusLine,
+  TICKING_TONES,
+  TONE_LABEL,
+  type PaneStatusRuntime,
+  type PaneStatusView,
+  type SessionStatusView,
+} from "../../core/activity-display";
+import { getClaudeAccountProfile } from "../../core/claude-accounts";
 import { flipAnimate } from "../../core/flip-animate";
-import { restorePaneWithMotion } from "../../core/pane-minimize";
+import { revealPane } from "../../core/pane-minimize";
 import { samePath } from "../../core/path-utils";
 import { collectPaneIds } from "../../core/session-layout";
 import { useSessionStore } from "../../core/session-manager";
@@ -30,11 +36,6 @@ import {
   loadSidebarCollapsed,
   saveSidebarCollapsed,
 } from "../../core/ui-preferences";
-import {
-  ACTIVITY_LABEL,
-  NEEDS_ATTENTION,
-  type PaneActivity,
-} from "../../types/activity";
 import type { AgentSession } from "../../types/session";
 import {
   IconActivity,
@@ -51,7 +52,7 @@ import {
   IconSidebarCollapse,
   IconSidebarExpand,
 } from "../ui/Icons";
-import { StatusDot } from "../ui/StatusDot";
+import { StatusDot, useTerminalStatusCounts } from "../ui/StatusDot";
 import { SessionContextMenu } from "./SessionContextMenu";
 import { SystemResourceMeter } from "./SystemResourceMeter";
 
@@ -85,41 +86,61 @@ function AgentIcon({
   return <Icon size={size} />;
 }
 
-const ATTENTION_ACTIVITIES: ReadonlySet<PaneActivity> = new Set([
-  "working",
-  "waiting_input",
-  "error",
-  "agent_fallback",
-]);
+/** The ring around a session in the collapsed rail: only the tones worth a
+ * glance from across the screen. */
+const RING_TONES = new Set(["working", "waiting", "done", "error", "fallback"]);
 
-function SessionStatusLine({
-  activity,
-  activitySince,
-}: {
-  activity: PaneActivity;
-  activitySince: number | undefined;
-}) {
+/** "Aguardando há 2m · 1 aguardando · 3 executando". The clock only ticks
+ * while the session's tone keeps counting (working, waiting, done…); the
+ * pane counts come from the store, so they need no timer at all. */
+function SessionStatusLine({ view }: { view: SessionStatusView }) {
+  const ticking = view.since !== undefined && TICKING_TONES.has(view.tone);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (!activitySince || !ATTENTION_ACTIVITIES.has(activity)) {
+    if (!ticking) {
       return;
     }
+    setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [activity, activitySince]);
+  }, [ticking, view.since]);
 
-  return <span>{formatSessionStatusLine(activity, activitySince, now)}</span>;
+  const detail = formatStatusDetail(view, now);
+  return (
+    <span
+      className="session-sidebar__status-text"
+      title={view.summary ? `${detail}\n${view.summary}` : detail}
+    >
+      <span className="session-sidebar__status-label">{formatStatusLine(view, now)}</span>
+      {view.summary && (
+        <span className="session-sidebar__status-summary"> · {view.summary}</span>
+      )}
+    </span>
+  );
 }
 
-function paneDotsKey(
-  paneIds: string[],
-  paneRuntime: Record<string, { activity?: PaneActivity } | undefined>,
-): string {
-  return paneIds
-    .map((paneId) => paneRuntime[paneId]?.activity ?? "starting")
-    .join("|");
+/** What of a pane's runtime the sidebar shows, as a string: the selector
+ * returns it so context-percent pings don't re-render the list. */
+function paneStatusKey(runtime: PaneStatusRuntime | undefined): string {
+  if (!runtime) {
+    return "";
+  }
+  return [
+    runtime.activity,
+    runtime.activitySince,
+    runtime.doneAt ?? "",
+    runtime.blockedReason ?? "",
+    runtime.blockedDetail ?? "",
+  ].join(":");
 }
+
+const DORMANT_PANE: PaneStatusView = {
+  tone: "dormant",
+  label: TONE_LABEL.dormant,
+  detail: "Sessão ainda não iniciada — abre ao selecionar",
+  attention: false,
+};
 
 interface SessionListItemProps {
   session: AgentSession;
@@ -161,17 +182,25 @@ const SessionListItem = memo(function SessionListItem({
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState(session.title);
   const inputRef = useRef<HTMLInputElement>(null);
-  const paneIds = collectPaneIds(session.layout);
-  const activity = useSessionStore((state) =>
-    getSessionActivity(session, state.paneRuntime),
+  const paneIds = useMemo(() => collectPaneIds(session.layout), [session.layout]);
+  const statusKey = useSessionStore(
+    (state) =>
+      `${state.spawnedSessionIds[session.id] ? 1 : 0}|` +
+      paneIds.map((paneId) => paneStatusKey(state.paneRuntime[paneId])).join(","),
   );
-  const activitySince = useSessionStore((state) =>
-    getSessionActivitySince(session, state.paneRuntime),
-  );
-  const dotsKey = useSessionStore((state) =>
-    paneDotsKey(paneIds, state.paneRuntime),
-  );
-  const paneActivities = dotsKey.split("|") as PaneActivity[];
+  // Rebuilt only when the key above changes; the store is read directly so
+  // the selector itself can stay a cheap string.
+  const { status, paneViews } = useMemo(() => {
+    const state = useSessionStore.getState();
+    const spawned = Boolean(state.spawnedSessionIds[session.id]);
+    return {
+      status: describeSessionStatus(paneIds, state.paneRuntime, { spawned }),
+      paneViews: paneIds.map((paneId) =>
+        spawned ? describePaneStatus(state.paneRuntime[paneId]) : DORMANT_PANE,
+      ),
+    };
+    // statusKey stands for everything read from the store here.
+  }, [statusKey, paneIds, session.id]);
   const minimizedKey = useSessionStore((state) =>
     paneIds.map((paneId) => (state.minimizedPanes[paneId] ? "1" : "0")).join(""),
   );
@@ -207,9 +236,11 @@ const SessionListItem = memo(function SessionListItem({
   };
 
   if (collapsed) {
-    const ringClass = ATTENTION_ACTIVITIES.has(activity)
-      ? ` session-sidebar__compact-item--ring-${activity}`
-      : "";
+    const ringClass = RING_TONES.has(status.tone)
+      ? ` session-sidebar__compact-item--ring-${status.tone}`
+      : status.tone === "dormant"
+        ? " session-sidebar__compact-item--dormant"
+        : "";
     return (
       <li
         data-session-id={session.id}
@@ -226,7 +257,7 @@ const SessionListItem = memo(function SessionListItem({
               ? "session-sidebar__compact-item session-sidebar__compact-item--active"
               : "session-sidebar__compact-item") + ringClass
           }
-          title={`${session.title}${claudeAccountName ? ` — ${claudeAccountName}` : ""} — ${ACTIVITY_LABEL[activity]}`}
+          title={`${session.title}${claudeAccountName ? ` — ${claudeAccountName}` : ""} — ${formatStatusDetail(status)}${status.summary ? ` (${status.summary})` : ""}`}
           aria-label={session.title}
           onClick={onSelect}
           onContextMenu={(event) => onContextMenu(event, session)}
@@ -269,7 +300,7 @@ const SessionListItem = memo(function SessionListItem({
           }}
         >
           <div className="session-sidebar__title-row">
-            <StatusDot activity={activity} />
+            <StatusDot tone={status.tone} title={formatStatusDetail(status)} />
             {session.pinned && (
               <span className="session-sidebar__pin" title="Fixada">
                 📌
@@ -325,40 +356,43 @@ const SessionListItem = memo(function SessionListItem({
           </div>
 
           <span
-            className={
-              NEEDS_ATTENTION.has(activity) || activity === "working"
-                ? `session-sidebar__status session-sidebar__status--${activity}`
-                : "session-sidebar__status"
-            }
+            className={`session-sidebar__status session-sidebar__status--${status.tone}`}
           >
-            <span className="session-sidebar__pane-dots" aria-hidden>
-              {paneActivities.map((paneActivity, index) => {
+            <span
+              className={
+                paneViews.length > 12
+                  ? "session-sidebar__pane-dots session-sidebar__pane-dots--crowded"
+                  : paneViews.length > 6
+                    ? "session-sidebar__pane-dots session-sidebar__pane-dots--dense"
+                    : "session-sidebar__pane-dots"
+              }
+              aria-hidden
+            >
+              {paneViews.map((paneView, index) => {
                 const minimized = minimizedKey[index] === "1";
                 return (
                   <button
                     key={paneIds[index]}
                     type="button"
+                    tabIndex={-1}
                     className={
-                      `session-sidebar__pane-dot session-sidebar__pane-dot--${paneActivity}` +
+                      `session-sidebar__pane-dot session-sidebar__pane-dot--${paneView.tone}` +
                       (minimized ? " session-sidebar__pane-dot--minimized" : "")
                     }
                     title={
-                      `Terminal ${index + 1} — ${ACTIVITY_LABEL[paneActivity]}` +
+                      `Terminal ${index + 1} — ${paneView.detail}` +
                       (minimized ? " · minimizado, clique para restaurar" : "")
                     }
                     onClick={(event) => {
                       event.stopPropagation();
-                      if (minimized) {
-                        restorePaneWithMotion(paneIds[index]);
-                      } else {
-                        onSelectPane(paneIds[index]);
-                      }
+                      // Minimized or not, the dot shows that terminal.
+                      onSelectPane(paneIds[index]);
                     }}
                   />
                 );
               })}
             </span>
-            <SessionStatusLine activity={activity} activitySince={activitySince} />
+            <SessionStatusLine view={status} />
           </span>
         </div>
 
@@ -412,9 +446,7 @@ export function SessionSidebar({
     y: number;
   } | null>(null);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const workingCount = useSessionStore((state) =>
-    countWorkingSessions(state.sessions, state.paneRuntime),
-  );
+  const counts = useTerminalStatusCounts();
   // A ordem é sempre a do store (pin + drag manual) — sem reordenação
   // automática; quem precisa de atenção sinaliza pela cor do status, não por posição.
   const listRef = useRef<HTMLUListElement | null>(null);
@@ -430,7 +462,6 @@ export function SessionSidebar({
   }, [sessionOrderKey]);
 
   const setActiveSessionId = useSessionStore((state) => state.setActiveSessionId);
-  const setActivePaneId = useSessionStore((state) => state.setActivePaneId);
   const renameSession = useSessionStore((state) => state.renameSession);
   const updateSessionCwd = useSessionStore((state) => state.updateSessionCwd);
   const reorderSessions = useSessionStore((state) => state.reorderSessions);
@@ -444,10 +475,9 @@ export function SessionSidebar({
     });
   };
 
-  const focusSessionPane = (sessionId: string, paneId: string) => {
-    setActiveSessionId(sessionId);
-    setActivePaneId(paneId);
-  };
+  // A pane dot shows that terminal wherever it sits — another session, the
+  // dock, behind a zoomed sibling — and hands it the keyboard.
+  const focusSessionPane = (paneId: string) => revealPane(paneId);
 
   const handleContextMenu = (
     event: React.MouseEvent,
@@ -483,12 +513,20 @@ export function SessionSidebar({
         {!collapsed && (
           <span className="session-sidebar__header-title">
             Sessões
-            {workingCount > 0 && (
+            {counts.waiting > 0 && (
               <span
-                className="session-sidebar__working-badge"
-                title={`${workingCount} sessão(ões) executando`}
+                className="session-sidebar__count-badge session-sidebar__count-badge--waiting"
+                title={`${counts.waiting} ${counts.waiting === 1 ? "terminal aguardando" : "terminais aguardando"} sua resposta`}
               >
-                {workingCount}
+                {counts.waiting}
+              </span>
+            )}
+            {counts.working > 0 && (
+              <span
+                className="session-sidebar__count-badge session-sidebar__count-badge--working"
+                title={`${counts.working} ${counts.working === 1 ? "terminal executando" : "terminais executando"}`}
+              >
+                {counts.working}
               </span>
             )}
           </span>
@@ -534,7 +572,7 @@ export function SessionSidebar({
             isActive={session.id === activeSessionId}
             forceRename={renameSessionId === session.id}
             onSelect={() => setActiveSessionId(session.id)}
-            onSelectPane={(paneId) => focusSessionPane(session.id, paneId)}
+            onSelectPane={focusSessionPane}
             onRename={(title) => renameSession(session.id, title)}
             onRemove={() => void closeSessionWithWorktreeReview(session.id)}
             onRenameComplete={onRenameComplete}

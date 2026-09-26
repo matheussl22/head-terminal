@@ -3,6 +3,7 @@ import {
   AGENT_FALLBACK_OSC,
   AGENT_PROFILE_LABELS,
   AGENT_RESUME_FALLBACK_OSC,
+  CODEX_TITLE_OVERRIDE,
   GGUF_PATH_MAX,
   ORNITH_DEFAULT_GGUF,
   ORNITH_FLAGS,
@@ -13,6 +14,7 @@ import {
   QWEN27_HF_FILE,
   RESUME_FAILURE_WINDOW_SECONDS,
   sanitizeClaudeConfigDir,
+  sanitizeClaudeSettingsPath,
   sanitizeOllamaModel,
   sanitizeResumeSessionId,
   type AgentProfile,
@@ -87,13 +89,18 @@ function claudeWithFallbackArgs(
   continueConversation: boolean,
   resumeSessionId?: string,
   claudeConfigDir?: string,
+  claudeSettingsPath?: string,
 ): string[] {
   const id = sanitizeResumeSessionId(resumeSessionId);
+  // The status hooks ride on every launch, the fresh one a failed resume
+  // falls back to included, or that pane would lose its status.
+  const settingsPath = sanitizeClaudeSettingsPath(claudeSettingsPath);
+  const settings = settingsPath ? ` --settings ${shellSingleQuote(settingsPath)}` : "";
   const command = id
-    ? withResumeFallback(`claude --resume ${id}`, "claude")
+    ? withResumeFallback(`claude --resume ${id}${settings}`, `claude${settings}`)
     : continueConversation
-      ? "claude --continue"
-      : "claude";
+      ? `claude --continue${settings}`
+      : `claude${settings}`;
   // Exported from the `-c` script, so it runs after the login rc files and
   // survives the `exec zsh -l` fallback: the pane stays on its own account.
   const configDir = sanitizeClaudeConfigDir(claudeConfigDir);
@@ -108,8 +115,9 @@ function codexWithFallbackArgs(resumeSessionId?: string): string[] {
   // equivalent — always spawns fresh until that's verified. --resume <id>
   // is confirmed (`codex resume <id>`), so that path is wired regardless.
   const id = sanitizeResumeSessionId(resumeSessionId);
+  const codex = `codex ${CODEX_TITLE_OVERRIDE}`;
   return withShellFallback(
-    id ? withResumeFallback(`codex resume ${id}`, "codex") : "codex",
+    id ? withResumeFallback(`${codex} resume ${id}`, codex) : codex,
   );
 }
 
@@ -226,7 +234,12 @@ export function buildPosixAgentProfiles(
     cursor: profile("cursor", cursorWithFallbackArgs(continueConversation, resumeSessionId)),
     claude: profile(
       "claude",
-      claudeWithFallbackArgs(continueConversation, resumeSessionId, options.claudeConfigDir),
+      claudeWithFallbackArgs(
+        continueConversation,
+        resumeSessionId,
+        options.claudeConfigDir,
+        options.claudeSettingsPath,
+      ),
     ),
     codex: profile("codex", codexWithFallbackArgs(resumeSessionId)),
     ollama: profile("ollama", ollamaWithFallbackArgs(options.ollamaModel, options.ollamaThinkOff)),

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 import { IPC_CHANNELS } from "./ipc/channels";
 import type {
+  AgentHookEventPayload,
   GitChangedEvent,
   HeadTerminalApi,
   LiveDelegationProgress,
@@ -10,10 +11,64 @@ import type {
   Unsubscribe,
 } from "./types/api";
 
+type Delivery = (payload: unknown) => void;
+
+interface ChannelFanout {
+  listener: (event: Electron.IpcRendererEvent, payload: unknown) => void;
+  deliveries: Set<Delivery>;
+}
+
+const fanouts = new Map<string, ChannelFanout>();
+
+/**
+ * One ipcRenderer listener per channel, handing each event to every
+ * subscriber. Each pane subscribes to terminal:data and terminal:exit (a
+ * Claude pane to the hook events too), so with one listener apiece a grid of
+ * 11 panes tripped Node's MaxListenersExceededWarning — a leak warning for
+ * what is only a busy session.
+ */
 function subscribe<T>(channel: string, callback: (event: T) => void): Unsubscribe {
-  const listener = (_event: Electron.IpcRendererEvent, payload: T) => callback(payload);
-  ipcRenderer.on(channel, listener);
-  return () => ipcRenderer.removeListener(channel, listener);
+  let fanout = fanouts.get(channel);
+  if (!fanout) {
+    const deliveries = new Set<Delivery>();
+    const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+      let failure: { error: unknown } | null = null;
+      // Whoever subscribes while this event goes out waits for the next one;
+      // whoever leaves meanwhile no longer gets it.
+      for (const deliver of [...deliveries]) {
+        if (!deliveries.has(deliver)) {
+          continue;
+        }
+        try {
+          deliver(payload);
+        } catch (error) {
+          // One pane's failure must not keep the event from the others.
+          failure ??= { error };
+        }
+      }
+      if (failure) {
+        throw failure.error;
+      }
+    };
+    fanout = { listener, deliveries };
+    fanouts.set(channel, fanout);
+    ipcRenderer.on(channel, listener);
+  }
+
+  // A wrapper of its own: the same callback subscribed twice is two
+  // subscriptions, as it was with one ipcRenderer listener each.
+  const deliver: Delivery = (payload) => callback(payload as T);
+  const current = fanout;
+  current.deliveries.add(deliver);
+  return () => {
+    if (!current.deliveries.delete(deliver) || current.deliveries.size > 0) {
+      return;
+    }
+    ipcRenderer.removeListener(channel, current.listener);
+    if (fanouts.get(channel) === current) {
+      fanouts.delete(channel);
+    }
+  };
 }
 
 const api: HeadTerminalApi = {
@@ -131,6 +186,12 @@ const api: HeadTerminalApi = {
     show: (input) => ipcRenderer.invoke(IPC_CHANNELS.notifications.show, input),
     onActivated: (callback) =>
       subscribe(IPC_CHANNELS.notifications.activated, callback),
+  },
+  agentHooks: {
+    getClaudeSettings: (paneId) =>
+      ipcRenderer.invoke(IPC_CHANNELS.agentHooks.getClaudeSettings, paneId),
+    onEvent: (callback) =>
+      subscribe<AgentHookEventPayload>(IPC_CHANNELS.agentHooks.event, callback),
   },
   diagnostics: {
     appendEvent: (line) => ipcRenderer.send(IPC_CHANNELS.diagnostics.appendEvent, line),

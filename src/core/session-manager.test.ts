@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type AgentSession } from "../types/session";
 import { EMPTY_GIT_CONTEXT } from "../types/git-context";
@@ -7,7 +7,7 @@ import {
   findPaneNode,
   resolvePaneCwd,
 } from "./session-layout";
-import { createEmptySession, useSessionStore } from "./session-manager";
+import { createEmptySession, isPaneOnScreen, useSessionStore } from "./session-manager";
 
 function session(id: string, pinned = false): AgentSession {
   return createEmptySession({
@@ -595,6 +595,74 @@ describe("useSessionStore pane folders", () => {
     expect(findPaneNode(session.layout, second)?.worktree).toBeUndefined();
   });
 
+  /** Both panes on a conversation of their own, as after an app restart:
+   * --resume ids picked, anchors known. */
+  function anchorBoth(first: string, second: string) {
+    useSessionStore.setState({
+      restoredPaneIds: { [first]: true, [second]: true },
+      paneResumeSessionIds: { [first]: "conv-1", [second]: "conv-2" },
+      paneResumeAnchors: { [first]: "conv-1", [second]: "conv-2" },
+    });
+  }
+
+  function expectNewConversation(paneId: string) {
+    const state = useSessionStore.getState();
+    expect(state.paneResumeAnchors[paneId]).toBeUndefined();
+    expect(state.paneResumeSessionIds[paneId]).toBeUndefined();
+    expect(state.restoredPaneIds[paneId]).toBeUndefined();
+  }
+
+  function expectKeptConversation(paneId: string, conversation: string) {
+    const state = useSessionStore.getState();
+    expect(state.paneResumeAnchors[paneId]).toBe(conversation);
+    expect(state.paneResumeSessionIds[paneId]).toBe(conversation);
+    expect(state.restoredPaneIds[paneId]).toBe(true);
+  }
+
+  // Review store-hooks-ui-fixes#0: a pane moved to another folder restarted
+  // still anchored on the old folder's conversation — the header kept its
+  // name, the hook filter dropped the new conversation's events, and the
+  // restart (or the next app start) asked the CLI to --resume it where it
+  // does not exist.
+  it("starts a new conversation in a terminal's new folder, leaving the neighbour's alone", () => {
+    const { first, second } = withSplitSession();
+    anchorBoth(first, second);
+
+    // Same folder: nothing restarts, nothing is forgotten.
+    useSessionStore.getState().updatePaneCwd(second, "C:\\Users\\m\\default");
+    expectKeptConversation(second, "conv-2");
+
+    useSessionStore.getState().updatePaneCwd(second, "D:\\repo");
+    expectNewConversation(second);
+    expectKeptConversation(first, "conv-1");
+  });
+
+  it("starts a new conversation in the worktree a terminal moves into", () => {
+    const { first, second } = withSplitSession();
+    anchorBoth(first, second);
+
+    useSessionStore.getState().adoptPaneWorktree(second, worktree);
+
+    expectNewConversation(second);
+    expectKeptConversation(first, "conv-1");
+  });
+
+  it("starts new conversations only in the terminals the session's worktree moves", () => {
+    const { first, second } = withSplitSession();
+    useSessionStore.getState().adoptPaneWorktree(second, {
+      ...worktree,
+      path: "D:\\repo-agent-2",
+      branch: "agent-2",
+    });
+    anchorBoth(first, second);
+
+    useSessionStore.getState().adoptSessionWorktree("s", worktree);
+
+    expectNewConversation(first);
+    // It already had a tree of its own and stays there, conversation included.
+    expectKeptConversation(second, "conv-2");
+  });
+
   it("keeps the mark when the session is pointed back at its own worktree", () => {
     withSplitSession();
     useSessionStore.getState().adoptSessionWorktree("s", worktree);
@@ -758,22 +826,34 @@ describe("useSessionStore minimized panes", () => {
     expect(useSessionStore.getState().minimizedPanes).toBe(minimized);
   });
 
-  it("remembers when a minimized agent stops working, until it works again", () => {
+  it("remembers when a minimized agent finishes a turn, until it works again or comes back", () => {
     const { second } = withSplitSession();
     const { updatePaneActivity } = useSessionStore.getState();
+    useSessionStore.getState().setActivePaneId(second);
     updatePaneActivity(second, "working");
     useSessionStore.getState().minimizePane(second);
-    expect(useSessionStore.getState().minimizedPanes[second].finishedAt).toBeUndefined();
-
-    updatePaneActivity(second, "waiting_input");
-    const finishedAt = useSessionStore.getState().minimizedPanes[second].finishedAt;
-    expect(finishedAt).toBeTypeOf("number");
+    expect(useSessionStore.getState().paneRuntime[second].doneAt).toBeUndefined();
 
     updatePaneActivity(second, "idle");
-    expect(useSessionStore.getState().minimizedPanes[second].finishedAt).toBe(finishedAt);
+    const doneAt = useSessionStore.getState().paneRuntime[second].doneAt;
+    expect(doneAt).toBeTypeOf("number");
 
     updatePaneActivity(second, "working");
-    expect(useSessionStore.getState().minimizedPanes[second].finishedAt).toBeUndefined();
+    expect(useSessionStore.getState().paneRuntime[second].doneAt).toBeUndefined();
+
+    updatePaneActivity(second, "idle");
+    expect(useSessionStore.getState().paneRuntime[second].doneAt).toBeTypeOf("number");
+    useSessionStore.getState().restorePane(second);
+    expect(useSessionStore.getState().paneRuntime[second].doneAt).toBeUndefined();
+  });
+
+  it("does not call a blocked agent finished", () => {
+    const { second } = withSplitSession();
+    useSessionStore.getState().minimizePane(second);
+    useSessionStore.getState().updatePaneActivity(second, "working");
+    useSessionStore.getState().updatePaneActivity(second, "waiting_input", { reason: "approval" });
+
+    expect(useSessionStore.getState().paneRuntime[second].doneAt).toBeUndefined();
   });
 
   it("does not track anything for panes on screen", () => {
@@ -860,13 +940,430 @@ describe("useSessionStore minimized panes", () => {
     expect(useSessionStore.getState().minimizedPanes[only]).toBeDefined();
   });
 
-  it("tracks an approval prompt per pane and clears it on restart", () => {
+  it("tracks what a pane is blocked on and clears it on restart", () => {
     const { second } = withSplitSession();
-    useSessionStore.getState().updatePaneApproval(second, true);
-    expect(useSessionStore.getState().paneRuntime[second].awaitingApproval).toBe(true);
+    useSessionStore
+      .getState()
+      .updatePaneActivity(second, "waiting_input", { reason: "approval", detail: "Bash" });
+    expect(useSessionStore.getState().paneRuntime[second]).toMatchObject({
+      activity: "waiting_input",
+      blockedReason: "approval",
+      blockedDetail: "Bash",
+    });
 
     useSessionStore.getState().restartPane(second);
 
-    expect(useSessionStore.getState().paneRuntime[second].awaitingApproval).toBe(false);
+    const runtime = useSessionStore.getState().paneRuntime[second];
+    expect(runtime.activity).toBe("starting");
+    expect(runtime.blockedReason).toBeUndefined();
+    expect(runtime.blockedDetail).toBeUndefined();
+  });
+});
+
+describe("useSessionStore pane status", () => {
+  beforeEach(() => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  function withSplitSession(sessionId = "s") {
+    const created = session(sessionId);
+    useSessionStore.getState().addSession(created);
+    const [first] = collectPaneIds(created.layout);
+    useSessionStore.getState().setActivePaneId(first);
+    useSessionStore.getState().splitActivePane("vertical");
+    const stored = useSessionStore
+      .getState()
+      .sessions.find((item) => item.id === sessionId)!;
+    const [, second] = collectPaneIds(stored.layout);
+    return { sessionId, first, second };
+  }
+
+  function finishTurn(paneId: string) {
+    useSessionStore.getState().updatePaneActivity(paneId, "working");
+    useSessionStore.getState().updatePaneActivity(paneId, "idle");
+    return useSessionStore.getState().paneRuntime[paneId];
+  }
+
+  it("marks a turn that ended in a pane nobody looks at as done, until it is focused", () => {
+    const { second } = withSplitSession();
+
+    expect(finishTurn(second).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().setActivePaneId(second);
+    expect(useSessionStore.getState().paneRuntime[second].doneAt).toBeUndefined();
+  });
+
+  it("does not mark a turn the user watched end", () => {
+    const { first } = withSplitSession();
+    expect(finishTurn(first).doneAt).toBeUndefined();
+  });
+
+  it("counts a window in the background as nobody watching", () => {
+    const { first } = withSplitSession();
+    vi.stubGlobal("document", { visibilityState: "visible", hasFocus: () => false });
+
+    expect(finishTurn(first).doneAt).toBeTypeOf("number");
+
+    // Typing into the pane is looking at it.
+    useSessionStore.getState().markPaneSeen(first);
+    expect(useSessionStore.getState().paneRuntime[first].doneAt).toBeUndefined();
+  });
+
+  it("counts a pane hidden by a zoomed sibling as unwatched", () => {
+    const { first, second } = withSplitSession();
+    useSessionStore.getState().toggleMaximizedPane(second);
+    expect(finishTurn(first).doneAt).toBeTypeOf("number");
+  });
+
+  it("marks the pane that gets the keyboard as seen when switching sessions", () => {
+    const { sessionId, first } = withSplitSession();
+    useSessionStore.getState().addSession(session("other"));
+    expect(finishTurn(first).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().setActiveSessionId(sessionId);
+
+    expect(useSessionStore.getState().activePaneId).toBe(first);
+    expect(useSessionStore.getState().paneRuntime[first].doneAt).toBeUndefined();
+  });
+
+  it("drops done as soon as the pane does anything else", () => {
+    const { second } = withSplitSession();
+    finishTurn(second);
+    useSessionStore
+      .getState()
+      .updatePaneActivity(second, "waiting_input", { reason: "question" });
+    expect(useSessionStore.getState().paneRuntime[second].doneAt).toBeUndefined();
+  });
+
+  it("refines a block without restarting its clock, and forgets it when it ends", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const { second } = withSplitSession();
+    const { updatePaneActivity } = useSessionStore.getState();
+
+    updatePaneActivity(second, "waiting_input", { reason: "approval" });
+    vi.setSystemTime(1_200);
+    updatePaneActivity(second, "waiting_input", { reason: "question" });
+    expect(useSessionStore.getState().paneRuntime[second]).toMatchObject({
+      blockedReason: "question",
+      activitySince: 1_000,
+    });
+
+    updatePaneActivity(second, "working");
+    expect(useSessionStore.getState().paneRuntime[second].blockedReason).toBeUndefined();
+  });
+
+  it("keeps the agent's exit code with the fallback shell only", () => {
+    const { second } = withSplitSession();
+    const { updatePaneActivity } = useSessionStore.getState();
+    updatePaneActivity(second, "agent_fallback", undefined, { agentExitCode: 0 });
+    expect(useSessionStore.getState().paneRuntime[second].agentExitCode).toBe(0);
+
+    updatePaneActivity(second, "idle");
+    expect(useSessionStore.getState().paneRuntime[second].agentExitCode).toBeUndefined();
+  });
+
+  it("clears everything the old process left when the pane restarts", () => {
+    const { second } = withSplitSession();
+    finishTurn(second);
+    useSessionStore.getState().restartPane(second);
+
+    const runtime = useSessionStore.getState().paneRuntime[second];
+    expect(runtime.activity).toBe("starting");
+    expect(runtime.doneAt).toBeUndefined();
+  });
+
+  it("does not touch the store for a pane seen with nothing to clear", () => {
+    const { first } = withSplitSession();
+    const before = useSessionStore.getState().paneRuntime;
+    useSessionStore.getState().markPaneSeen(first);
+    expect(useSessionStore.getState().paneRuntime).toBe(before);
+  });
+});
+
+describe("useSessionStore reads \"Concluído\" only off a pane on screen", () => {
+  beforeEach(() => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function withSplitSession(sessionId = "s") {
+    const created = session(sessionId);
+    useSessionStore.getState().addSession(created);
+    const [first] = collectPaneIds(created.layout);
+    useSessionStore.getState().setActivePaneId(first);
+    useSessionStore.getState().splitActivePane("vertical");
+    const stored = useSessionStore
+      .getState()
+      .sessions.find((item) => item.id === sessionId)!;
+    const [, second] = collectPaneIds(stored.layout);
+    return { sessionId, first, second };
+  }
+
+  function withThreePanes(sessionId = "three") {
+    const created = session(sessionId);
+    useSessionStore.getState().addSession(created);
+    const [a] = collectPaneIds(created.layout);
+    useSessionStore.getState().setActivePaneId(a);
+    useSessionStore.getState().splitActivePane("vertical");
+    useSessionStore.getState().splitActivePane("horizontal");
+    const [, b, c] = collectPaneIds(
+      useSessionStore.getState().sessions.find((item) => item.id === sessionId)!.layout,
+    );
+    return { a, b, c };
+  }
+
+  function finishTurn(paneId: string) {
+    useSessionStore.getState().updatePaneActivity(paneId, "working");
+    useSessionStore.getState().updatePaneActivity(paneId, "idle");
+    return useSessionStore.getState().paneRuntime[paneId];
+  }
+
+  function doneAt(paneId: string) {
+    return useSessionStore.getState().paneRuntime[paneId]?.doneAt;
+  }
+
+  it("tells a pane on the canvas from one in the dock or parked behind a zoom", () => {
+    const { first, second } = withSplitSession();
+    expect(isPaneOnScreen(useSessionStore.getState(), first)).toBe(true);
+
+    useSessionStore.getState().toggleMaximizedPane(second);
+    expect(isPaneOnScreen(useSessionStore.getState(), first)).toBe(false);
+    expect(isPaneOnScreen(useSessionStore.getState(), second)).toBe(true);
+
+    useSessionStore.getState().toggleMaximizedPane(second);
+    useSessionStore.getState().minimizePane(first);
+    expect(isPaneOnScreen(useSessionStore.getState(), first)).toBe(false);
+    expect(isPaneOnScreen(useSessionStore.getState(), "missing")).toBe(false);
+  });
+
+  // Review store-ui-semantics#1, harness F2.
+  it("keeps it on a minimized pane when its session is picked with every pane in the dock", () => {
+    const { sessionId, first, second } = withSplitSession();
+    useSessionStore.getState().minimizePane(first);
+    useSessionStore.getState().minimizePane(second);
+    useSessionStore.getState().addSession(session("other"));
+    expect(finishTurn(first).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().setActiveSessionId(sessionId);
+
+    expect(useSessionStore.getState().activePaneId).toBe(first);
+    expect(doneAt(first)).toBeTypeOf("number");
+  });
+
+  // Review store-ui-semantics#1, harness F2b.
+  it("hands the keyboard to the zoomed pane and keeps it on the one parked behind", () => {
+    const { sessionId, first, second } = withSplitSession();
+    useSessionStore.getState().toggleMaximizedPane(second);
+    useSessionStore.getState().addSession(session("other"));
+    expect(finishTurn(first).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().setActiveSessionId(sessionId);
+
+    expect(useSessionStore.getState().activePaneId).toBe(second);
+    expect(useSessionStore.getState().maximizedPaneIds[sessionId]).toBe(second);
+    expect(doneAt(first)).toBeTypeOf("number");
+  });
+
+  it("moves the keyboard off a pane a zoomed sibling hides when its session is picked again", () => {
+    const { sessionId, first, second } = withSplitSession();
+    useSessionStore.getState().setActivePaneId(second);
+    useSessionStore.getState().toggleMaximizedPane(first);
+
+    useSessionStore.getState().setActiveSessionId(sessionId);
+
+    expect(useSessionStore.getState().activePaneId).toBe(first);
+    expect(useSessionStore.getState().maximizedPaneIds[sessionId]).toBe(first);
+  });
+
+  // Review store-ui-semantics#1: coming back to the window.
+  it("reads it off the focused pane when the window comes back, only if the pane is on screen", () => {
+    const { first, second } = withSplitSession();
+    vi.stubGlobal("document", { visibilityState: "visible", hasFocus: () => false });
+    expect(finishTurn(first).doneAt).toBeTypeOf("number");
+
+    // Still in the background: nothing read.
+    useSessionStore.getState().markActivePaneSeen();
+    expect(doneAt(first)).toBeTypeOf("number");
+
+    vi.stubGlobal("document", { visibilityState: "visible", hasFocus: () => true });
+    useSessionStore.getState().markActivePaneSeen();
+    expect(doneAt(first)).toBeUndefined();
+
+    // Every pane in the dock: the last one minimized stays the active one,
+    // out of sight, and keeps its "Terminou" when the window comes back.
+    useSessionStore.getState().minimizePane(second);
+    useSessionStore.getState().minimizePane(first);
+    expect(useSessionStore.getState().activePaneId).toBe(first);
+    vi.stubGlobal("document", { visibilityState: "visible", hasFocus: () => false });
+    expect(finishTurn(first).doneAt).toBeTypeOf("number");
+    vi.stubGlobal("document", { visibilityState: "visible", hasFocus: () => true });
+    useSessionStore.getState().markActivePaneSeen();
+    expect(doneAt(first)).toBeTypeOf("number");
+  });
+
+  it("keeps it on the focused pane when a zoomed sibling hides it from the returning window", () => {
+    const { first, second } = withSplitSession();
+    useSessionStore.getState().toggleMaximizedPane(second);
+    expect(useSessionStore.getState().activePaneId).toBe(first);
+    expect(finishTurn(first).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().markActivePaneSeen();
+
+    expect(doneAt(first)).toBeTypeOf("number");
+  });
+
+  it("still reads it on user input and on restore, wherever the pane is", () => {
+    const { first, second } = withSplitSession();
+    useSessionStore.getState().minimizePane(second);
+    expect(finishTurn(second).doneAt).toBeTypeOf("number");
+    useSessionStore.getState().markPaneSeen(second);
+    expect(doneAt(second)).toBeUndefined();
+
+    expect(finishTurn(second).doneAt).toBeTypeOf("number");
+    useSessionStore.getState().restorePane(second);
+    expect(doneAt(second)).toBeUndefined();
+    expect(doneAt(first)).toBeUndefined();
+  });
+
+  // Review store-ui-semantics#2, harness J1.
+  it("drops a sibling's zoom when a parked pane is activated, and reads it once shown", () => {
+    const { sessionId, first, second } = withSplitSession();
+    useSessionStore.getState().toggleMaximizedPane(first);
+    expect(finishTurn(second).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().setActivePaneId(second);
+
+    const state = useSessionStore.getState();
+    expect(state.activePaneId).toBe(second);
+    expect(state.maximizedPaneIds[sessionId]).toBeUndefined();
+    expect(doneAt(second)).toBeUndefined();
+  });
+
+  it("keeps the zoom, and the news, when a minimized pane is merely activated", () => {
+    const { b: zoomed, c: minimized } = withThreePanes();
+    useSessionStore.getState().minimizePane(minimized);
+    useSessionStore.getState().toggleMaximizedPane(zoomed);
+    expect(finishTurn(minimized).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().setActivePaneId(minimized);
+
+    expect(useSessionStore.getState().maximizedPaneIds.three).toBe(zoomed);
+    expect(doneAt(minimized)).toBeTypeOf("number");
+  });
+
+  // Review store-ui-semantics#5, harness F4.
+  it("reads it off the pane that inherits the keyboard from a minimized one", () => {
+    const { first, second } = withSplitSession();
+    expect(finishTurn(second).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().minimizePane(first);
+
+    expect(useSessionStore.getState().activePaneId).toBe(second);
+    expect(doneAt(second)).toBeUndefined();
+  });
+
+  it("hands the keyboard to the zoomed pane when the focused one is minimized", () => {
+    const { a, b: zoomed } = withThreePanes();
+    useSessionStore.getState().toggleMaximizedPane(zoomed);
+    expect(useSessionStore.getState().activePaneId).toBe(a);
+
+    useSessionStore.getState().minimizePane(a);
+
+    expect(useSessionStore.getState().activePaneId).toBe(zoomed);
+    expect(useSessionStore.getState().maximizedPaneIds.three).toBe(zoomed);
+  });
+
+  it("reads it off the pane that inherits the keyboard from a closed one", () => {
+    const { first, second } = withSplitSession();
+    expect(finishTurn(second).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().closePane(first);
+
+    expect(useSessionStore.getState().activePaneId).toBe(second);
+    expect(doneAt(second)).toBeUndefined();
+  });
+
+  it("leaves a sibling's news alone when the closed pane did not have the keyboard", () => {
+    const { a, b, c } = withThreePanes();
+    expect(finishTurn(b).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().closePane(c);
+
+    expect(useSessionStore.getState().activePaneId).toBe(a);
+    expect(doneAt(b)).toBeTypeOf("number");
+  });
+
+  it("reads it off the pane of the session that takes the screen when one is closed", () => {
+    const { first: other } = withSplitSession("next");
+    const { sessionId } = withSplitSession("closing");
+    expect(finishTurn(other).doneAt).toBeTypeOf("number");
+
+    useSessionStore.getState().removeSession(sessionId);
+
+    expect(useSessionStore.getState().activeSessionId).toBe("next");
+    expect(useSessionStore.getState().activePaneId).toBe(other);
+    expect(doneAt(other)).toBeUndefined();
+  });
+});
+
+describe("useSessionStore closing the active session", () => {
+  beforeEach(() => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    useSessionStore.setState(useSessionStore.getInitialState(), true);
+  });
+
+  // Review store-ui-semantics#8, harness R1: after an app restart only the
+  // active session had spawned, and the next one came up as an empty canvas
+  // labelled "Não iniciada".
+  it("starts the session that takes the screen", () => {
+    const a = session("A");
+    const b = session("B");
+    useSessionStore.getState().hydrateWorkspace([a, b], "A", collectPaneIds(a.layout)[0]);
+    expect(useSessionStore.getState().spawnedSessionIds.B).toBeUndefined();
+
+    useSessionStore.getState().removeSession("A");
+
+    const state = useSessionStore.getState();
+    expect(state.activeSessionId).toBe("B");
+    expect(state.activePaneId).toBe(collectPaneIds(b.layout)[0]);
+    expect(state.spawnedSessionIds).toEqual({ B: true });
+  });
+
+  it("does not start anything when a background session is closed", () => {
+    const a = session("A");
+    const b = session("B");
+    const c = session("C");
+    useSessionStore.getState().hydrateWorkspace([a, b, c], "A", collectPaneIds(a.layout)[0]);
+
+    useSessionStore.getState().removeSession("B");
+
+    expect(useSessionStore.getState().activeSessionId).toBe("A");
+    expect(useSessionStore.getState().spawnedSessionIds).toEqual({ A: true });
   });
 });

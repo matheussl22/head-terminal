@@ -11,9 +11,11 @@ import {
 import type {
   AgentCliInstallResult,
   AgentCliStatus,
+  AgentHookEventPayload,
   AllowedSecretKey,
   BrainstormAgent,
   CheckpointInput,
+  ClaudeHookSettings,
   ConfirmInput,
   GitChangedEvent,
   GitContextPayload,
@@ -28,6 +30,7 @@ import type {
   McpServersPayload,
   MigratedPreferences,
   NotificationInput,
+  NotificationTarget,
   PersistedWorkspace,
   PlatformInfo,
   PtyDataEvent,
@@ -53,6 +56,7 @@ import {
   WSL_DISTRO,
   WSL_SHELL_COMMAND,
 } from "../../src/config/agents-shared";
+import { AGENT_HOOK_PANE_ENV, AGENT_HOOK_PANE_ID } from "../../src/types/agent-hooks";
 import { unsupported } from "./errors";
 import {
   asBoolean,
@@ -161,6 +165,10 @@ export interface IpcServices {
     readForTerminal(): Promise<string | null>;
     importPaths(paths: unknown): Promise<string | null>;
     saveImageFromClipboard(): Promise<string | null>;
+  };
+  agentHooks?: {
+    getClaudeSettings(paneId: string): Promise<ClaudeHookSettings | null>;
+    onEvent(listener: (payload: AgentHookEventPayload) => void): () => void;
   };
 }
 
@@ -475,15 +483,35 @@ export function registerIpc({
     if (!Notification.isSupported()) return;
     const notification = new Notification(input);
     notification.on("click", () => {
+      // The pane first, the window after: the renderer reads the pane it has
+      // focused as seen as soon as the window comes back, and that must be
+      // the pane the notification is about, not whichever one was active.
+      if (input.sessionId) {
+        const target: NotificationTarget = input.paneId
+          ? { sessionId: input.sessionId, paneId: input.paneId }
+          : { sessionId: input.sessionId };
+        send(IPC_CHANNELS.notifications.activated, target);
+      }
       if (window.isMinimized()) window.restore();
       window.show();
       window.focus();
-      if (input.sessionId) {
-        send(IPC_CHANNELS.notifications.activated, input.sessionId);
-      }
     });
     notification.show();
   });
+
+  // No hook server means no hooks: the pane runs on its title and screen,
+  // which is a supported mode, not an error. The pane id names a file and is
+  // written into it as a header, so only the shape the renderer mints gets
+  // through; an odd one (a pane restored from an old workspace) costs the
+  // pane its hooks, not its spawn.
+  handle(IPC_CHANNELS.agentHooks.getClaudeSettings, (_event, value) => {
+    const paneId = asString(value, "paneId", { maxLength: 256 });
+    if (!AGENT_HOOK_PANE_ID.test(paneId)) return null;
+    return services.agentHooks?.getClaudeSettings(paneId) ?? null;
+  });
+  const unsubscribeAgentHooks = services.agentHooks?.onEvent((payload) =>
+    send(IPC_CHANNELS.agentHooks.event, payload),
+  );
 
   on(IPC_CHANNELS.diagnostics.appendEvent, (_event, value) => {
     void services.diagnostics?.appendEvent(
@@ -565,6 +593,7 @@ export function registerIpc({
     // the app keeps running after its window closes, so a leak here would be
     // a shell per closed window until quit.
     if (window.webContents.isDestroyed()) cleanupOwner();
+    unsubscribeAgentHooks?.();
     registeredHandles.forEach((channel) => ipcMain.removeHandler(channel));
     registeredListeners.forEach(([channel, listener]) =>
       ipcMain.removeListener(channel, listener),
@@ -671,9 +700,18 @@ function validateSpawnInput(value: unknown): SpawnPtyInput {
     "TERM",
     "COLORTERM",
     "CLAUDE_CONFIG_DIR",
+    AGENT_HOOK_PANE_ENV,
   ]);
   if (env && Object.keys(env).some((key) => !allowedEnv.has(key))) {
     throw new TypeError("env contains a variable that is not allowed");
+  }
+  // The pane id is exported to the pane for tools that want it; the hooks
+  // route by the id in the pane's settings file, not by this. Only the shape
+  // the renderer mints gets through, and an odd one (a pane restored from an
+  // old workspace) is dropped rather than failing the spawn.
+  const paneId = env?.[AGENT_HOOK_PANE_ENV];
+  if (env && paneId !== undefined && !AGENT_HOOK_PANE_ID.test(paneId)) {
+    delete env[AGENT_HOOK_PANE_ENV];
   }
   return {
     id: asString(input.id, "id", { maxLength: 256 }),
@@ -869,6 +907,10 @@ function validateNotificationInput(value: unknown): NotificationInput {
       input.sessionId === undefined
         ? undefined
         : asString(input.sessionId, "sessionId", { maxLength: 256 }),
+    paneId:
+      input.paneId === undefined
+        ? undefined
+        : asString(input.paneId, "paneId", { maxLength: 256 }),
     silent: input.silent === undefined ? undefined : asBoolean(input.silent, "silent"),
   };
 }

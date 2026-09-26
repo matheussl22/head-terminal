@@ -38,7 +38,8 @@
   gap: 6px;
 }
 
-.session-sidebar__working-badge {
+/* Terminals waiting on the user (blue, first) and working (green). */
+.session-sidebar__count-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -46,11 +47,20 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: var(--status-working-subtle);
-  color: var(--status-working);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0;
+}
+
+.session-sidebar__count-badge--working {
+  background: var(--status-working-subtle);
+  color: var(--status-working);
+}
+
+.session-sidebar__count-badge--waiting {
+  background: var(--status-waiting-strong);
+  color: var(--status-waiting);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--status-waiting) 45%, transparent);
 }
 
 .session-sidebar--collapsed .session-sidebar__header {
@@ -268,16 +278,28 @@
   animation: status-pulse 1.6s ease-in-out infinite;
 }
 
-.session-sidebar__compact-item--ring-waiting_input {
+/* Waiting: the ring plus a halo, the one that must be seen from across the
+   screen. */
+.session-sidebar__compact-item--ring-waiting {
   border-color: var(--status-waiting);
+  box-shadow: 0 0 0 3px var(--status-waiting-halo);
+}
+
+.session-sidebar__compact-item--ring-done {
+  border-color: var(--status-done);
 }
 
 .session-sidebar__compact-item--ring-error {
   border-color: var(--status-error);
 }
 
-.session-sidebar__compact-item--ring-agent_fallback {
+.session-sidebar__compact-item--ring-fallback {
   border-color: var(--status-fallback);
+}
+
+.session-sidebar__compact-item--dormant {
+  border-style: dashed;
+  color: var(--text-muted);
 }
 
 .session-sidebar__compact-new:hover,
@@ -329,9 +351,12 @@
   line-height: 1;
 }
 
+/* The title keeps a readable stub; the account chip next to it gives way
+   first (it used to be the other way round: "10 co…" beside a full
+   "Conta padrão"). */
 .session-sidebar__title {
-  flex: 1;
-  min-width: 0;
+  flex: 1 1 auto;
+  min-width: 56px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -354,6 +379,8 @@
 }
 
 .session-sidebar__account-chip {
+  flex: 0 4 auto;
+  min-width: 0;
   max-width: 92px;
   overflow: hidden;
   padding: 1px 6px;
@@ -442,80 +469,150 @@
 }
 
 
+/* Status line under the title: one pane-dot per terminal, then "Aguardando
+   há 2m · 1 aguardando · 3 executando". It may run under the corner the
+   rename/close buttons use — those sit on the title row — and it ends in an
+   ellipsis instead of being cut mid-word. */
 .session-sidebar__status {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  margin-right: -49px;
   font-size: var(--font-xs);
   color: var(--text-muted);
-  overflow: hidden;
   white-space: nowrap;
 }
 
-.session-sidebar__status--working {
+.session-sidebar__status-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-sidebar__status--working .session-sidebar__status-label {
   color: var(--status-working);
 }
 
-.session-sidebar__status--waiting_input {
+.session-sidebar__status--waiting .session-sidebar__status-label {
   color: var(--status-waiting);
+  font-weight: 600;
 }
 
-.session-sidebar__status--error {
+.session-sidebar__status--done .session-sidebar__status-label {
+  color: var(--status-done);
+}
+
+.session-sidebar__status--error .session-sidebar__status-label {
   color: var(--status-error);
 }
 
-.session-sidebar__status--agent_fallback {
+.session-sidebar__status--fallback .session-sidebar__status-label {
   color: var(--status-fallback);
 }
 
+.session-sidebar__status--dormant .session-sidebar__status-label {
+  font-style: italic;
+}
+
+.session-sidebar__status-summary {
+  color: var(--text-muted);
+}
+
+/* One mark per terminal. Shape follows the tone like the status glyph:
+   what needs the user is taller (waiting, done, error, agent down), work
+   pulses, idle and exited are hollow, a session never started is dashed. */
 .session-sidebar__pane-dots {
   display: inline-flex;
   align-items: center;
   gap: 3px;
   flex: 0 0 auto;
+  height: 10px;
 }
 
 .session-sidebar__pane-dot {
+  --dot: var(--border-strong);
   width: 10px;
   height: 6px;
   padding: 0;
   border: 0;
   border-radius: 2px;
+  background: var(--dot);
+  box-sizing: border-box;
   cursor: pointer;
 }
 
-.session-sidebar__pane-dot--starting,
+/* Many terminals: the marks get thinner instead of overflowing the card. */
+.session-sidebar__pane-dots--dense {
+  gap: 2px;
+}
+
+.session-sidebar__pane-dots--dense .session-sidebar__pane-dot {
+  width: 6px;
+}
+
+.session-sidebar__pane-dots--crowded {
+  gap: 1px;
+}
+
+.session-sidebar__pane-dots--crowded .session-sidebar__pane-dot {
+  width: 4px;
+  border-radius: 1px;
+}
+
 .session-sidebar__pane-dot--idle {
-  background: var(--border-strong);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--status-idle);
+}
+
+.session-sidebar__pane-dot--starting {
+  opacity: 0.6;
 }
 
 .session-sidebar__pane-dot--working {
-  background: var(--status-working);
+  --dot: var(--status-working);
   animation: status-pulse 1.6s ease-in-out infinite;
 }
 
-.session-sidebar__pane-dot--waiting_input {
-  background: var(--status-waiting);
+.session-sidebar__pane-dot--waiting,
+.session-sidebar__pane-dot--done,
+.session-sidebar__pane-dot--error,
+.session-sidebar__pane-dot--fallback {
+  height: 10px;
+}
+
+.session-sidebar__pane-dot--waiting {
+  --dot: var(--status-waiting);
+  box-shadow: 0 0 0 1.5px var(--status-waiting-halo);
+}
+
+.session-sidebar__pane-dot--done {
+  --dot: var(--status-done);
 }
 
 .session-sidebar__pane-dot--error {
-  background: var(--status-error);
+  --dot: var(--status-error);
 }
 
-.session-sidebar__pane-dot--agent_fallback {
-  background: var(--status-fallback);
+.session-sidebar__pane-dot--fallback {
+  --dot: var(--status-fallback);
 }
 
 .session-sidebar__pane-dot--exited {
   background: transparent;
-  box-sizing: border-box;
-  border: 1.5px solid var(--status-exited);
+  border: 1px solid var(--status-exited);
+}
+
+.session-sidebar__pane-dot--dormant {
+  background: transparent;
+  border: 1px dashed var(--status-exited);
 }
 
 /* Minimized terminal: same color, tucked down like a window in a dock. */
 .session-sidebar__pane-dot--minimized {
   height: 3px;
-  margin-top: 3px;
+  align-self: flex-end;
 }
 
 /* Context menu (right-click on a session) */

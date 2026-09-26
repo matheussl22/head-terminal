@@ -3,6 +3,7 @@ import {
   AGENT_FALLBACK_OSC,
   AGENT_PROFILE_LABELS,
   AGENT_RESUME_FALLBACK_OSC,
+  CODEX_TITLE_OVERRIDE,
   GGUF_PATH_MAX,
   ORNITH_DEFAULT_GGUF,
   ORNITH_FLAGS,
@@ -15,6 +16,7 @@ import {
   WINDOWS_SHELL_COMMAND,
   WSL_SHELL_COMMAND,
   sanitizeClaudeConfigDir,
+  sanitizeClaudeSettingsPath,
   sanitizeOllamaModel,
   sanitizeResumeSessionId,
   sanitizeWslDistro,
@@ -122,13 +124,18 @@ function claudeArgs(
   continueConversation: boolean,
   resumeSessionId?: string,
   claudeConfigDir?: string,
+  claudeSettingsPath?: string,
 ): string[] {
   const id = sanitizeResumeSessionId(resumeSessionId);
+  // The status hooks ride on every launch, the fresh one a failed resume
+  // falls back to included, or that pane would lose its status.
+  const settingsPath = sanitizeClaudeSettingsPath(claudeSettingsPath);
+  const settings = settingsPath ? ` --settings ${psQuote(settingsPath)}` : "";
   const command = id
-    ? withResumeFallback(`claude --resume ${id}`, "claude")
+    ? withResumeFallback(`claude --resume ${id}${settings}`, `claude${settings}`)
     : continueConversation
-      ? "claude --continue"
-      : "claude";
+      ? `claude --continue${settings}`
+      : `claude${settings}`;
   // Set in the script — i.e. after `$PROFILE` — and left set, so a `claude`
   // typed on the fallback shell later still lands on the pane's account.
   const configDir = sanitizeClaudeConfigDir(claudeConfigDir);
@@ -150,7 +157,8 @@ function cursorArgs(continueConversation: boolean, resumeSessionId?: string): st
 
 function codexArgs(resumeSessionId?: string): string[] {
   const id = sanitizeResumeSessionId(resumeSessionId);
-  const command = id ? withResumeFallback(`codex resume ${id}`, "codex") : "codex";
+  const codex = `codex ${CODEX_TITLE_OVERRIDE}`;
+  const command = id ? withResumeFallback(`${codex} resume ${id}`, codex) : codex;
   return withShellFallback(whenInstalled("codex", command, CODEX_HINT));
 }
 
@@ -280,7 +288,12 @@ export function buildWindowsAgentProfiles(
     cursor: profile("cursor", cursorArgs(continueConversation, resumeSessionId)),
     claude: profile(
       "claude",
-      claudeArgs(continueConversation, resumeSessionId, options.claudeConfigDir),
+      claudeArgs(
+        continueConversation,
+        resumeSessionId,
+        options.claudeConfigDir,
+        options.claudeSettingsPath,
+      ),
     ),
     codex: profile("codex", codexArgs(resumeSessionId)),
     ollama: profile("ollama", ollamaArgs(options.ollamaModel, options.ollamaThinkOff)),

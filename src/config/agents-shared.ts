@@ -29,6 +29,10 @@ export interface AgentProfileOptions {
    * the user's shell profile ran, so a `$PROFILE` / `.zshrc` that exports its
    * own value cannot silently move the pane onto another account. */
   claudeConfigDir?: string;
+  /** `--settings` file with the status hooks the app injects into every
+   * Claude pane (see electron/services/agent-hook-server.ts). Absent: the
+   * pane runs without them and its status comes from title/screen only. */
+  claudeSettingsPath?: string;
   /** Windows only: the `shell` profile opens this WSL distribution instead
    * of PowerShell. Ignored by every other profile and on Linux/macOS. */
   wslDistro?: string;
@@ -42,6 +46,23 @@ export function sanitizeClaudeConfigDir(dir?: string): string | undefined {
     ? trimmed
     : undefined;
 }
+
+/** Same rules as the config dir: the settings file is a path the pane's shell
+ * will single-quote onto Claude's command line. */
+export function sanitizeClaudeSettingsPath(settingsPath?: string): string | undefined {
+  return sanitizeClaudeConfigDir(settingsPath);
+}
+
+/**
+ * Codex's terminal title is where it says what it is doing: `⠋ Working`,
+ * `⠙ Starting`, `[ ! ] Action Required`, `Ready`. The default title already
+ * carries the spinner and "Action Required", but a user config can reorder or
+ * drop them (and `tui.animations = false` stops the spinner), so every pane
+ * pins a title the status can read. One spelling fits both shells: a
+ * double-quoted word with nothing PowerShell or zsh would expand, handed to
+ * codex as a single argv entry that it parses as TOML.
+ */
+export const CODEX_TITLE_OVERRIDE = `-c "tui.terminal_title=['activity','run-state']"`;
 
 export const DEFAULT_AGENT_PROFILE_ID = "cursor";
 

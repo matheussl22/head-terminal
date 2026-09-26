@@ -8,9 +8,13 @@ import {
   Bot,
   Check,
   Cpu,
+  Ellipsis,
   Folder,
+  FolderOpen,
   GitBranch,
+  Grid2x2,
   HardDrive,
+  History,
   LockKeyhole,
   Maximize2,
   MemoryStick,
@@ -22,6 +26,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Settings2,
   SlidersHorizontal,
   SquareSplitHorizontal,
@@ -117,6 +122,29 @@ export function IconRefresh({ className, size = 14 }: IconProps) {
 
 export function IconChevronDown({ className, size = 14 }: IconProps) {
   return <ChevronDown className={className} size={size} aria-hidden />;
+}
+
+/** The pane header's overflow menu: whatever doesn't fit inline. */
+export function IconMore({ className, size = 14 }: IconProps) {
+  return <Ellipsis className={className} size={size} aria-hidden />;
+}
+
+export function IconHistory({ className, size = 14 }: IconProps) {
+  return <History className={className} size={size} aria-hidden />;
+}
+
+export function IconFolderOpen({ className, size = 14 }: IconProps) {
+  return <FolderOpen className={className} size={size} aria-hidden />;
+}
+
+/** Restart that picks the conversation back up (vs. IconRefresh: a new one). */
+export function IconRestartContinue({ className, size = 14 }: IconProps) {
+  return <RotateCcw className={className} size={size} aria-hidden />;
+}
+
+/** Give every terminal of the session the same room. */
+export function IconEqualize({ className, size = 14 }: IconProps) {
+  return <Grid2x2 className={className} size={size} aria-hidden />;
 }
 
 export function IconSplitVertical({ className, size = 14 }: IconProps) {

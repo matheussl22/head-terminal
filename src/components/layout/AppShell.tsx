@@ -5,7 +5,11 @@ import {
   CLEAR_SHORTCUT,
   HARD_CLEAR_SHORTCUT,
 } from "../../config/toolbar";
-import { countWorkingSessions } from "../../core/activity-utils";
+import {
+  countTerminalStatuses,
+  formatCloseWarning,
+  formatWindowTitle,
+} from "../../core/activity-utils";
 import type { AgentSession } from "../../types/session";
 import { checkpoint } from "../../core/logger";
 import {
@@ -26,6 +30,7 @@ import { CommandPalette } from "./CommandPalette";
 import { SessionSidebar } from "./SessionSidebar";
 import { SessionWorkspace } from "./SessionWorkspace";
 import { SettingsDialog } from "./SettingsDialog";
+import { useTerminalStatusCounts } from "../ui/StatusDot";
 
 interface AppShellProps {
   sessions: AgentSession[];
@@ -39,9 +44,9 @@ export function AppShell({
   onCreateSession,
 }: AppShellProps) {
   const spawnedSessionIds = useSessionStore((state) => state.spawnedSessionIds);
-  const workingCount = useSessionStore((state) =>
-    countWorkingSessions(state.sessions, state.paneRuntime),
-  );
+  // By terminal, like the toolbar chips: two agents running in one session
+  // are two, not one.
+  const statusCounts = useTerminalStatusCounts();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [searchPaneId, setSearchPaneId] = useState<string | null>(null);
@@ -84,22 +89,27 @@ export function AppShell({
     onCloseSearch: () => setSearchPaneId(null),
   });
 
+  const windowTitle = formatWindowTitle(
+    import.meta.env.DEV ? "Head Terminal (Dev)" : "Head Terminal",
+    statusCounts,
+  );
   useEffect(() => {
-    const base = import.meta.env.DEV ? "Head Terminal (Dev)" : "Head Terminal";
-    const title =
-      workingCount > 0 ? `● ${workingCount} executando — ${base}` : base;
-    void window.headTerminal.app.setTitle(title);
-  }, [workingCount]);
+    void window.headTerminal.app.setTitle(windowTitle);
+  }, [windowTitle]);
 
   useEffect(() => {
     const unlisten = window.headTerminal.app.onCloseRequested(() => {
       void (async () => {
         const state = useSessionStore.getState();
-        const working = countWorkingSessions(state.sessions, state.paneRuntime);
-        if (working > 0) {
+        // A terminal waiting on an approval is a turn stopped half-way:
+        // closing kills it as surely as one still running.
+        const warning = formatCloseWarning(
+          countTerminalStatuses(state.sessions, state.paneRuntime, state.spawnedSessionIds),
+        );
+        if (warning) {
           const ok = await window.headTerminal.system.confirm({
             title: "Fechar Head Terminal",
-            message: `${working} agent(s) ainda executando.`,
+            message: warning,
             detail: "Fechar mesmo assim? Os processos em execução serão encerrados.",
             confirmLabel: "Fechar",
             cancelLabel: "Cancelar",

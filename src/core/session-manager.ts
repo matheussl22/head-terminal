@@ -1,11 +1,12 @@
 import { create } from "zustand";
 
-import type { PaneActivity } from "../types/activity";
+import type { BlockedReason, PaneActivity, PaneBlock } from "../types/activity";
 import {
   closePaneInLayout,
   collectPaneIds,
   createInitialLayout,
   createPaneId,
+  equalizeLayout,
   findPaneNode,
   mapPaneNodes,
   resolvePaneCwd,
@@ -21,7 +22,7 @@ import {
 } from "./session-persistence";
 import { logEvent } from "./logger";
 import { gitContextsEqual } from "./git-context-utils";
-import { type MinimizedPane, nextFinishedAt } from "./minimized-panes";
+import type { MinimizedPane } from "./minimized-panes";
 import { samePath } from "./path-utils";
 import {
   loadRunEverything,
@@ -42,9 +43,19 @@ export interface PaneRuntime {
   restartAttempts: number;
   /** % de contexto restante reportado pelo agent no output (0-100). */
   contextPercent?: number;
-  /** The "waiting_input" is an approval prompt, not the agent back at its
-   * own prompt (see ActivityDetector). */
-  awaitingApproval?: boolean;
+  /** Why the pane is "waiting_input" — set only while it is. */
+  blockedReason?: BlockedReason;
+  /** What it is blocked on, when the agent said so (e.g. the tool name of a
+   * permission request: "Bash", "Write"). Display only. */
+  blockedDetail?: string;
+  /** The agent finished a turn while nobody was looking at this pane (other
+   * session, other pane focused, window in the background, minimized). The
+   * UI shows "Concluído" until the user looks at it — focuses the pane or
+   * types into it — or the agent goes back to work. */
+  doneAt?: number;
+  /** "agent_fallback" only: the exit code the agent left with. 0 is the user
+   * leaving on purpose (/exit, Ctrl+C twice), not a crash. */
+  agentExitCode?: number;
 }
 
 /** Custom conversation names are keyed by CLI session id, and those ids are
@@ -155,7 +166,9 @@ interface SessionStore {
   /** Takes this terminal off the session's canvas — the others take its room
    * — while its agent keeps running. */
   minimizePane: (paneId: string) => void;
-  /** Puts a minimized terminal back where it was and makes it the active one. */
+  /** Puts a minimized terminal back where it was and makes it the active one.
+   * It also brings out a pane parked behind a zoomed sibling, so it is the
+   * one step that shows any pane, wherever it is (see revealPane). */
   restorePane: (paneId: string) => void;
   updateSplitRatio: (
     sessionId: string,
@@ -163,6 +176,10 @@ interface SessionStore {
     ratio: number,
     options?: { persist?: boolean },
   ) => void;
+  /** Gives the session's panes on the canvas even room: the panes of a row
+   * the same width, those of a column the same height (see equalizeLayout).
+   * Minimized panes are left out of the count. */
+  equalizeSessionLayout: (sessionId: string) => void;
   restartPane: (
     paneId: string,
     options?: { continueConversation?: boolean },
@@ -191,9 +208,22 @@ interface SessionStore {
   restartTargetPanes: () => void;
   restartSessionPanes: (sessionId: string) => void;
   updatePaneStatus: (paneId: string, status: SessionStatus) => void;
-  updatePaneActivity: (paneId: string, activity: PaneActivity) => void;
+  /** What the pane's ActivityDetector says it is doing. `blocked` is kept only
+   * with "waiting_input", `agentExitCode` only with "agent_fallback". */
+  updatePaneActivity: (
+    paneId: string,
+    activity: PaneActivity,
+    blocked?: PaneBlock,
+    options?: { agentExitCode?: number },
+  ) => void;
+  /** The user typed into the pane (or brought it back from the dock): a
+   * finished turn is no longer news ("Concluído" goes back to "Pronto"). */
+  markPaneSeen: (paneId: string) => void;
+  /** The window came back to the front: the focused pane is being looked at
+   * again — but only if it is actually on screen. One in the dock or parked
+   * behind a zoomed sibling keeps its "Concluído". */
+  markActivePaneSeen: () => void;
   updatePaneContext: (paneId: string, contextPercent: number) => void;
-  updatePaneApproval: (paneId: string, awaitingApproval: boolean) => void;
   registerPtyWriter: (paneId: string, write: (data: string) => void) => void;
   unregisterPtyWriter: (paneId: string) => void;
   setVoiceRecordingPaneId: (paneId: string | null) => void;
@@ -220,13 +250,30 @@ function visiblePaneIds(
   return collectPaneIds(layout).filter((paneId) => !minimizedPanes[paneId]);
 }
 
+/** The pane shown alone in the session's canvas, if a zoom is in effect: it
+ * must still be one of the session's panes and not be in the dock. */
+function zoomedPaneOf(
+  layout: AgentSession["layout"],
+  zoomedPaneId: string | undefined,
+  minimizedPanes: Record<string, MinimizedPane>,
+): string | null {
+  return zoomedPaneId &&
+    !minimizedPanes[zoomedPaneId] &&
+    collectPaneIds(layout).includes(zoomedPaneId)
+    ? zoomedPaneId
+    : null;
+}
+
 /** The pane the keyboard lands on when a session gets the focus without one
- * of its own panes already having it: the first one on screen. */
+ * of its own panes already having it: the zoomed one when there is a zoom
+ * (its siblings are parked out of sight), otherwise the first one on screen. */
 function firstPaneOnScreen(
   layout: AgentSession["layout"],
   minimizedPanes: Record<string, MinimizedPane>,
+  zoomedPaneId?: string,
 ): string | null {
   return (
+    zoomedPaneOf(layout, zoomedPaneId, minimizedPanes) ??
     visiblePaneIds(layout, minimizedPanes)[0] ??
     collectPaneIds(layout)[0] ??
     null
@@ -237,21 +284,58 @@ function syncActivePane(
   session: AgentSession | null,
   currentPaneId: string | null,
   minimizedPanes: Record<string, MinimizedPane>,
+  maximizedPaneIds: Record<string, string>,
 ): string | null {
   if (!session) {
     return null;
   }
 
   const paneIds = collectPaneIds(session.layout);
-  if (currentPaneId && paneIds.includes(currentPaneId)) {
+  const zoomed = zoomedPaneOf(
+    session.layout,
+    maximizedPaneIds[session.id],
+    minimizedPanes,
+  );
+  // A pane of the session keeps the keyboard, unless a zoomed sibling has it
+  // parked where nobody can see it.
+  if (
+    currentPaneId &&
+    paneIds.includes(currentPaneId) &&
+    (!zoomed || zoomed === currentPaneId)
+  ) {
     return currentPaneId;
   }
 
-  return firstPaneOnScreen(session.layout, minimizedPanes);
+  return firstPaneOnScreen(
+    session.layout,
+    minimizedPanes,
+    maximizedPaneIds[session.id],
+  );
 }
 
 function sessionHasPane(session: AgentSession, paneId: string): boolean {
   return collectPaneIds(session.layout).includes(paneId);
+}
+
+/**
+ * The pane is on its session's canvas: not minimized into the dock and not
+ * parked behind a zoomed sibling. It says nothing about which session is on
+ * screen or whether the window is in front — see isPaneWatched for that.
+ * Only a pane on screen can have its "Concluído" read by focusing it.
+ */
+export function isPaneOnScreen(
+  state: Pick<SessionStore, "sessions" | "minimizedPanes" | "maximizedPaneIds">,
+  paneId: string,
+): boolean {
+  if (state.minimizedPanes[paneId]) {
+    return false;
+  }
+  const session = state.sessions.find((item) => sessionHasPane(item, paneId));
+  if (!session) {
+    return false;
+  }
+  const zoomed = state.maximizedPaneIds[session.id];
+  return !zoomed || zoomed === paneId;
 }
 
 function logSpawnState(
@@ -352,9 +436,64 @@ function resetPaneRuntime(
       status: "starting",
       activity: "starting",
       activitySince: Date.now(),
-      awaitingApproval: false,
+      // A fresh process owes nothing the previous one left pending.
+      blockedReason: undefined,
+      blockedDetail: undefined,
+      doneAt: undefined,
+      agentExitCode: undefined,
     },
   };
+}
+
+/** The window is on screen and has the keyboard. Without a DOM (tests) the
+ * user is assumed to be there. */
+function isWindowAttended(): boolean {
+  if (typeof document === "undefined") {
+    return true;
+  }
+  if (document.visibilityState === "hidden") {
+    return false;
+  }
+  return typeof document.hasFocus !== "function" || document.hasFocus();
+}
+
+/** Someone is looking at this pane right now: it is the focused pane of the
+ * session on screen, not minimized or hidden behind a zoomed sibling, and the
+ * window itself is in front of the user. */
+function isPaneWatched(state: SessionStore, paneId: string): boolean {
+  if (state.activePaneId !== paneId) {
+    return false;
+  }
+  const session = state.sessions.find((item) => item.id === state.activeSessionId);
+  if (!session || !sessionHasPane(session, paneId)) {
+    return false;
+  }
+  return isPaneOnScreen(state, paneId) && isWindowAttended();
+}
+
+/** Drops a pane's "Concluído" — returns the same map when there is none. */
+function clearDoneAt(
+  runtime: Record<string, PaneRuntime>,
+  paneId: string | null,
+): Record<string, PaneRuntime> {
+  const current = paneId ? runtime[paneId] : undefined;
+  if (!paneId || !current || current.doneAt === undefined) {
+    return runtime;
+  }
+  return { ...runtime, [paneId]: { ...current, doneAt: undefined } };
+}
+
+/** The keyboard moved to `paneId`: its "Concluído" is read — as long as the
+ * pane is on screen for the user to actually see. One in the dock or parked
+ * behind a zoomed sibling keeps it until it is shown. */
+function clearDoneAtIfOnScreen(
+  runtime: Record<string, PaneRuntime>,
+  view: Pick<SessionStore, "sessions" | "minimizedPanes" | "maximizedPaneIds">,
+  paneId: string | null,
+): Record<string, PaneRuntime> {
+  return paneId && isPaneOnScreen(view, paneId)
+    ? clearDoneAt(runtime, paneId)
+    : runtime;
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
@@ -470,17 +609,23 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   setActiveSessionId: (sessionId) =>
     set((state) => {
       const session = state.sessions.find((item) => item.id === sessionId) ?? null;
+      const activePaneId = syncActivePane(
+        session,
+        state.activePaneId,
+        state.minimizedPanes,
+        state.maximizedPaneIds,
+      );
       const next = {
         activeSessionId: sessionId,
-        activePaneId: syncActivePane(
-          session,
-          state.activePaneId,
-          state.minimizedPanes,
-        ),
+        activePaneId,
         spawnedSessionIds: {
           ...state.spawnedSessionIds,
           [sessionId]: true,
         },
+        // The pane that gets the keyboard is the one the user now looks at —
+        // unless every pane is in the dock and the keyboard sits on one of
+        // them, out of sight.
+        paneRuntime: clearDoneAtIfOnScreen(state.paneRuntime, state, activePaneId),
       };
       persistWorkspaceState({ ...state, ...next });
       logSpawnState("session.spawn_state", sessionId, next.spawnedSessionIds, {
@@ -492,7 +637,26 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   setActivePaneId: (paneId) =>
     set((state) => {
-      const next = { activePaneId: paneId };
+      // Handing the keyboard to a pane parked behind a zoomed sibling (a
+      // toolbar chip, a sidebar dot) would leave it typing into a terminal
+      // nobody sees: the zoom goes, as restorePane does. A minimized pane is
+      // not shown by that, so its session's zoom stays.
+      const session = state.sessions.find((item) => sessionHasPane(item, paneId));
+      const zoomed = session ? state.maximizedPaneIds[session.id] : undefined;
+      let maximizedPaneIds = state.maximizedPaneIds;
+      if (session && zoomed && zoomed !== paneId && !state.minimizedPanes[paneId]) {
+        maximizedPaneIds = { ...state.maximizedPaneIds };
+        delete maximizedPaneIds[session.id];
+      }
+      const next = {
+        activePaneId: paneId,
+        maximizedPaneIds,
+        paneRuntime: clearDoneAtIfOnScreen(
+          state.paneRuntime,
+          { ...state, maximizedPaneIds },
+          paneId,
+        ),
+      };
       persistWorkspaceState({ ...state, ...next });
       return next;
     }),
@@ -593,7 +757,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     if (changed) {
       // A conversation belongs to a folder: the agent restarts fresh there.
-      get().restartPane(paneId);
+      // The CLI keeps its transcripts per folder, so the old anchor would
+      // only --resume what the new folder doesn't have (and meanwhile name
+      // the wrong conversation in the header and filter out the new one's
+      // hook events) until the new transcript shows up.
+      get().restartPane(paneId, { continueConversation: false });
     }
   },
 
@@ -626,9 +794,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       return next;
     });
 
-    // Só quem trocou de pasta reinicia; quem ficou mantém a conversa em curso.
+    // Só quem trocou de pasta reinicia, e numa conversa nova (ver
+    // updatePaneCwd); quem ficou mantém a conversa em curso.
     for (const paneId of movedPaneIds) {
-      get().restartPane(paneId);
+      get().restartPane(paneId, { continueConversation: false });
     }
   },
 
@@ -654,7 +823,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     });
 
     if (changed) {
-      get().restartPane(paneId);
+      // Pasta nova, conversa nova (ver updatePaneCwd).
+      get().restartPane(paneId, { continueConversation: false });
     }
   },
 
@@ -674,17 +844,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const remaining = state.sessions.filter((item) => item.id !== sessionId);
       const cleanup = cleanupPaneState(state, paneIds);
 
-      let activeSessionId = state.activeSessionId;
-      let activePaneId = state.activePaneId;
-
-      if (activeSessionId === sessionId) {
-        const nextSession = remaining[0] ?? null;
-        activeSessionId = nextSession?.id ?? null;
-        activePaneId = nextSession
-          ? firstPaneOnScreen(nextSession.layout, cleanup.minimizedPanes)
-          : null;
-      }
-
       const spawnedSessionIds = { ...state.spawnedSessionIds };
       delete spawnedSessionIds[sessionId];
 
@@ -694,6 +853,40 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const maximizedPaneIds = { ...state.maximizedPaneIds };
       delete maximizedPaneIds[sessionId];
 
+      let activeSessionId = state.activeSessionId;
+      let activePaneId = state.activePaneId;
+      let paneRuntime = cleanup.paneRuntime;
+      let activated: string | null = null;
+
+      if (activeSessionId === sessionId) {
+        const nextSession = remaining[0] ?? null;
+        activeSessionId = nextSession?.id ?? null;
+        activePaneId = nextSession
+          ? firstPaneOnScreen(
+              nextSession.layout,
+              cleanup.minimizedPanes,
+              maximizedPaneIds[nextSession.id],
+            )
+          : null;
+        if (nextSession) {
+          // The session that takes the screen has to run, like one picked
+          // in the sidebar — after an app restart only the one that was
+          // active had spawned, and the canvas would come up empty.
+          spawnedSessionIds[nextSession.id] = true;
+          activated = nextSession.id;
+          // The pane that gets the keyboard is the one the user now looks at.
+          paneRuntime = clearDoneAtIfOnScreen(
+            paneRuntime,
+            {
+              sessions: remaining,
+              minimizedPanes: cleanup.minimizedPanes,
+              maximizedPaneIds,
+            },
+            activePaneId,
+          );
+        }
+      }
+
       const next = {
         sessions: remaining,
         activeSessionId,
@@ -702,8 +895,15 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         sessionGitContext,
         maximizedPaneIds,
         ...cleanup,
+        paneRuntime,
       };
       persistWorkspaceState({ ...state, ...next }, { immediate: true });
+      if (activated) {
+        logSpawnState("session.spawn_state", activated, spawnedSessionIds, {
+          source: "remove",
+        });
+        checkpointSessionSpawn(activated);
+      }
       return next;
     }),
 
@@ -754,8 +954,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const paneResumeSessionIds = { ...state.paneResumeSessionIds };
       const paneResumeAnchors = { ...state.paneResumeAnchors };
       const pendingConversationLabels = { ...state.pendingConversationLabels };
-      // Explicit false: fresh agent (e.g. after /exit). Explicit true: keep
-      // --continue. Undefined: leave hydrate flag alone (supervisor/cwd).
+      // Explicit false: fresh agent (e.g. after /exit, or in another folder).
+      // Explicit true: keep --continue. Undefined: leave hydrate flag alone
+      // (supervisor).
       if (options?.continueConversation === true) {
         restoredPaneIds[paneId] = true;
       } else if (options?.continueConversation === false) {
@@ -1016,11 +1217,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         item.id === session.id ? { ...item, layout } : item,
       );
 
-      const activePaneId =
-        state.activePaneId === paneId
-          ? firstPaneOnScreen(layout, cleanup.minimizedPanes)
-          : state.activePaneId;
-
       // Closing the maximized pane — or the last of its siblings on screen,
       // which leaves nothing to hide — drops the zoom instead of stranding it.
       const maximizedPaneIds = { ...state.maximizedPaneIds };
@@ -1031,11 +1227,31 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         delete maximizedPaneIds[session.id];
       }
 
+      const activePaneId =
+        state.activePaneId === paneId
+          ? firstPaneOnScreen(layout, cleanup.minimizedPanes, maximizedPaneIds[session.id])
+          : state.activePaneId;
+
+      // The pane that inherits the keyboard is the one the user now looks at.
+      const paneRuntime =
+        activePaneId !== state.activePaneId
+          ? clearDoneAtIfOnScreen(
+              cleanup.paneRuntime,
+              {
+                sessions: nextSessions,
+                minimizedPanes: cleanup.minimizedPanes,
+                maximizedPaneIds,
+              },
+              activePaneId,
+            )
+          : cleanup.paneRuntime;
+
       const next = {
         sessions: nextSessions,
         activePaneId,
         maximizedPaneIds,
         ...cleanup,
+        paneRuntime,
       };
       persistWorkspaceState({ ...state, ...next }, { immediate: true });
       return next;
@@ -1100,17 +1316,30 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         delete maximizedPaneIds[session.id];
       }
 
-      // The keyboard follows what is still on screen. With nothing left the
-      // pane stays the active one, so the shortcut brings it straight back.
+      // The keyboard follows what is still on screen — the zoomed pane when
+      // one is left. With nothing left the pane stays the active one, so the
+      // shortcut brings it straight back.
       const activePaneId =
         state.activePaneId === paneId && onScreen.length > 0
-          ? onScreen[0]
+          ? (zoomedPaneOf(session.layout, maximizedPaneIds[session.id], minimizedPanes) ??
+            onScreen[0])
           : state.activePaneId;
 
-      const next = { minimizedPanes, maximizedPaneIds, activePaneId };
-      if (activePaneId !== state.activePaneId) {
-        persistWorkspaceState({ ...state, ...next });
+      if (activePaneId === state.activePaneId) {
+        return { minimizedPanes, maximizedPaneIds };
       }
+      const next = {
+        minimizedPanes,
+        maximizedPaneIds,
+        activePaneId,
+        // The pane that inherits the keyboard is the one the user now looks at.
+        paneRuntime: clearDoneAtIfOnScreen(
+          state.paneRuntime,
+          { sessions: state.sessions, minimizedPanes, maximizedPaneIds },
+          activePaneId,
+        ),
+      };
+      persistWorkspaceState({ ...state, ...next });
       return next;
     }),
 
@@ -1145,8 +1374,16 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           ...state.spawnedSessionIds,
           [session.id]: true,
         },
+        // Bringing it back is looking at it: its card's "Terminou" is read.
+        paneRuntime: clearDoneAt(state.paneRuntime, paneId),
       };
       persistWorkspaceState({ ...state, ...next });
+      if (!state.spawnedSessionIds[session.id]) {
+        logSpawnState("session.spawn_state", session.id, next.spawnedSessionIds, {
+          source: "restore",
+        });
+        checkpointSessionSpawn(session.id);
+      }
       return next;
     }),
 
@@ -1193,6 +1430,27 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       return next;
     }),
 
+  // The terminals refit on their own: SessionWorkspace refits every pane on
+  // the canvas once the layout settles, the same path a divider drag takes.
+  equalizeSessionLayout: (sessionId) =>
+    set((state) => {
+      const session = state.sessions.find((candidate) => candidate.id === sessionId);
+      if (!session) {
+        return state;
+      }
+      const hidden = new Set(
+        collectPaneIds(session.layout).filter((paneId) => state.minimizedPanes[paneId]),
+      );
+      const layout = equalizeLayout(session.layout, hidden);
+      const next = {
+        sessions: state.sessions.map((candidate) =>
+          candidate.id === sessionId ? { ...candidate, layout } : candidate,
+        ),
+      };
+      persistWorkspaceState({ ...state, ...next });
+      return next;
+    }),
+
   updatePaneStatus: (paneId, status) =>
     set((state) => {
       const current = state.paneRuntime[paneId] ?? createPaneRuntime();
@@ -1208,36 +1466,68 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       };
     }),
 
-  updatePaneActivity: (paneId, activity) =>
+  updatePaneActivity: (paneId, activity, blocked, options) =>
     set((state) => {
       const current = state.paneRuntime[paneId] ?? createPaneRuntime();
-      if (current.activity === activity) {
+      const blockedReason = activity === "waiting_input" ? blocked?.reason : undefined;
+      const blockedDetail = activity === "waiting_input" ? blocked?.detail : undefined;
+      const agentExitCode =
+        activity === "agent_fallback"
+          ? (options?.agentExitCode ?? current.agentExitCode)
+          : undefined;
+      const activityChanged = current.activity !== activity;
+      if (
+        !activityChanged &&
+        current.blockedReason === blockedReason &&
+        current.blockedDetail === blockedDetail &&
+        current.agentExitCode === agentExitCode
+      ) {
         return state;
       }
 
       const now = Date.now();
-      const paneRuntime = {
-        ...state.paneRuntime,
-        [paneId]: { ...current, activity, activitySince: now },
-      };
-
-      // A minimized terminal remembers when its agent stopped, so its card
-      // can say so until the user brings it back.
-      const minimized = state.minimizedPanes[paneId];
-      const finishedAt = minimized
-        ? nextFinishedAt(minimized.finishedAt, current.activity, activity, now)
-        : undefined;
-      if (!minimized || finishedAt === minimized.finishedAt) {
-        return { paneRuntime };
+      // A turn that ends while nobody is looking is news until someone does:
+      // the pane (and its minimized card) says "Concluído". Anything but
+      // "idle" makes it stale — back to work, blocked, gone.
+      let doneAt = current.doneAt;
+      if (activityChanged) {
+        doneAt =
+          activity === "idle" && current.activity === "working" && !isPaneWatched(state, paneId)
+            ? now
+            : undefined;
       }
 
       return {
-        paneRuntime,
-        minimizedPanes: {
-          ...state.minimizedPanes,
-          [paneId]: { since: minimized.since, finishedAt },
+        paneRuntime: {
+          ...state.paneRuntime,
+          [paneId]: {
+            ...current,
+            activity,
+            // A dialog that only refines its reason is still the same wait.
+            activitySince: activityChanged ? now : current.activitySince,
+            blockedReason,
+            blockedDetail,
+            doneAt,
+            agentExitCode,
+          },
         },
       };
+    }),
+
+  markPaneSeen: (paneId) =>
+    set((state) => {
+      const paneRuntime = clearDoneAt(state.paneRuntime, paneId);
+      return paneRuntime === state.paneRuntime ? state : { paneRuntime };
+    }),
+
+  markActivePaneSeen: () =>
+    set((state) => {
+      const { activePaneId } = state;
+      if (!activePaneId || !isPaneWatched(state, activePaneId)) {
+        return state;
+      }
+      const paneRuntime = clearDoneAt(state.paneRuntime, activePaneId);
+      return paneRuntime === state.paneRuntime ? state : { paneRuntime };
     }),
 
   updatePaneContext: (paneId, contextPercent) =>
@@ -1251,21 +1541,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         paneRuntime: {
           ...state.paneRuntime,
           [paneId]: { ...current, contextPercent },
-        },
-      };
-    }),
-
-  updatePaneApproval: (paneId, awaitingApproval) =>
-    set((state) => {
-      const current = state.paneRuntime[paneId];
-      if (!current || Boolean(current.awaitingApproval) === awaitingApproval) {
-        return state;
-      }
-
-      return {
-        paneRuntime: {
-          ...state.paneRuntime,
-          [paneId]: { ...current, awaitingApproval },
         },
       };
     }),

@@ -1,12 +1,19 @@
 import {
   useEffect,
+  useMemo,
   useReducer,
   useRef,
   useState,
   type ComponentType,
 } from "react";
 
-import { ACTIVITY_LABEL } from "../../types/activity";
+import { VOICE_SHORTCUT } from "../../config/toolbar";
+import {
+  describePaneStatus,
+  formatStatusDetail,
+  type PaneStatusView,
+} from "../../core/activity-display";
+import { isResumableAgent } from "../../core/agent-sessions-bridge";
 import { contextColor } from "../../core/context-meter";
 import { formatBranchLabel } from "../../core/git-context-utils";
 import {
@@ -18,13 +25,25 @@ import {
   useSessionStore,
 } from "../../core/session-manager";
 import { NEW_CONVERSATION_LABEL } from "../../core/conversation-display";
-import { collectPaneIds, findPaneNode } from "../../core/session-layout";
+import {
+  collectPaneIds,
+  findPaneNode,
+  isLayoutEqualized,
+} from "../../core/session-layout";
+import { paneShortLabel } from "../../core/pane-labels";
 import { minimizePaneWithMotion } from "../../core/pane-minimize";
 import { basenamePath } from "../../core/path-utils";
 import { formatShortcut } from "../../core/shortcuts";
+import {
+  isVoiceInputBlocked,
+  isVoiceInputSupported,
+  toggleVoiceInput,
+} from "../../core/voice-input";
 import { isolatePaneInWorktree } from "../../core/worktree";
-import { usePaneConversation } from "../../hooks/usePaneConversation";
-import { GitBranchBadge } from "../ui/GitBranchBadge";
+import {
+  usePaneConversation,
+  type PaneConversation,
+} from "../../hooks/usePaneConversation";
 import {
   IconActivity,
   IconAgentClaude,
@@ -35,17 +54,27 @@ import {
   IconAgentCursor,
   IconAgentShell,
   IconClose,
-  IconPencil,
+  IconEqualize,
   IconFolder,
+  IconFolderOpen,
   IconGitBranch,
+  IconHistory,
   IconMaximize,
+  IconMic,
   IconMinimize,
   IconMinimizeToDock,
+  IconPencil,
   IconRefresh,
+  IconRestartContinue,
   IconSplitHorizontal,
   IconSplitVertical,
 } from "../ui/Icons";
-import { ResumeSessionMenu } from "./ResumeSessionMenu";
+import { StatusDot } from "../ui/StatusDot";
+import { PaneActionsMenu, type PaneMenuAction } from "./PaneActionsMenu";
+import {
+  ResumeSessionMenu,
+  type ResumeSessionMenuHandle,
+} from "./ResumeSessionMenu";
 import { VoiceInputButton } from "./VoiceInputButton";
 
 const AGENT_ICON: Record<string, ComponentType<{ size?: number }>> = {
@@ -59,17 +88,6 @@ const AGENT_ICON: Record<string, ComponentType<{ size?: number }>> = {
   shell: IconAgentShell,
 };
 
-const AGENT_LABEL: Record<string, string> = {
-  antigravity: "agy",
-  cursor: "cx",
-  claude: "cc",
-  codex: "cdx",
-  ollama: "olm",
-  ornith: "orn",
-  qwen27: "qw",
-  shell: "sh",
-};
-
 export function AgentIcon({
   agentProfileId,
   size = 14,
@@ -81,10 +99,9 @@ export function AgentIcon({
   return <Icon size={size} />;
 }
 
-export function paneShortLabel(agentProfileId: string, paneIndex: number): string {
-  const prefix = AGENT_LABEL[agentProfileId] ?? agentProfileId.slice(0, 3);
-  return `${prefix}${paneIndex + 1}`;
-}
+// One source for "cc3" — the header, its minimized card and the
+// notifications all name a pane the same way.
+export { paneShortLabel };
 
 interface TerminalPaneOverlayProps {
   paneId: string;
@@ -208,37 +225,43 @@ export function TerminalPaneOverlay({ paneId }: TerminalPaneOverlayProps) {
 /** Name of the agent conversation the pane is on, with inline rename. Shows
  * "nova conversa" until the CLI writes its transcript and the pane anchors
  * onto it — renaming before that still works, the name is applied as soon as
- * the conversation is identified. */
+ * the conversation is identified. The header owns `editing` and the
+ * conversation lookup, so the "⋯" menu can start a rename, and the tooltip
+ * and the menu can name the conversation, while the name itself has no room
+ * on screen. */
 function PaneConversationName({
   paneId,
-  cwd,
-  agentProfileId,
-  claudeAccountId,
+  conversation,
+  editing,
+  onEditingChange,
 }: {
   paneId: string;
-  cwd: string;
-  agentProfileId: string;
-  claudeAccountId?: string;
+  conversation: PaneConversation;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
 }) {
-  const conversation = usePaneConversation({
-    paneId,
-    cwd,
-    agentProfileId,
-    claudeAccountId,
-  });
   const setPaneConversationLabel = useSessionStore(
     (state) => state.setPaneConversationLabel,
   );
-  const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [wasEditing, setWasEditing] = useState(editing);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Entering edit mode — from a click here or from the menu — starts from
+  // the name on screen.
+  if (editing !== wasEditing) {
+    setWasEditing(editing);
+    if (editing) {
+      setDraft(conversation.name ?? "");
+    }
+  }
+
   useEffect(() => {
-    if (isEditing) {
+    if (editing) {
       inputRef.current?.focus();
       inputRef.current?.select();
     }
-  }, [isEditing]);
+  }, [editing]);
 
   if (!conversation.supported) {
     return null;
@@ -251,7 +274,7 @@ function PaneConversationName({
       ? ""
       : " terminal-pane-header__conversation--empty";
 
-  if (isEditing) {
+  if (editing) {
     return (
       <input
         ref={inputRef}
@@ -259,22 +282,23 @@ function PaneConversationName({
         value={draft}
         maxLength={CONVERSATION_LABEL_MAX_LENGTH}
         placeholder="Nome da conversa"
+        aria-label="Nome da conversa"
         onChange={(event) => setDraft(event.target.value)}
         onClick={(event) => event.stopPropagation()}
         onBlur={() => {
           setPaneConversationLabel(paneId, draft);
-          setIsEditing(false);
+          onEditingChange(false);
         }}
         onKeyDown={(event) => {
           event.stopPropagation();
           if (event.key === "Enter") {
             event.preventDefault();
             setPaneConversationLabel(paneId, draft);
-            setIsEditing(false);
+            onEditingChange(false);
           }
           if (event.key === "Escape") {
             event.preventDefault();
-            setIsEditing(false);
+            onEditingChange(false);
           }
         }}
       />
@@ -292,8 +316,7 @@ function PaneConversationName({
         title={`Conversa: ${displayName} — clique para renomear (vazio volta ao nome automático)`}
         onClick={(event) => {
           event.stopPropagation();
-          setDraft(conversation.name ?? "");
-          setIsEditing(true);
+          onEditingChange(true);
         }}
       >
         <span className="terminal-pane-header__conversation-text">
@@ -308,11 +331,21 @@ function PaneConversationName({
   );
 }
 
-/** The folder this terminal runs in. Picking another one restarts the pane
- * there — a conversation belongs to a folder — without touching its siblings. */
-function PaneFolderButton({ paneId, cwd }: { paneId: string; cwd: string }) {
-  const updatePaneCwd = useSessionStore((state) => state.updatePaneCwd);
+/** Picks another folder for this terminal. It restarts there — a
+ * conversation belongs to a folder — without touching its siblings. */
+function pickPaneFolder(paneId: string, cwd: string): void {
+  void window.headTerminal.system
+    .selectDirectory(cwd)
+    .then((selected) => {
+      if (typeof selected === "string" && selected) {
+        useSessionStore.getState().updatePaneCwd(paneId, selected);
+      }
+    })
+    .catch(() => undefined);
+}
 
+/** The folder this terminal runs in. */
+function PaneFolderButton({ paneId, cwd }: { paneId: string; cwd: string }) {
   return (
     <button
       type="button"
@@ -321,14 +354,7 @@ function PaneFolderButton({ paneId, cwd }: { paneId: string; cwd: string }) {
       aria-label={`Pasta do terminal: ${cwd}`}
       onClick={(event) => {
         event.stopPropagation();
-        void window.headTerminal.system
-          .selectDirectory(cwd)
-          .then((selected) => {
-            if (typeof selected === "string" && selected) {
-              updatePaneCwd(paneId, selected);
-            }
-          })
-          .catch(() => undefined);
+        pickPaneFolder(paneId, cwd);
       }}
     >
       <IconFolder size={11} className="terminal-pane-header__cwd-icon" />
@@ -337,33 +363,49 @@ function PaneFolderButton({ paneId, cwd }: { paneId: string; cwd: string }) {
   );
 }
 
-/** Tira este terminal da árvore compartilhada e o põe na sua própria, com
- * branch e index só dele. A pasta do cabeçalho passa a ser a do worktree e o
- * agent reinicia lá — é o mesmo caminho que "trocar de pasta", só que a pasta
- * é criada na hora. */
-function PaneIsolateButton({ paneId }: { paneId: string }) {
-  const [isolating, setIsolating] = useState(false);
+function isElementShown(element: HTMLElement | null | undefined): boolean {
+  if (!element) {
+    return false;
+  }
+  return typeof element.checkVisibility === "function"
+    ? element.checkVisibility()
+    : element.offsetParent !== null;
+}
 
+/** Status chip: the tone's glyph plus its word. In a narrow pane the word is
+ * kept only for what asks for the user (waiting, done, error, agent down);
+ * the rest shrink to the glyph, whose shape still tells them apart. The word
+ * stays in the DOM for screen readers either way. */
+function PaneStatusChip({
+  view,
+  tooltip,
+}: {
+  view: PaneStatusView;
+  tooltip: () => string;
+}) {
   return (
-    <button
-      type="button"
-      className="terminal-pane-header__action"
-      disabled={isolating}
-      title="Isolar em worktree: branch agent-N em pasta irmã, com os arquivos ignorados copiados. Reinicia só este terminal."
-      aria-label="Isolar este terminal em um worktree"
-      onClick={(event) => {
-        event.stopPropagation();
-        setIsolating(true);
-        void isolatePaneInWorktree(paneId).finally(() => setIsolating(false));
+    <span
+      className={
+        `terminal-pane-header__status terminal-pane-header__status--${view.tone}` +
+        (view.attention ? " terminal-pane-header__status--attention" : "")
+      }
+      title={formatStatusDetail(view)}
+      // The time in the tooltip ("há 2 min") is computed when the pointer
+      // arrives rather than by a timer: ten panes don't re-render every
+      // second for a tooltip nobody is reading.
+      onPointerEnter={(event) => {
+        event.currentTarget.title = tooltip();
       }}
     >
-      <IconGitBranch size={13} />
-    </button>
+      <StatusDot tone={view.tone} title={null} />
+      <span className="terminal-pane-header__status-label">{view.label}</span>
+    </span>
   );
 }
 
 interface TerminalPaneHeaderProps {
   paneId: string;
+  sessionId: string;
   cwd: string;
   agentProfileId: string;
   claudeAccountId?: string;
@@ -372,12 +414,21 @@ interface TerminalPaneHeaderProps {
   onScreenPaneCount: number;
   isActive: boolean;
   isMaximized: boolean;
+  /** This pane is on screen (see ResumeSessionMenu's `onScreen`). */
+  onScreen?: boolean;
   onFocus: () => void;
   onClose: () => void;
 }
 
+/**
+ * Every control is rendered, always; the header's container queries
+ * (panes.css) decide what fits at the pane's width, and the "⋯" menu lists
+ * whatever they hid. Nothing here measures the pane, so dragging a divider
+ * re-renders nothing.
+ */
 export function TerminalPaneHeader({
   paneId,
+  sessionId,
   cwd,
   agentProfileId,
   claudeAccountId,
@@ -386,16 +437,20 @@ export function TerminalPaneHeader({
   onScreenPaneCount,
   isActive,
   isMaximized,
+  onScreen = true,
   onFocus,
   onClose,
 }: TerminalPaneHeaderProps) {
-  const activity = useSessionStore(
-    (state) => state.paneRuntime[paneId]?.activity ?? "starting",
-  );
+  const runtime = useSessionStore((state) => state.paneRuntime[paneId]);
+  const view = useMemo(() => describePaneStatus(runtime), [runtime]);
+  const contextPercent = runtime?.contextPercent;
   const restartPane = useSessionStore((state) => state.restartPane);
   const splitPane = useSessionStore((state) => state.splitPane);
   const toggleMaximizedPane = useSessionStore(
     (state) => state.toggleMaximizedPane,
+  );
+  const equalizeSessionLayout = useSessionStore(
+    (state) => state.equalizeSessionLayout,
   );
   const gitContext = useSessionStore((state) => state.paneGitContext[paneId]);
   // Este terminal já tem uma árvore só dele: ou a pegou sozinho, ou é o único
@@ -413,21 +468,234 @@ export function TerminalPaneHeader({
       );
     }),
   );
-  const contextPercent = useSessionStore(
-    (state) => state.paneRuntime[paneId]?.contextPercent,
-  );
+  const conversation = usePaneConversation({
+    paneId,
+    cwd,
+    agentProfileId,
+    claudeAccountId,
+  });
+  // Where the rename started: from the "⋯" the field takes the folder and
+  // branch's room (a narrow pane has none to spare); a click on the name in a
+  // wide pane edits it in place and leaves the rest of the header alone.
+  const [renaming, setRenaming] = useState<false | "inline" | "menu">(false);
+  const [isolating, setIsolating] = useState(false);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const resumeMenuRef = useRef<ResumeSessionMenuHandle>(null);
+
   const branchLabel = formatBranchLabel(gitContext);
   const shortLabel = paneShortLabel(agentProfileId, paneIndex);
+  const folderName = basenamePath(cwd, cwd);
+  const resumable = isResumableAgent(agentProfileId);
+  const canIsolate = Boolean(gitContext?.repoRoot) && !ownsWorktree;
+  const canMaximize = onScreenPaneCount > 1 || isMaximized;
+  const canClose = paneCount > 1;
+
+  const toggleMaximized = () => {
+    onFocus();
+    toggleMaximizedPane(paneId);
+  };
+  const split = (direction: "vertical" | "horizontal") => {
+    onFocus();
+    splitPane(paneId, direction);
+  };
+  const isolate = () => {
+    setIsolating(true);
+    void isolatePaneInWorktree(paneId).finally(() => setIsolating(false));
+  };
+
+  const conversationName = conversation.name ?? NEW_CONVERSATION_LABEL;
+  /** The name has no room below the narrowest tiers (panes.css); the tooltip
+   * and the "⋯" header name the conversation then. */
+  const isConversationHidden = () =>
+    conversation.supported &&
+    !isElementShown(
+      headerRef.current?.querySelector<HTMLElement>(".terminal-pane-header__conversation"),
+    );
+
+  /** Status tooltip, plus whatever the header had no room to show. */
+  const statusTooltip = () => {
+    const header = headerRef.current;
+    const lines = [`${shortLabel} · ${formatStatusDetail(view, Date.now())}`];
+    if (isConversationHidden()) {
+      lines.push(`Conversa: ${conversationName}`);
+    }
+    if (!isElementShown(header?.querySelector<HTMLElement>(".terminal-pane-header__cwd"))) {
+      lines.push(`Pasta: ${cwd}`);
+    }
+    if (
+      branchLabel &&
+      !isElementShown(header?.querySelector<HTMLElement>(".terminal-pane-header__branch"))
+    ) {
+      lines.push(`Branch: ${branchLabel}`);
+    }
+    if (
+      contextPercent !== undefined &&
+      !isElementShown(header?.querySelector<HTMLElement>(".terminal-pane-header__context"))
+    ) {
+      lines.push(`Contexto restante: ${contextPercent}%`);
+    }
+    return lines.join("\n");
+  };
+
+  const menuActions: PaneMenuAction[] = [];
+  if (resumable) {
+    menuActions.push(
+      {
+        id: "history",
+        label: "Histórico de conversas…",
+        icon: IconHistory,
+        group: "conversation",
+        keepFocus: true,
+        run: (anchor) => resumeMenuRef.current?.openAt(anchor),
+      },
+      {
+        id: "rename",
+        label: "Renomear conversa",
+        icon: IconPencil,
+        group: "conversation",
+        keepFocus: true,
+        run: () => setRenaming("menu"),
+      },
+    );
+  }
+  menuActions.push({
+    id: "folder",
+    label: "Trocar pasta…",
+    hint: "reinicia só este terminal",
+    icon: IconFolderOpen,
+    group: "conversation",
+    run: () => pickPaneFolder(paneId, cwd),
+  });
+  if (canMaximize) {
+    menuActions.push({
+      id: "maximize",
+      label: isMaximized ? "Restaurar os outros terminais" : "Expandir este terminal",
+      icon: isMaximized ? IconMinimize : IconMaximize,
+      shortcut: "Ctrl+Shift+Z",
+      inline: "maximize",
+      group: "layout",
+      run: toggleMaximized,
+    });
+  }
+  menuActions.push(
+    {
+      id: "split-v",
+      label: "Dividir abaixo",
+      icon: IconSplitVertical,
+      shortcut: "Ctrl+\\",
+      inline: "split-v",
+      group: "layout",
+      run: () => split("vertical"),
+    },
+    {
+      id: "split-h",
+      label: "Dividir ao lado",
+      icon: IconSplitHorizontal,
+      shortcut: "Ctrl+Shift+\\",
+      inline: "split-h",
+      group: "layout",
+      run: () => split("horizontal"),
+    },
+  );
+  if (paneCount >= 3) {
+    menuActions.push({
+      id: "equalize",
+      label: "Distribuir terminais igualmente",
+      icon: IconEqualize,
+      group: "layout",
+      disabledHint: "já estão com o mesmo tamanho",
+      disabled: () => {
+        const state = useSessionStore.getState();
+        const session = state.sessions.find((candidate) => candidate.id === sessionId);
+        if (!session) {
+          return true;
+        }
+        const hidden = new Set(
+          collectPaneIds(session.layout).filter((id) => state.minimizedPanes[id]),
+        );
+        return isLayoutEqualized(session.layout, hidden);
+      },
+      run: () => equalizeSessionLayout(sessionId),
+    });
+  }
+  if (canIsolate) {
+    menuActions.push({
+      id: "isolate",
+      label: "Isolar em worktree",
+      hint: "branch própria em pasta irmã; reinicia só este terminal",
+      icon: IconGitBranch,
+      inline: "isolate",
+      group: "layout",
+      disabled: isolating,
+      run: isolate,
+    });
+  }
+  if (isVoiceInputSupported()) {
+    menuActions.push({
+      id: "voice",
+      label: "Gravar prompt por voz",
+      icon: IconMic,
+      shortcut: VOICE_SHORTCUT,
+      inline: "voice",
+      group: "process",
+      disabled: () => isVoiceInputBlocked(paneId),
+      run: () => void toggleVoiceInput(paneId),
+    });
+  }
+  menuActions.push({
+    id: "restart",
+    label: resumable ? "Reiniciar com nova conversa" : "Reiniciar terminal",
+    icon: IconRefresh,
+    inline: "restart",
+    group: "process",
+    // Same as the inline button without Shift: a restored or resumed pane
+    // would otherwise come back on its old conversation.
+    run: () => restartPane(paneId, { continueConversation: false }),
+  });
+  if (resumable) {
+    menuActions.push({
+      id: "restart-continue",
+      label: "Reiniciar continuando a conversa",
+      icon: IconRestartContinue,
+      group: "process",
+      run: () => restartPane(paneId, { continueConversation: true }),
+    });
+  }
+  menuActions.push({
+    id: "minimize",
+    label: "Minimizar",
+    hint: "sai da tela; o agent segue rodando",
+    icon: IconMinimizeToDock,
+    shortcut: "Ctrl+Shift+M",
+    inline: "minimize",
+    group: "process",
+    keepFocus: true,
+    run: () => minimizePaneWithMotion(paneId),
+  });
+  if (canClose) {
+    menuActions.push({
+      id: "close",
+      label: "Fechar terminal",
+      icon: IconClose,
+      shortcut: "Ctrl+Shift+W",
+      group: "close",
+      danger: true,
+      keepFocus: true,
+      run: onClose,
+    });
+  }
+
+  const headerClasses = [
+    "terminal-pane-header",
+    isActive ? "terminal-pane-header--active" : null,
+    renaming ? "terminal-pane-header--renaming" : null,
+    renaming === "menu" ? "terminal-pane-header--renaming-menu" : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div
-      className={
-        isActive
-          ? "terminal-pane-header terminal-pane-header--active"
-          : "terminal-pane-header"
-      }
-      onClick={onFocus}
-    >
+    <div ref={headerRef} className={headerClasses} onClick={onFocus}>
       <span className="terminal-pane-header__title">
         <span
           className={`terminal-pane-header__agent terminal-pane-header__agent--${agentProfileId}`}
@@ -438,25 +706,30 @@ export function TerminalPaneHeader({
         <span className="terminal-pane-header__name">{shortLabel}</span>
         <PaneFolderButton paneId={paneId} cwd={cwd} />
         {branchLabel && (
-          <span className="terminal-pane-header__branch" title={branchLabel}>
-            <GitBranchBadge
-              context={gitContext}
-              className="terminal-pane-header__branch-badge"
-            />
+          <span
+            className="terminal-pane-header__branch"
+            title={gitContext?.repoRoot ? `${branchLabel} — ${gitContext.repoRoot}` : branchLabel}
+          >
+            <IconGitBranch size={10} className="terminal-pane-header__branch-icon" />
+            <span className="terminal-pane-header__branch-text">{branchLabel}</span>
           </span>
         )}
-        <PaneConversationName
-          paneId={paneId}
-          cwd={cwd}
-          agentProfileId={agentProfileId}
-          claudeAccountId={claudeAccountId}
-        />
-        <ResumeSessionMenu
-          paneId={paneId}
-          agentProfileId={agentProfileId}
-          cwd={cwd}
-          claudeAccountId={claudeAccountId}
-        />
+        <span className="terminal-pane-header__conversation-group">
+          <PaneConversationName
+            paneId={paneId}
+            conversation={conversation}
+            editing={renaming !== false}
+            onEditingChange={(editing) => setRenaming(editing ? "inline" : false)}
+          />
+          <ResumeSessionMenu
+            paneId={paneId}
+            agentProfileId={agentProfileId}
+            cwd={cwd}
+            claudeAccountId={claudeAccountId}
+            handleRef={resumeMenuRef}
+            onScreen={onScreen}
+          />
+        </span>
       </span>
       <span className="terminal-pane-header__right">
         {contextPercent !== undefined && (
@@ -469,24 +742,24 @@ export function TerminalPaneHeader({
             style={{ color: contextColor(contextPercent) }}
             title={`Contexto restante do agent: ${contextPercent}%`}
           >
-            ctx {contextPercent}%
+            <span className="terminal-pane-header__context-prefix">ctx </span>
+            {contextPercent}%
           </span>
         )}
-        <span
-          className={`terminal-pane-header__status terminal-pane-header__status--${activity}`}
-          title={
-            activity === "agent_fallback"
-              ? "Agent caiu — shell ativo"
-              : ACTIVITY_LABEL[activity]
-          }
-        >
-          {ACTIVITY_LABEL[activity]}
-        </span>
-        {activity === "agent_fallback" && (
+        <PaneStatusChip view={view} tooltip={statusTooltip} />
+        {view.tone === "fallback" && (
           <button
             type="button"
             className="terminal-pane-header__restart-agent"
-            title="Agent caiu — shell ativo. Nova conversa. Segure Shift para continuar a anterior."
+            data-pane-action="restart-agent"
+            title={`${
+              runtime?.agentExitCode === 0
+                ? "Agent saiu"
+                : runtime?.agentExitCode !== undefined
+                  ? `Agent caiu (código ${runtime.agentExitCode})`
+                  : "Agent caiu"
+            } — shell ativo. Nova conversa. Segure Shift para continuar a anterior.`}
+            aria-label="Reiniciar agent"
             onClick={(event) => {
               event.stopPropagation();
               restartPane(paneId, {
@@ -494,14 +767,30 @@ export function TerminalPaneHeader({
               });
             }}
           >
-            Reiniciar agent
+            <IconRefresh size={12} className="terminal-pane-header__restart-agent-icon" />
+            <span className="terminal-pane-header__restart-agent-text">Reiniciar agent</span>
           </button>
         )}
-        <VoiceInputButton paneId={paneId} />
-        {gitContext?.repoRoot && !ownsWorktree && (
-          <PaneIsolateButton paneId={paneId} />
+        <span className="terminal-pane-header__mic-slot" data-pane-action="voice">
+          <VoiceInputButton paneId={paneId} />
+        </span>
+        {canIsolate && (
+          <button
+            type="button"
+            className="terminal-pane-header__action"
+            data-pane-action="isolate"
+            disabled={isolating}
+            title="Isolar em worktree: branch agent-N em pasta irmã, com os arquivos ignorados copiados. Reinicia só este terminal."
+            aria-label="Isolar este terminal em um worktree"
+            onClick={(event) => {
+              event.stopPropagation();
+              isolate();
+            }}
+          >
+            <IconGitBranch size={13} />
+          </button>
         )}
-        {(onScreenPaneCount > 1 || isMaximized) && (
+        {canMaximize && (
           <button
             type="button"
             className={
@@ -509,6 +798,7 @@ export function TerminalPaneHeader({
                 ? "terminal-pane-header__action terminal-pane-header__action--on"
                 : "terminal-pane-header__action"
             }
+            data-pane-action="maximize"
             title={
               isMaximized
                 ? `Restaurar os outros terminais (${formatShortcut("Ctrl+Shift+Z")})`
@@ -522,8 +812,7 @@ export function TerminalPaneHeader({
             aria-pressed={isMaximized}
             onClick={(event) => {
               event.stopPropagation();
-              onFocus();
-              toggleMaximizedPane(paneId);
+              toggleMaximized();
             }}
           >
             {isMaximized ? <IconMinimize size={13} /> : <IconMaximize size={13} />}
@@ -532,12 +821,12 @@ export function TerminalPaneHeader({
         <button
           type="button"
           className="terminal-pane-header__action"
+          data-pane-action="split-v"
           title={`Dividir abaixo (${formatShortcut("Ctrl+\\")})`}
           aria-label="Dividir verticalmente"
           onClick={(event) => {
             event.stopPropagation();
-            onFocus();
-            splitPane(paneId, "vertical");
+            split("vertical");
           }}
         >
           <IconSplitVertical size={13} />
@@ -545,12 +834,12 @@ export function TerminalPaneHeader({
         <button
           type="button"
           className="terminal-pane-header__action"
+          data-pane-action="split-h"
           title={`Dividir ao lado (${formatShortcut("Ctrl+Shift+\\")})`}
           aria-label="Dividir horizontalmente"
           onClick={(event) => {
             event.stopPropagation();
-            onFocus();
-            splitPane(paneId, "horizontal");
+            split("horizontal");
           }}
         >
           <IconSplitHorizontal size={13} />
@@ -558,6 +847,7 @@ export function TerminalPaneHeader({
         <button
           type="button"
           className="terminal-pane-header__action"
+          data-pane-action="restart"
           title="Reiniciar pane (Shift: continuar conversa)"
           aria-label={`Reiniciar ${shortLabel}`}
           onClick={(event) => {
@@ -572,6 +862,7 @@ export function TerminalPaneHeader({
         <button
           type="button"
           className="terminal-pane-header__action"
+          data-pane-action="minimize"
           title={`Minimizar (${formatShortcut("Ctrl+Shift+M")}): sai da tela e o agent segue rodando; o status fica num card da sessão`}
           aria-label={`Minimizar ${shortLabel}`}
           onClick={(event) => {
@@ -581,11 +872,63 @@ export function TerminalPaneHeader({
         >
           <IconMinimizeToDock size={13} />
         </button>
-        {paneCount > 1 && (
+        <PaneActionsMenu
+          paneId={paneId}
+          label={`Mais ações de ${shortLabel}`}
+          actions={menuActions}
+          hostRef={headerRef}
+          onActivate={onFocus}
+          renderHeader={() => (
+            <>
+              <div
+                className={`pane-actions-menu__status pane-actions-menu__status--${view.tone}`}
+              >
+                <StatusDot tone={view.tone} title={null} />
+                <span>{formatStatusDetail(view, Date.now())}</span>
+              </div>
+              {isConversationHidden() && (
+                <div className="pane-actions-menu__conversation" title={conversationName}>
+                  <span className="pane-actions-menu__conversation-label">Conversa:</span>{" "}
+                  <span
+                    className={
+                      conversation.name
+                        ? "pane-actions-menu__conversation-name"
+                        : "pane-actions-menu__conversation-name pane-actions-menu__conversation-name--empty"
+                    }
+                  >
+                    {conversationName}
+                  </span>
+                </div>
+              )}
+              <div className="pane-actions-menu__context">
+                <span className="pane-actions-menu__context-item" title={cwd}>
+                  <IconFolder size={11} />
+                  <span>{folderName}</span>
+                </span>
+                {branchLabel && (
+                  <span className="pane-actions-menu__context-item" title={branchLabel}>
+                    <IconGitBranch size={11} />
+                    <span>{branchLabel}</span>
+                  </span>
+                )}
+                {contextPercent !== undefined && (
+                  <span
+                    className="pane-actions-menu__context-item pane-actions-menu__context-item--ctx"
+                    style={{ color: contextColor(contextPercent) }}
+                  >
+                    ctx {contextPercent}%
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        />
+        {canClose && (
           <button
             type="button"
             className="terminal-pane-header__action terminal-pane-header__close"
-            title="Fechar terminal"
+            data-pane-action="close"
+            title={`Fechar terminal (${formatShortcut("Ctrl+Shift+W")})`}
             aria-label={`Fechar ${shortLabel}`}
             onClick={(event) => {
               event.stopPropagation();

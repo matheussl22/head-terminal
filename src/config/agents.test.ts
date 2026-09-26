@@ -6,6 +6,7 @@ vi.mock("../core/agent-launcher", () => ({
 
 import {
   AGENT_FALLBACK_OSC,
+  CODEX_TITLE_OVERRIDE,
   ORNITH_DEFAULT_GGUF,
   QWEN27_DEFAULT_GGUF,
   buildAgentProfiles,
@@ -96,13 +97,58 @@ describe("claude account pinning", () => {
   });
 });
 
+describe("agent status signals", () => {
+  const SESSION_ID = "c8654eb2-0d87-42c0-a670-c5037d25b1e0";
+  const SETTINGS = "/home/me/.config/Head Terminal/agent-hooks/claude-status-hooks.json";
+
+  it("launches every claude with the status hooks settings, fallback included", () => {
+    const flag = `--settings '${SETTINGS}'`;
+    expect(buildAgentProfiles({ claudeSettingsPath: SETTINGS }).claude.args.join(" "))
+      .toContain(`; claude ${flag}; printf`);
+    expect(
+      buildAgentProfiles({ claudeSettingsPath: SETTINGS, continueConversation: true })
+        .claude.args.join(" "),
+    ).toContain(`claude --continue ${flag};`);
+    const resumed = buildAgentProfiles({
+      claudeSettingsPath: SETTINGS,
+      resumeSessionId: SESSION_ID,
+    }).claude.args.join(" ");
+    expect(resumed).toContain(`claude --resume ${SESSION_ID} ${flag};`);
+    expect(resumed).toMatch(/resume-failed:%s.*claude --settings '[^']+'; fi/u);
+    expect(buildAgentProfiles({ claudeSettingsPath: SETTINGS }).codex.args.join(" "))
+      .not.toContain("--settings");
+    expect(buildAgentProfiles().claude.args.join(" ")).not.toContain("--settings");
+  });
+
+  it("single-quotes a hostile settings path and drops one with control characters", () => {
+    const quoted = buildAgentProfiles({ claudeSettingsPath: "/tmp/it's $(x).json" })
+      .claude.args.join(" ");
+    expect(quoted).toContain(`claude --settings '/tmp/it'\\''s $(x).json';`);
+    const dropped = buildAgentProfiles({ claudeSettingsPath: "/tmp/x.json\nrm -rf /" })
+      .claude.args.join(" ");
+    expect(dropped).not.toContain("--settings");
+    expect(dropped).not.toContain("rm -rf");
+  });
+
+  it("pins codex's run-state title on every launch, fallback included", () => {
+    expect(buildAgentProfiles().codex.args.join(" ")).toContain(
+      `; codex ${CODEX_TITLE_OVERRIDE}; printf`,
+    );
+    const resumed = buildAgentProfiles({ resumeSessionId: SESSION_ID }).codex.args.join(" ");
+    expect(resumed).toContain(`codex ${CODEX_TITLE_OVERRIDE} resume ${SESSION_ID};`);
+    expect(resumed).toContain(`resume_code; codex ${CODEX_TITLE_OVERRIDE}; fi`);
+  });
+});
+
 describe("agent profiles resume flag", () => {
   const SESSION_ID = "c8654eb2-0d87-42c0-a670-c5037d25b1e0";
 
   it("resumes claude, codex and cursor by session id", () => {
     const profiles = buildAgentProfiles({ resumeSessionId: SESSION_ID });
     expect(profiles.claude.args.join(" ")).toContain(`claude --resume ${SESSION_ID}`);
-    expect(profiles.codex.args.join(" ")).toContain(`codex resume ${SESSION_ID}`);
+    expect(profiles.codex.args.join(" ")).toContain(
+      `codex ${CODEX_TITLE_OVERRIDE} resume ${SESSION_ID}`,
+    );
     expect(profiles.cursor.args.join(" ")).toContain(
       `ht_cursor --resume ${SESSION_ID}`,
     );

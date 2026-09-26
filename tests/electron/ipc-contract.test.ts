@@ -6,13 +6,57 @@ const electron = vi.hoisted(() => {
 
   class Notification {
     static isSupported = vi.fn(() => true);
+    static instances: Notification[] = [];
     on = vi.fn();
     show = vi.fn();
+    constructor() {
+      Notification.instances.push(this);
+    }
   }
+
+  // The preload's side: an EventEmitter's on/removeListener, and a way for
+  // the test to play main sending on a channel.
+  type RendererListener = (event: unknown, payload: unknown) => void;
+  const rendererListeners = new Map<string, RendererListener[]>();
+  const listenersOf = (channel: string) => {
+    let list = rendererListeners.get(channel);
+    if (!list) {
+      list = [];
+      rendererListeners.set(channel, list);
+    }
+    return list;
+  };
+  const ipcRenderer = {
+    on: vi.fn((channel: string, listener: RendererListener) => {
+      listenersOf(channel).push(listener);
+      return ipcRenderer;
+    }),
+    removeListener: vi.fn((channel: string, listener: RendererListener) => {
+      const list = listenersOf(channel);
+      const index = list.indexOf(listener);
+      if (index >= 0) list.splice(index, 1);
+      return ipcRenderer;
+    }),
+    invoke: vi.fn(),
+    send: vi.fn(),
+    listenerCount: (channel: string) => listenersOf(channel).length,
+    emit: (channel: string, payload: unknown) => {
+      for (const listener of [...listenersOf(channel)]) listener({}, payload);
+    },
+    reset: () => rendererListeners.clear(),
+  };
+  const exposed: Record<string, unknown> = {};
 
   return {
     handles,
     listeners,
+    ipcRenderer,
+    exposed,
+    contextBridge: {
+      exposeInMainWorld: vi.fn((key: string, api: unknown) => {
+        exposed[key] = api;
+      }),
+    },
     app: {
       isPackaged: false,
       getVersion: vi.fn(() => "0.1.0-test"),
@@ -49,10 +93,14 @@ vi.mock("electron", () => ({
   clipboard: electron.clipboard,
   ipcMain: electron.ipcMain,
   Notification: electron.Notification,
+  contextBridge: electron.contextBridge,
+  ipcRenderer: electron.ipcRenderer,
+  webUtils: { getPathForFile: vi.fn(() => "") },
 }));
 
 import { IPC_CHANNELS } from "../../electron/ipc/channels";
 import { registerIpc, type IpcServices } from "../../electron/ipc/register";
+import type { HeadTerminalApi, PtyDataEvent } from "../../electron/types/api";
 
 interface FakeWindowHarness {
   window: Parameters<typeof registerIpc>[0]["window"];
@@ -116,6 +164,7 @@ function send(channel: string, event: unknown, ...args: unknown[]): unknown {
 beforeEach(() => {
   electron.handles.clear();
   electron.listeners.clear();
+  electron.Notification.instances.length = 0;
   vi.clearAllMocks();
 });
 
@@ -124,8 +173,8 @@ describe("Electron IPC contract", () => {
     const channels = flattenChannels(IPC_CHANNELS);
 
     expect(new Set(channels).size).toBe(channels.length);
-    expect(channels).toHaveLength(62);
-    expect(channels.every((channel) => /^[a-z]+:[a-z][a-z-]*$/.test(channel))).toBe(true);
+    expect(channels).toHaveLength(64);
+    expect(channels.every((channel) => /^[a-z][a-z-]*:[a-z][a-z-]*$/.test(channel))).toBe(true);
   });
 
   it("registers every renderer request channel and no generic IPC escape hatch", () => {
@@ -140,6 +189,7 @@ describe("Electron IPC contract", () => {
       IPC_CHANNELS.live.toggleRequested,
       IPC_CHANNELS.live.endRequested,
       IPC_CHANNELS.live.delegationProgress,
+      IPC_CHANNELS.agentHooks.event,
     ]);
     const expected = flattenChannels(IPC_CHANNELS).filter(
       (channel) => !mainToRendererOnly.has(channel),
@@ -180,6 +230,168 @@ describe("Electron IPC contract", () => {
       await invoke(IPC_CHANNELS.terminal.spawn, harness.trustedEvent, input),
     ).toEqual({ id: "pane-1", pid: 321 });
     expect(spawn).toHaveBeenCalledWith(73, input);
+  });
+
+  it("lets the pane id through to the PTY env, and only a well-formed one", async () => {
+    const harness = fakeWindow();
+    const spawn = vi.fn(() => ({ id: "pane-1", pid: 321 }));
+    registerIpc({
+      window: harness.window,
+      services: { terminal: { spawn, write: vi.fn(), resize: vi.fn(), kill: vi.fn() } },
+    });
+    const base = { id: "pane-1", command: "/bin/zsh", args: ["-l"], cwd: "/tmp", cols: 100, rows: 30 };
+    const paneId = "0d4c9a51-7f39-4a8e-9b0e-2d6f1c3e5a77";
+
+    await invoke(IPC_CHANNELS.terminal.spawn, harness.trustedEvent, {
+      ...base,
+      env: { CLAUDE_CONFIG_DIR: "/home/me/.claude-x", HT_PANE_ID: paneId },
+    });
+    expect(spawn).toHaveBeenLastCalledWith(73, expect.objectContaining({
+      env: { CLAUDE_CONFIG_DIR: "/home/me/.claude-x", HT_PANE_ID: paneId },
+    }));
+
+    // A malformed id costs the pane its hooks, not its spawn.
+    await invoke(IPC_CHANNELS.terminal.spawn, harness.trustedEvent, {
+      ...base,
+      env: { HT_PANE_ID: "x\r\nInjected: 1", LANG: "pt_BR.UTF-8" },
+    });
+    expect(spawn).toHaveBeenLastCalledWith(73, expect.objectContaining({
+      env: { LANG: "pt_BR.UTF-8" },
+    }));
+
+    // The allowlist still holds for everything else.
+    expect(() =>
+      invoke(IPC_CHANNELS.terminal.spawn, harness.trustedEvent, {
+        ...base,
+        env: { HT_PANE_ID: paneId, NODE_OPTIONS: "--require /tmp/x.js" },
+      }),
+    ).toThrow(/not allowed/);
+  });
+
+  it("hands out one pane's Claude hook settings, or null without a hook server", async () => {
+    const harness = fakeWindow();
+    const paneId = "0d4c9a51-7f39-4a8e-9b0e-2d6f1c3e5a77";
+    registerIpc({ window: harness.window });
+    expect(
+      await invoke(IPC_CHANNELS.agentHooks.getClaudeSettings, harness.trustedEvent, paneId),
+    ).toBeNull();
+
+    const settings = { settingsPath: `/data/agent-hooks/panes/${paneId}.json` };
+    const getClaudeSettings = vi.fn(async (_paneId: string) => settings);
+    registerIpc({
+      window: harness.window,
+      services: {
+        agentHooks: { getClaudeSettings, onEvent: vi.fn(() => vi.fn()) },
+      },
+    });
+    expect(
+      await invoke(IPC_CHANNELS.agentHooks.getClaudeSettings, harness.trustedEvent, paneId),
+    ).toEqual(settings);
+    expect(getClaudeSettings).toHaveBeenCalledWith(paneId);
+    expect(() =>
+      invoke(IPC_CHANNELS.agentHooks.getClaudeSettings, harness.foreignEvent, paneId),
+    ).toThrow(/untrusted frame/);
+  });
+
+  it("validates the pane id before it can name a file or a header", async () => {
+    const harness = fakeWindow();
+    const getClaudeSettings = vi.fn(async () => ({ settingsPath: "/x.json" }));
+    registerIpc({
+      window: harness.window,
+      services: { agentHooks: { getClaudeSettings, onEvent: vi.fn(() => vi.fn()) } },
+    });
+
+    for (const value of [undefined, 42, ""]) {
+      expect(() =>
+        invoke(IPC_CHANNELS.agentHooks.getClaudeSettings, harness.trustedEvent, value),
+      ).toThrow(/paneId/);
+    }
+    // A malformed id costs the pane its hooks, not its spawn.
+    for (const value of ["../../evil", "a\r\nInjected: 1", "$HT_PANE_ID", "x".repeat(65)]) {
+      expect(
+        await invoke(IPC_CHANNELS.agentHooks.getClaudeSettings, harness.trustedEvent, value),
+      ).toBeNull();
+    }
+    expect(getClaudeSettings).not.toHaveBeenCalled();
+  });
+
+  it("forwards hook events to the window and stops when unregistered", () => {
+    const harness = fakeWindow();
+    let emit: ((payload: unknown) => void) | undefined;
+    const unsubscribe = vi.fn();
+    const remove = registerIpc({
+      window: harness.window,
+      services: {
+        agentHooks: {
+          getClaudeSettings: vi.fn(async () => null),
+          onEvent: vi.fn((listener) => {
+            emit = listener as (payload: unknown) => void;
+            return unsubscribe;
+          }),
+        },
+      },
+    });
+    const payload = {
+      paneId: "0d4c9a51-7f39-4a8e-9b0e-2d6f1c3e5a77",
+      source: "claude",
+      event: "PermissionRequest",
+      toolName: "Write",
+      sessionId: "3f2c1a9e-7b4d-4e21-9c55-0a1b2c3d4e5f",
+      receivedAt: 1,
+    };
+    emit?.(payload);
+    expect(harness.sent).toEqual([[IPC_CHANNELS.agentHooks.event, payload]]);
+
+    remove();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  // Review store-hooks-ui-fixes#1: with the window brought back first, the
+  // renderer's focus listener read the "Concluído" of the pane that was
+  // active before the click could say which pane it was about.
+  it("says which pane a clicked notification is about before bringing the window back", async () => {
+    const harness = fakeWindow();
+    const order: string[] = [];
+    const win = harness.window as unknown as Record<
+      "isMinimized" | "restore" | "show" | "focus",
+      ReturnType<typeof vi.fn>
+    >;
+    win.isMinimized.mockReturnValue(true);
+    for (const name of ["restore", "show", "focus"] as const) {
+      win[name].mockImplementation(() => order.push(name));
+    }
+    vi.mocked(harness.window.webContents.send).mockImplementation((channel: string) => {
+      order.push(channel);
+    });
+    registerIpc({ window: harness.window });
+
+    await invoke(IPC_CHANNELS.notifications.show, harness.trustedEvent, {
+      title: "Head Terminal",
+      body: "web: cc2 concluiu",
+      sessionId: "s2",
+      paneId: "p-b",
+    });
+    const [notification] = electron.Notification.instances;
+    expect(notification.show).toHaveBeenCalledOnce();
+    const onClick = notification.on.mock.calls.find(([name]) => name === "click")?.[1] as () => void;
+    onClick();
+
+    expect(order).toEqual([IPC_CHANNELS.notifications.activated, "restore", "show", "focus"]);
+    expect(harness.window.webContents.send).toHaveBeenCalledWith(
+      IPC_CHANNELS.notifications.activated,
+      { sessionId: "s2", paneId: "p-b" },
+    );
+
+    // Without a session to land on it still brings the window back.
+    order.length = 0;
+    win.isMinimized.mockReturnValue(false);
+    await invoke(IPC_CHANNELS.notifications.show, harness.trustedEvent, {
+      title: "Head Terminal",
+      body: "algo",
+    });
+    const plain = electron.Notification.instances[1];
+    (plain.on.mock.calls.find(([name]) => name === "click")?.[1] as () => void)();
+    expect(order).toEqual(["show", "focus"]);
   });
 
   it("accepts a PowerShell pane with the fixed switch set and an encoded script", async () => {
@@ -508,5 +720,96 @@ describe("Electron IPC contract", () => {
     expect(cleanup).toHaveBeenCalledTimes(3);
     onGone();
     expect(cleanup).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("preload bridge", () => {
+  async function loadApi(): Promise<HeadTerminalApi> {
+    vi.resetModules();
+    electron.ipcRenderer.reset();
+    await import("../../electron/preload");
+    return electron.exposed.headTerminal as HeadTerminalApi;
+  }
+
+  // e2e: an 11th pane tripped MaxListenersExceededWarning on terminal:data
+  // and terminal:exit — every pane subscribing put its own listener on
+  // ipcRenderer.
+  it("keeps one IPC listener per channel however many panes subscribe", async () => {
+    const api = await loadApi();
+    const seen = Array.from({ length: 12 }, () => [] as string[]);
+    const unsubscribe = seen.map((received, index) =>
+      api.terminal.onData((event: PtyDataEvent) => {
+        if (event.id === `pane-${index}`) received.push(String(event.data));
+      }),
+    );
+    const exits = seen.map(() => api.terminal.onExit(() => undefined));
+
+    expect(electron.ipcRenderer.listenerCount(IPC_CHANNELS.terminal.data)).toBe(1);
+    expect(electron.ipcRenderer.listenerCount(IPC_CHANNELS.terminal.exit)).toBe(1);
+
+    electron.ipcRenderer.emit(IPC_CHANNELS.terminal.data, { id: "pane-3", data: "oi" });
+    expect(seen[3]).toEqual(["oi"]);
+    expect(seen.filter((received) => received.length > 0)).toHaveLength(1);
+
+    // Leaving twice is leaving once; the others keep receiving.
+    unsubscribe[3]();
+    unsubscribe[3]();
+    electron.ipcRenderer.emit(IPC_CHANNELS.terminal.data, { id: "pane-3", data: "tchau" });
+    electron.ipcRenderer.emit(IPC_CHANNELS.terminal.data, { id: "pane-4", data: "ainda" });
+    expect(seen[3]).toEqual(["oi"]);
+    expect(seen[4]).toEqual(["ainda"]);
+
+    // The last one out takes the IPC listener along; the next one in is back.
+    for (const leave of [...unsubscribe, ...exits]) leave();
+    expect(electron.ipcRenderer.listenerCount(IPC_CHANNELS.terminal.data)).toBe(0);
+    expect(electron.ipcRenderer.listenerCount(IPC_CHANNELS.terminal.exit)).toBe(0);
+    const late: PtyDataEvent[] = [];
+    api.terminal.onData((event) => late.push(event));
+    electron.ipcRenderer.emit(IPC_CHANNELS.terminal.data, { id: "pane-9", data: "de volta" });
+    expect(late).toEqual([{ id: "pane-9", data: "de volta" }]);
+    expect(electron.ipcRenderer.listenerCount(IPC_CHANNELS.terminal.data)).toBe(1);
+  });
+
+  it("counts the same callback subscribed twice as two subscriptions", async () => {
+    const api = await loadApi();
+    const callback = vi.fn();
+    const first = api.agentHooks.onEvent(callback);
+    api.agentHooks.onEvent(callback);
+    electron.ipcRenderer.emit(IPC_CHANNELS.agentHooks.event, { paneId: "p" });
+    expect(callback).toHaveBeenCalledTimes(2);
+
+    first();
+    electron.ipcRenderer.emit(IPC_CHANNELS.agentHooks.event, { paneId: "p" });
+    expect(callback).toHaveBeenCalledTimes(3);
+  });
+
+  it("delivers to every pane even when one of them throws, and still reports it", async () => {
+    const api = await loadApi();
+    const after = vi.fn();
+    api.terminal.onExit(() => {
+      throw new Error("pane quebrado");
+    });
+    api.terminal.onExit(after);
+
+    expect(() =>
+      electron.ipcRenderer.emit(IPC_CHANNELS.terminal.exit, { id: "p", exitCode: 0 }),
+    ).toThrow("pane quebrado");
+    expect(after).toHaveBeenCalledWith({ id: "p", exitCode: 0 });
+  });
+
+  it("does not hand the event being delivered to a pane that left or joined meanwhile", async () => {
+    const api = await loadApi();
+    const leaving = vi.fn();
+    const joined = vi.fn();
+    let leave: () => void = () => undefined;
+    api.git.onChanged(() => {
+      leave();
+      api.git.onChanged(joined);
+    });
+    leave = api.git.onChanged(leaving);
+
+    electron.ipcRenderer.emit(IPC_CHANNELS.git.changed, { watchId: "w" });
+    expect(leaving).not.toHaveBeenCalled();
+    expect(joined).not.toHaveBeenCalled();
   });
 });

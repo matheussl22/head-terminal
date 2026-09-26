@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type MouseEvent,
+  type Ref,
+} from "react";
 
 import {
   fetchResumableSessions,
@@ -11,35 +19,78 @@ import {
 } from "../../core/session-manager";
 import { IconChevronDown, IconPencil } from "../ui/Icons";
 
+/** Lets another control open the list — the pane's "⋯" menu does, when the
+ * header is too narrow to show this menu's own chevron. */
+export interface ResumeSessionMenuHandle {
+  openAt: (anchor: MenuAnchor) => void;
+}
+
 interface ResumeSessionMenuProps {
   paneId: string;
   agentProfileId: string;
   cwd: string;
   claudeAccountId?: string;
+  handleRef?: Ref<ResumeSessionMenuHandle>;
+  /** The pane is on screen: its session is the one shown, and it is neither
+   * in the dock nor parked behind a zoomed sibling. The list closes when it
+   * stops being — it would otherwise stay open where nobody sees it, still
+   * holding Esc. */
+  onScreen?: boolean;
 }
 
-interface MenuPosition {
+export interface MenuPosition {
   right: number;
   top: number;
-  /** Room left below the trigger, so a long list scrolls instead of running
-   * off the bottom of the window. */
+  /** Room left on the side the menu opens to, so a long list scrolls instead
+   * of running off the window. */
   maxHeight: number;
+}
+
+/** The trigger's box, as getBoundingClientRect gives it. */
+export interface MenuAnchor {
+  right: number;
+  bottom: number;
+  top?: number;
 }
 
 const MENU_VIEWPORT_MARGIN_PX = 12;
 const MENU_MAX_HEIGHT_PX = 600;
 const MENU_MIN_HEIGHT_PX = 160;
+const RESUME_MENU_WIDTH_PX = 440;
 
+/**
+ * Where a menu opens: 4px under its trigger, right edges aligned. With the
+ * menu's size known it also stays on screen — shifted left when the trigger
+ * sits near the left edge, and flipped above the trigger when it doesn't fit
+ * below but does (better) above.
+ */
 export function resolveMenuPosition(
-  rect: { right: number; bottom: number },
+  rect: MenuAnchor,
   viewport: { width: number; height: number },
+  menu: { width?: number; height?: number } = {},
 ): MenuPosition {
-  const top = rect.bottom + 4;
-  const room = viewport.height - top - MENU_VIEWPORT_MARGIN_PX;
+  let right = Math.max(MENU_VIEWPORT_MARGIN_PX, viewport.width - rect.right);
+  if (menu.width !== undefined) {
+    right = Math.max(
+      MENU_VIEWPORT_MARGIN_PX,
+      Math.min(right, viewport.width - MENU_VIEWPORT_MARGIN_PX - menu.width),
+    );
+  }
+
+  const below = rect.bottom + 4;
+  const roomBelow = viewport.height - below - MENU_VIEWPORT_MARGIN_PX;
+  if (menu.height !== undefined && rect.top !== undefined && menu.height > roomBelow) {
+    const roomAbove = rect.top - 4 - MENU_VIEWPORT_MARGIN_PX;
+    if (roomAbove > roomBelow) {
+      const height = Math.min(menu.height, roomAbove, MENU_MAX_HEIGHT_PX);
+      return { right, top: rect.top - 4 - height, maxHeight: height };
+    }
+  }
+
   return {
-    right: Math.max(MENU_VIEWPORT_MARGIN_PX, viewport.width - rect.right),
-    top,
-    maxHeight: Math.max(MENU_MIN_HEIGHT_PX, Math.min(MENU_MAX_HEIGHT_PX, room)),
+    right,
+    top: below,
+    maxHeight: Math.max(MENU_MIN_HEIGHT_PX, Math.min(MENU_MAX_HEIGHT_PX, roomBelow)),
   };
 }
 
@@ -79,6 +130,8 @@ export function ResumeSessionMenu({
   agentProfileId,
   cwd,
   claudeAccountId,
+  handleRef,
+  onScreen = true,
 }: ResumeSessionMenuProps) {
   const resumePane = useSessionStore((state) => state.resumePane);
   const conversationLabels = useSessionStore(
@@ -122,18 +175,51 @@ export function ResumeSessionMenu({
         close();
       }
     };
+    // Capture phase: the keyboard is usually still in this pane's terminal
+    // (the list opens from the header, or from "⋯"), and xterm would send the
+    // Esc to the agent — interrupting its turn or declining its question —
+    // and swallow it before a bubbling listener ever saw it. The rename field
+    // inside the list handles its own Esc (cancel the rename, keep the list).
+    // Only an Esc from the list or from this pane is for the list, or one
+    // with the keyboard nowhere (opening it from "⋯" unmounts the item that
+    // had the focus). One typed in the palette, a rename in the sidebar or
+    // another pane's terminal belongs there.
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        close();
+      if (event.key !== "Escape") {
+        return;
       }
+      const target = event.target instanceof Node ? event.target : null;
+      const inList = Boolean(target && menuRef.current?.contains(target));
+      if (inList && target instanceof HTMLInputElement) {
+        return;
+      }
+      const pane = triggerRef.current?.closest(".terminal-pane-shell");
+      const inPane = Boolean(target && pane?.contains(target));
+      const nowhere =
+        !target || target === document.body || target === document.documentElement;
+      if (!inList && !inPane && !nowhere) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      close();
     };
     window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keydown", onKeyDown, true);
     return () => {
       window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keydown", onKeyDown, true);
     };
   }, [position, close]);
+
+  // Ctrl+Tab to another session, Ctrl+Shift+M, a notification revealing a
+  // pane elsewhere: none is a click outside the list, and the list goes off
+  // screen with its pane — open, and still taking the next Esc.
+  useEffect(() => {
+    if (!onScreen) {
+      close();
+    }
+  }, [onScreen, close]);
 
   useEffect(() => {
     if (editingId) {
@@ -142,22 +228,13 @@ export function ResumeSessionMenu({
     }
   }, [editingId]);
 
-  if (!isResumableAgent(agentProfileId)) {
-    return null;
-  }
-
-  const open = (event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    if (position) {
-      close();
-      return;
-    }
-    const rect = event.currentTarget.getBoundingClientRect();
+  const openAt = (anchor: MenuAnchor) => {
     setPosition(
-      resolveMenuPosition(rect, {
-        width: window.innerWidth,
-        height: window.innerHeight,
-      }),
+      resolveMenuPosition(
+        anchor,
+        { width: window.innerWidth, height: window.innerHeight },
+        { width: Math.min(RESUME_MENU_WIDTH_PX, window.innerWidth - 24) },
+      ),
     );
     setEntries(null);
 
@@ -172,6 +249,21 @@ export function ResumeSessionMenu({
           noteConversationTitles(result);
         }
       });
+  };
+
+  useImperativeHandle(handleRef, () => ({ openAt }));
+
+  if (!isResumableAgent(agentProfileId)) {
+    return null;
+  }
+
+  const open = (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (position) {
+      close();
+      return;
+    }
+    openAt(event.currentTarget.getBoundingClientRect());
   };
 
   const displayNames = new Map<string, number>();
@@ -191,8 +283,10 @@ export function ResumeSessionMenu({
         ref={triggerRef}
         type="button"
         className="terminal-pane-header__action"
+        data-pane-action="history"
         title="Histórico de conversas desta pasta"
         aria-label="Histórico de conversas desta pasta"
+        aria-haspopup="menu"
         aria-expanded={position !== null}
         onClick={open}
       >
@@ -208,6 +302,15 @@ export function ResumeSessionMenu({
             maxHeight: position.maxHeight,
           }}
           role="menu"
+          onClick={(event) => {
+            // The list lives inside the pane header, whose click activates the
+            // pane and hands the keyboard to its terminal. A click on the list
+            // itself (its padding, "Carregando…", the rename field) is not
+            // that; picking a conversation is, and still gets there.
+            if (!(event.target as HTMLElement).closest("button")) {
+              event.stopPropagation();
+            }
+          }}
         >
           {entries === null && (
             <div className="resume-session-menu__empty">Carregando…</div>

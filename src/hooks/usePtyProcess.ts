@@ -6,13 +6,24 @@ import {
   getAgentProfile,
 } from "../config/agents";
 import { ActivityDetector } from "../core/activity-detector";
-import { ContextMeter } from "../core/context-meter";
 import {
-  CLAUDE_FOLDER_TRUST_CONFIRM_KEY,
-  ClaudeFolderTrustAutoAccept,
-} from "../core/claude-folder-trust";
+  classifyClaudeScreen,
+  classifyTitle,
+  isTerminalReply,
+} from "../core/activity-signals";
+import {
+  getClaudeHookSettingsPath,
+  subscribeAgentHookEvents,
+} from "../core/agent-hooks-bridge";
+import { ContextMeter } from "../core/context-meter";
+import { ClaudeFolderTrustAutoAccept } from "../core/claude-folder-trust";
 import { resolveClaudeConfigDir } from "../core/claude-accounts";
-import { anchorPaneResumeSession, snapshotExistingSessionIds } from "../core/pane-resume-anchor";
+import {
+  anchorPaneResumeSession,
+  anchorPaneToHookSession,
+  PaneForegroundSession,
+  snapshotExistingSessionIds,
+} from "../core/pane-resume-anchor";
 import { isResumableAgent } from "../core/agent-sessions-bridge";
 import { checkpoint, logError, logEvent } from "../core/logger";
 import { notifyUiReady } from "../core/startup-watchdog";
@@ -27,8 +38,23 @@ import {
 } from "../core/pty-bridge";
 import { useSessionStore } from "../core/session-manager";
 import { createRafPtyWriter } from "../core/terminal-factory";
+import { SpawnScreenReader } from "../core/terminal-screen";
 import { WorkspaceDetector } from "../core/workspace-detector";
+import type { PaneActivity } from "../types/activity";
 import type { TerminalInstance } from "./useTerminalInstance";
+
+/** A Claude pane never waits longer than this on the hook server: without
+ * its settings the pane still spawns and reads Claude's title and screen. */
+const HOOK_SETTINGS_WAIT_MS = 1500;
+
+function claudeHookSettingsWithin(paneId: string, ms: number): Promise<string | undefined> {
+  return Promise.race([
+    getClaudeHookSettingsPath(paneId),
+    new Promise<undefined>((resolve) => {
+      setTimeout(() => resolve(undefined), ms);
+    }),
+  ]);
+}
 
 interface UsePtyProcessOptions {
   instance: TerminalInstance | null;
@@ -79,9 +105,7 @@ export function usePtyProcess({
   const updatePaneContext = useSessionStore(
     (state) => state.updatePaneContext,
   );
-  const updatePaneApproval = useSessionStore(
-    (state) => state.updatePaneApproval,
-  );
+  const markPaneSeen = useSessionStore((state) => state.markPaneSeen);
   const previousDisposeRef = useRef(Promise.resolve<void>(undefined));
 
   useEffect(() => {
@@ -94,27 +118,77 @@ export function usePtyProcess({
     let loggedFirstByte = false;
     const listeners: IDisposable[] = [];
     let bridge: PtyBridge | null = null;
+    // What this spawn's process drew — not what a previous one left on the
+    // screen of this reused xterm (see SpawnScreenReader).
+    const spawnScreen = new SpawnScreenReader(terminal);
+    const readScreen = spawnScreen.read;
 
-    const activityDetector = new ActivityDetector(
-      (activity) => {
-        updatePaneActivity(paneId, activity);
+    let lastActivity: PaneActivity = "starting";
+    const activityDetector = new ActivityDetector({
+      agentProfileId,
+      readScreen,
+      onChange: (activity, blocked, meta) => {
+        // A restart may already have reset the pane for the next process.
+        if (disposed) {
+          return;
+        }
+        logEvent("info", "pane.activity", {
+          paneId,
+          from: lastActivity,
+          to: activity,
+          source: meta.source,
+          reason: blocked?.reason,
+          detail: blocked?.detail,
+          agentExitCode: meta.agentExitCode,
+        });
+        lastActivity = activity;
+        updatePaneActivity(paneId, activity, blocked, {
+          agentExitCode: meta.agentExitCode,
+        });
       },
-      (pending) => {
-        updatePaneApproval(paneId, pending);
-      },
-    );
+    });
+    // Keys the folder-trust auto-accept sends are the app's, not the user's:
+    // they go straight to the pty, past the input tracking below. It stands
+    // down for good once Claude's REPL is on screen, its first status title
+    // arrives, or its startup window is over. Hooks do not stop it: a
+    // background session dispatched from this pane reports through the same
+    // settings file, while this spawn may still be showing the dialog.
     const folderTrust =
-      agentProfileId === "claude" ? new ClaudeFolderTrustAutoAccept() : null;
+      agentProfileId === "claude"
+        ? new ClaudeFolderTrustAutoAccept({
+            readScreen,
+            send: (keys) => {
+              if (!disposed) {
+                bridge?.write(keys);
+              }
+            },
+            isAgentUp: (screen) => {
+              const state = classifyClaudeScreen(screen).state;
+              return state === "idle" || state === "working";
+            },
+            onAccepted: () => {
+              logEvent("info", "claude.folder_trust_auto_accepted", {
+                paneId,
+                sessionId,
+              });
+            },
+            onGaveUp: () => {
+              logEvent("warn", "claude.folder_trust_auto_accept_gave_up", {
+                paneId,
+                sessionId,
+              });
+            },
+          })
+        : null;
     const workspaceDetector = new WorkspaceDetector(onWorkspacePath);
     const contextMeter = new ContextMeter((percent) => {
       updatePaneContext(paneId, percent);
     });
 
+    // A fresh process starts with nothing pending: whatever the previous one
+    // left (a dialog, an unseen finished turn) must not linger.
     activityDetector.onStarting();
     updatePaneActivity(paneId, "starting");
-    // A fresh detector starts with no prompt pending, and says nothing until
-    // one shows up: whatever the previous process left must not linger.
-    updatePaneApproval(paneId, false);
 
     // Sentinel emitted by the profile args right before the shell fallback
     // replaces a dead agent (§2.3) — without it the fallback is invisible.
@@ -123,10 +197,58 @@ export function usePtyProcess({
       (payload) => {
         const exitCode = Number(payload.split(":")[1] ?? "0");
         logEvent("warn", "agent.fallback", { paneId, sessionId, exitCode });
-        activityDetector.onAgentFallback();
+        activityDetector.onAgentFallback(Number.isFinite(exitCode) ? exitCode : 1);
         return true;
       },
     );
+
+    // The agents' own status line: Claude's ◐/✳, codex's spinner and
+    // "Action Required", cursor's status indicators.
+    const titleListener = terminal.onTitleChange((title) => {
+      if (disposed) {
+        return;
+      }
+      activityDetector.onTitle(title);
+      // Claude only sets a status title once the trust dialog is behind it.
+      // Only this spawn's titles count: until its pty is up, a title can
+      // only be the previous process's, still draining through xterm.
+      if (folderTrust && bridge && classifyTitle(title)?.family === "claude") {
+        folderTrust.stop();
+      }
+    });
+
+    // A session sent to the background from this pane keeps reporting
+    // through this pane's settings file: only the conversation in the pane's
+    // foreground speaks for it, as learned from the prompt the pane itself
+    // submitted — and learned again whenever it changes in place (/clear
+    // and friends). That is also the pane's conversation for good: its
+    // resume anchor, which no sibling pane's transcript poll may take.
+    const foregroundSession = new PaneForegroundSession((conversationId) => {
+      if (disposed) {
+        return;
+      }
+      logEvent("info", "claude.foreground_session", {
+        paneId,
+        sessionId,
+        conversationId,
+      });
+      void anchorPaneToHookSession({
+        paneId,
+        sessionId: conversationId,
+        cwd,
+        agentProfileId,
+        claudeAccountId,
+        isDisposed: () => disposed,
+      });
+    });
+    const unsubscribeHooks =
+      agentProfileId === "claude"
+        ? subscribeAgentHookEvents(paneId, (event) => {
+            if (!disposed && foregroundSession.accepts(event)) {
+              activityDetector.onHookEvent(event);
+            }
+          })
+        : null;
 
     // The pane asked to resume a conversation the CLI wouldn't take, so it
     // is now on a brand new one: say so and find out which one it landed on,
@@ -183,6 +305,17 @@ export function usePtyProcess({
           agentProfileId === "claude"
             ? resolveClaudeConfigDir(claudeAccountId)
             : undefined;
+        // The hooks that let Claude report its own state (see
+        // agent-hook-server.ts): this pane's own settings file, with its id
+        // written in it. Without them the pane still reads Claude's title
+        // and screen.
+        const claudeSettingsPath =
+          agentProfileId === "claude"
+            ? await claudeHookSettingsWithin(paneId, HOOK_SETTINGS_WAIT_MS)
+            : undefined;
+        if (disposed) {
+          return;
+        }
         const profile = getAgentProfile(agentProfileId, {
           continueConversation,
           resumeSessionId,
@@ -190,6 +323,7 @@ export function usePtyProcess({
           ollamaThinkOff,
           ggufPath,
           claudeConfigDir,
+          claudeSettingsPath,
           wslDistro,
         });
         const startsNewConversation =
@@ -207,14 +341,16 @@ export function usePtyProcess({
         }
 
         const spawnStartMs = Date.now();
+        const env: Record<string, string> = {};
+        if (claudeConfigDir) {
+          env.CLAUDE_CONFIG_DIR = claudeConfigDir;
+        }
         const nextBridge = await createPtyBridge({
           profile,
           cwd,
           cols: terminal.cols,
           rows: terminal.rows,
-          env: claudeConfigDir
-            ? { CLAUDE_CONFIG_DIR: claudeConfigDir }
-            : undefined,
+          env,
         });
 
         if (disposed) {
@@ -224,6 +360,8 @@ export function usePtyProcess({
         bridge = nextBridge;
 
         if (instance.spawnCount.current > 0) {
+          // The previous process's screen stays up until this one paints.
+          spawnScreen.holdUntilPainted();
           const attempt = instance.spawnCount.current + 1;
           terminal.writeln("");
           terminal.writeln(
@@ -241,19 +379,11 @@ export function usePtyProcess({
             if (disposed) {
               return;
             }
-            activityDetector.onData(frameText);
+            spawnScreen.noteFrame(frameText);
+            activityDetector.onFrame();
             workspaceDetector.onData(frameText);
             contextMeter.onData(frameText);
-            folderTrust?.onData(frameText, () => {
-              if (disposed) {
-                return;
-              }
-              logEvent("info", "claude.folder_trust_auto_accepted", {
-                paneId,
-                sessionId,
-              });
-              bridge?.write(CLAUDE_FOLDER_TRUST_CONFIRM_KEY);
-            });
+            folderTrust?.check();
           },
         );
 
@@ -282,16 +412,25 @@ export function usePtyProcess({
           }),
         );
 
-        instance.writeToPty.current = (data) => {
+        // Everything written on the user's behalf — keys, paste, voice,
+        // toolbar commands — passes through here: Enter may start a shell
+        // command or answer a dialog, and typing into a pane is looking at it.
+        // Replies xterm sends for the terminal (cursor reports and the like)
+        // are neither.
+        const writeUserInput = (data: string) => {
           bridge?.write(data);
+          if (disposed || isTerminalReply(data)) {
+            return;
+          }
+          activityDetector.onUserInput(data);
+          foregroundSession.noteUserInput(data);
+          markPaneSeen(paneId);
         };
+        instance.writeToPty.current = writeUserInput;
         instance.resizePty.current = (cols, rows) => {
-          activityDetector.onResize();
           bridge?.pty.resize(cols, rows);
         };
-        registerPtyWriter(paneId, (data) => {
-          bridge?.write(data);
-        });
+        registerPtyWriter(paneId, writeUserInput);
 
         checkpoint("js.pty.spawn_ok", { paneId, sessionId });
         updatePaneStatus(paneId, "running");
@@ -337,6 +476,8 @@ export function usePtyProcess({
       disposed = true;
       oscHandler.dispose();
       resumeFallbackHandler.dispose();
+      titleListener.dispose();
+      unsubscribeHooks?.();
       activityDetector.dispose();
       folderTrust?.dispose();
       listeners.forEach((listener) => listener.dispose());
@@ -358,14 +499,15 @@ export function usePtyProcess({
     resumeSessionId,
     cwd,
     instance,
-      onWorkspacePath,
-      paneId,
+    markPaneSeen,
+    onWorkspacePath,
+    paneId,
     registerPtyWriter,
     restartKey,
     sessionId,
     unregisterPtyWriter,
     updatePaneActivity,
-    updatePaneApproval,
+    updatePaneContext,
     updatePaneStatus,
   ]);
 

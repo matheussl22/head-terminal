@@ -42,10 +42,14 @@
   --accent-subtle: rgba(240, 168, 50, 0.12);
   --accent-muted: rgba(240, 168, 50, 0.45);
 
-  /* Activity states — semantic, never decorative */
+  /* Activity states — semantic, never decorative. "done" is a finished turn
+     nobody has looked at yet: violet, so it can't be mistaken for work
+     (green) or for a question (blue). Every state also has its own glyph
+     shape (see .status-dot), so none of this rests on color alone. */
   --status-idle: #8b9099;
   --status-working: #3fb950;
   --status-waiting: #58a6ff;
+  --status-done: #a78bfa;
   --status-error: #f85149;
   --status-fallback: #e8845c;
   --status-starting: #8b9099;
@@ -53,9 +57,18 @@
 
   --status-working-subtle: rgba(63, 185, 80, 0.14);
   --status-waiting-subtle: rgba(88, 166, 255, 0.14);
+  --status-done-subtle: rgba(167, 139, 250, 0.15);
   --status-error-subtle: rgba(248, 81, 73, 0.14);
   --status-fallback-subtle: rgba(232, 132, 92, 0.16);
   --status-idle-subtle: rgba(139, 144, 153, 0.14);
+
+  /* Waiting is the one state that owes the user an answer: a stronger chip,
+     a halo around its dot and a tint over the whole pane header. */
+  --status-waiting-strong: rgba(88, 166, 255, 0.24);
+  --status-waiting-halo: rgba(88, 166, 255, 0.32);
+  --status-waiting-tint: rgba(88, 166, 255, 0.13);
+  --status-done-tint: rgba(167, 139, 250, 0.06);
+  --status-error-tint: rgba(248, 81, 73, 0.08);
 
   /* Buttons */
   --button-bg: var(--bg-3);
@@ -98,4 +111,32 @@
   /* Motion */
   --transition-fast: 120ms ease;
   --transition-normal: 160ms ease;
+}
+
+/* Claro: the dark palette's status colors wash out on white. Same hues,
+   GitHub Light's values, which were tuned for a white page. The themes in
+   src/config/themes.ts don't carry status tokens, so this is the one place
+   that knows about them. */
+:root[data-theme="light"] {
+  --status-idle: #6e7781;
+  --status-working: #1a7f37;
+  --status-waiting: #0969da;
+  --status-done: #8250df;
+  --status-error: #cf222e;
+  --status-fallback: #bc4c00;
+  --status-starting: #6e7781;
+  --status-exited: #8c959f;
+
+  --status-working-subtle: rgba(26, 127, 55, 0.12);
+  --status-waiting-subtle: rgba(9, 105, 218, 0.1);
+  --status-done-subtle: rgba(130, 80, 223, 0.12);
+  --status-error-subtle: rgba(207, 34, 46, 0.1);
+  --status-fallback-subtle: rgba(188, 76, 0, 0.12);
+  --status-idle-subtle: rgba(110, 119, 129, 0.12);
+
+  --status-waiting-strong: rgba(9, 105, 218, 0.16);
+  --status-waiting-halo: rgba(9, 105, 218, 0.22);
+  --status-waiting-tint: rgba(9, 105, 218, 0.07);
+  --status-done-tint: rgba(130, 80, 223, 0.05);
+  --status-error-tint: rgba(207, 34, 46, 0.06);
 }

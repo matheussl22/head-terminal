@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { sendAgentCommand } from "../../actions/sendAgentCommand";
-import { PALETTE_ACTIONS } from "../../config/toolbar";
+import { PALETTE_ACTIONS, type ToolbarCommand } from "../../config/toolbar";
 import { exportDiagnosticBundle } from "../../core/export-diagnostic";
 import { runGhostGlyphDiagnostic } from "../../core/ghost-glyph-diagnostic";
 import { logError } from "../../core/logger";
@@ -12,6 +12,28 @@ import { closePaneWithWorktreeReview } from "../../core/worktree";
 import { toggleBrainstorm } from "../../core/live-brainstorm";
 import { getTerminal } from "../../core/terminal-registry";
 import { isVoiceInputSupported, toggleVoiceInput } from "../../core/voice-input";
+
+/** Layout commands that live with the palette rather than in the toolbar
+ * config: they act on the session's panes, not on the agent. */
+const LAYOUT_ACTIONS: ToolbarCommand[] = [
+  {
+    id: "equalize-panes",
+    label: "Distribuir terminais igualmente",
+    command: "__equalize_panes__",
+    description:
+      "Dá a mesma largura aos terminais de uma linha e a mesma altura aos de uma coluna na sessão ativa",
+  },
+];
+
+/** The palette's list: the toolbar's actions with the layout ones right
+ * after "Fechar terminal", next to the other pane commands. */
+function withLayoutActions(actions: ToolbarCommand[]): ToolbarCommand[] {
+  const anchor = actions.findIndex((action) => action.command === "__close_pane__");
+  if (anchor === -1) {
+    return [...actions, ...LAYOUT_ACTIONS];
+  }
+  return [...actions.slice(0, anchor + 1), ...LAYOUT_ACTIONS, ...actions.slice(anchor + 1)];
+}
 
 function getFocusable(container: HTMLElement): HTMLElement[] {
   return Array.from(
@@ -72,11 +94,17 @@ export function CommandPalette({
   const toggleMaximizedActivePane = useSessionStore(
     (state) => state.toggleMaximizedActivePane,
   );
+  const equalizeSessionLayout = useSessionStore(
+    (state) => state.equalizeSessionLayout,
+  );
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const available = useMemo(
     () =>
-      isVoiceInputSupported()
-        ? PALETTE_ACTIONS
-        : PALETTE_ACTIONS.filter((action) => action.command !== "__voice_input__"),
+      withLayoutActions(
+        isVoiceInputSupported()
+          ? PALETTE_ACTIONS
+          : PALETTE_ACTIONS.filter((action) => action.command !== "__voice_input__"),
+      ),
     [],
   );
   const filtered = useMemo(() => {
@@ -127,6 +155,10 @@ export function CommandPalette({
         if (activePaneId) {
           void closePaneWithWorktreeReview(activePaneId);
         }
+      } else if (command === "__equalize_panes__") {
+        if (activeSessionId) {
+          equalizeSessionLayout(activeSessionId);
+        }
       } else if (command === "__rename_session__") {
         onRenameRequest();
       } else if (command === "__settings__") {
@@ -155,7 +187,9 @@ export function CommandPalette({
     },
     [
       activePaneId,
+      activeSessionId,
       closePalette,
+      equalizeSessionLayout,
       onRenameRequest,
       onSettingsRequest,
       splitActivePane,

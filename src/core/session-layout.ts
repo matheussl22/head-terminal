@@ -334,6 +334,17 @@ export function collectVisibleSplitDividers(
   return collectSplitDividers(layout, FULL_BOUNDS, [], hidden);
 }
 
+/** A split never hands a side less than this share, whatever it is told. The
+ * floor that matters is in pixels and depends on how many panes each side
+ * holds (see `splitRatioBounds`, enforced while dragging); this one only keeps
+ * a ratio sane. It has to stay well under 1/10: equalizing a row of ten panes
+ * gives the first split 0.1. */
+const MIN_SPLIT_RATIO = 0.02;
+
+function clampSplitRatio(ratio: number): number {
+  return Math.min(1 - MIN_SPLIT_RATIO, Math.max(MIN_SPLIT_RATIO, ratio));
+}
+
 export function updateSplitRatioInLayout(
   layout: LayoutNode,
   path: number[],
@@ -346,7 +357,7 @@ export function updateSplitRatioInLayout(
 
     return {
       ...layout,
-      ratio: Math.min(0.85, Math.max(0.15, ratio)),
+      ratio: clampSplitRatio(ratio),
     };
   }
 
@@ -366,5 +377,150 @@ export function updateSplitRatioInLayout(
   return {
     ...layout,
     second: updateSplitRatioInLayout(layout.second, tail, ratio),
+  };
+}
+
+/** The node a divider's `path` points at (0 = first, 1 = second). */
+export function findLayoutNodeAtPath(
+  layout: LayoutNode,
+  path: number[],
+): LayoutNode | null {
+  let node: LayoutNode = layout;
+  for (const step of path) {
+    if (node.kind !== "split") {
+      return null;
+    }
+    node = step === 0 ? node.first : node.second;
+  }
+  return node;
+}
+
+/**
+ * How many panes this subtree lines up along `direction`: its columns for
+ * "horizontal", its rows for "vertical". Splits in that direction add their
+ * sides up; splits across it stack them, so the busier side counts. Panes off
+ * the canvas (minimized) count for nothing, like they take no room.
+ */
+export function countPanesAlong(
+  node: LayoutNode,
+  direction: SplitDirection,
+  hidden: ReadonlySet<string> = NO_HIDDEN_PANES,
+): number {
+  if (node.kind === "pane") {
+    return hidden.has(node.paneId) ? 0 : 1;
+  }
+  const first = countPanesAlong(node.first, direction, hidden);
+  const second = countPanesAlong(node.second, direction, hidden);
+  return node.direction === direction ? first + second : Math.max(first, second);
+}
+
+/**
+ * Every split shares its room by how many panes each side lines up in the
+ * split's direction, so the panes of a row get the same width and those of a
+ * column the same height — a chain of same-direction splits (what "dividir ao
+ * lado" repeated produces: 1/2, 1/4, 1/8…) comes out even, and a grid keeps
+ * its columns aligned. For a plain chain this is leaves(first) / leaves(node).
+ *
+ * A split whose side is entirely off the canvas keeps its ratio: on screen it
+ * divides nothing, and the pane comes back exactly where it was.
+ */
+export function equalizeLayout(
+  layout: LayoutNode,
+  hidden: ReadonlySet<string> = NO_HIDDEN_PANES,
+): LayoutNode {
+  if (layout.kind === "pane") {
+    return layout;
+  }
+  const first = countPanesAlong(layout.first, layout.direction, hidden);
+  const second = countPanesAlong(layout.second, layout.direction, hidden);
+  return {
+    ...layout,
+    ratio: first > 0 && second > 0 ? first / (first + second) : layout.ratio,
+    first: equalizeLayout(layout.first, hidden),
+    second: equalizeLayout(layout.second, hidden),
+  };
+}
+
+/** Whether equalizing would move anything (ratios compared to 0.1%). */
+export function isLayoutEqualized(
+  layout: LayoutNode,
+  hidden: ReadonlySet<string> = NO_HIDDEN_PANES,
+): boolean {
+  const equalized = equalizeLayout(layout, hidden);
+  const same = (a: LayoutNode, b: LayoutNode): boolean => {
+    if (a.kind === "pane" || b.kind === "pane") {
+      return a.kind === b.kind;
+    }
+    return (
+      Math.abs(a.ratio - b.ratio) < 0.001 && same(a.first, b.first) && same(a.second, b.second)
+    );
+  };
+  return same(layout, equalized);
+}
+
+/**
+ * How long this subtree must be along `direction` for none of its panes to
+ * get under `minPanePx`, given the ratios its splits have now. A split in that
+ * direction hands each side its ratio of the room, so the side that is
+ * squeezed hardest sets the need: a pane left with 17% of its side needs that
+ * side six times its own minimum, not twice. Splits across it stack their
+ * sides, so the longer need wins. Panes off the canvas take no room.
+ */
+function minExtentAlong(
+  node: LayoutNode,
+  direction: SplitDirection,
+  minPanePx: number,
+  hidden: ReadonlySet<string>,
+): number {
+  if (node.kind === "pane") {
+    return hidden.has(node.paneId) ? 0 : minPanePx;
+  }
+  const first = minExtentAlong(node.first, direction, minPanePx, hidden);
+  const second = minExtentAlong(node.second, direction, minPanePx, hidden);
+  if (node.direction !== direction) {
+    return Math.max(first, second);
+  }
+  // A side entirely off the canvas divides nothing: the other takes it all.
+  if (first === 0) {
+    return second;
+  }
+  if (second === 0) {
+    return first;
+  }
+  return Math.max(first / node.ratio, second / (1 - node.ratio));
+}
+
+/**
+ * The ratios a divider may take so that no pane on either side gets smaller
+ * than `minPanePx` (the pane's box, gap included) in an area `areaPx` long.
+ * Nested splits keep their ratios while this one moves, so each side's need
+ * comes from how its panes actually share it, not from counting them as if
+ * they were even. When the area is too small for both sides, each side gets
+ * room in proportion to what it needs and the divider stays put there.
+ */
+export function splitRatioBounds(
+  split: LayoutNode,
+  areaPx: number,
+  minPanePx: number,
+  hidden: ReadonlySet<string> = NO_HIDDEN_PANES,
+): { min: number; max: number } {
+  if (split.kind !== "split" || areaPx <= 0) {
+    return { min: MIN_SPLIT_RATIO, max: 1 - MIN_SPLIT_RATIO };
+  }
+  const firstNeed = Math.max(
+    minPanePx,
+    minExtentAlong(split.first, split.direction, minPanePx, hidden),
+  );
+  const secondNeed = Math.max(
+    minPanePx,
+    minExtentAlong(split.second, split.direction, minPanePx, hidden),
+  );
+  if (firstNeed + secondNeed >= areaPx) {
+    const ratio = clampSplitRatio(firstNeed / (firstNeed + secondNeed));
+    return { min: ratio, max: ratio };
+  }
+  return {
+    min: clampSplitRatio(firstNeed / areaPx),
+    max: clampSplitRatio(1 - secondNeed / areaPx),
   };
 }

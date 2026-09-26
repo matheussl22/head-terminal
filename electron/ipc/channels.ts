@@ -74,6 +74,11 @@ export const IPC_CHANNELS = {
     show: "notifications:show",
     activated: "notifications:activated",
   },
+  agentHooks: {
+    getClaudeSettings: "agent-hooks:get-claude-settings",
+    /** Main → renderer: a lifecycle event an agent reported for one pane. */
+    event: "agent-hooks:event",
+  },
   diagnostics: {
     appendEvent: "diagnostics:append-event",
     appendCheckpoint: "diagnostics:append-checkpoint",

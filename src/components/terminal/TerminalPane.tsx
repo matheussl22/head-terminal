@@ -6,6 +6,7 @@ import {
   type CSSProperties,
 } from "react";
 
+import { paneStatusTone } from "../../core/activity-display";
 import { landPaneMotion } from "../../core/pane-minimize";
 import { useSessionStore } from "../../core/session-manager";
 import { loadPaneHeadersEnabled } from "../../core/ui-preferences";
@@ -77,6 +78,9 @@ export function TerminalPane({
   const wasMinimizedRef = useRef(isMinimized);
   const showHeader = loadPaneHeadersEnabled();
   const [searchQuery, setSearchQuery] = useState("");
+  // The frame itself carries the tone, so a pane blocked on the user stands
+  // out in a crowded grid even with its header hidden or squeezed to a dot.
+  const tone = useSessionStore((state) => paneStatusTone(state.paneRuntime[paneId]));
 
   // A minimized terminal must not keep the keyboard: typing would land in an
   // agent nobody can see. Child effects run before AppShell's, which then
@@ -127,6 +131,7 @@ export function TerminalPane({
     isActive ? "terminal-pane-shell--active" : null,
     isMaximized ? "terminal-pane-shell--maximized" : null,
     isParked ? "terminal-pane-shell--parked" : null,
+    `terminal-pane-shell--tone-${tone}`,
   ]
     .filter(Boolean)
     .join(" ");
@@ -142,6 +147,7 @@ export function TerminalPane({
       {showHeader && (
         <TerminalPaneHeader
           paneId={paneId}
+          sessionId={sessionId}
           cwd={cwd}
           agentProfileId={agentProfileId}
           claudeAccountId={claudeAccountId}
@@ -150,6 +156,7 @@ export function TerminalPane({
           onScreenPaneCount={onScreenPaneCount}
           isActive={isActive}
           isMaximized={isMaximized}
+          onScreen={isVisible && !isParked}
           onFocus={onFocus}
           onClose={onClose}
         />

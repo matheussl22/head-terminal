@@ -18,7 +18,14 @@ vi.mock("./session-manager", () => ({
   },
 }));
 
-import { anchorPaneResumeSession, hasTranscriptTitle } from "./pane-resume-anchor";
+import type { AgentHookEvent } from "../types/agent-hooks";
+import {
+  anchorPaneResumeSession,
+  anchorPaneToHookSession,
+  hasTranscriptTitle,
+  PaneForegroundSession,
+  resetHookSessionClaimsForTests,
+} from "./pane-resume-anchor";
 import { setCachedPlatformInfoForTests } from "./platform-info";
 
 describe("anchorPaneResumeSession", () => {
@@ -396,6 +403,211 @@ describe("anchorPaneResumeSession", () => {
     paneRuntime = { "pane-1": { status: "exited" } };
     await vi.advanceTimersByTimeAsync(10_000);
     await promise;
+  });
+});
+
+function hookEvent(event: string, sessionId?: string): AgentHookEvent {
+  return { paneId: "pane-1", source: "claude", event, sessionId, receivedAt: 0 };
+}
+
+describe("PaneForegroundSession", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("adopts the conversation of the prompt the pane just submitted, and speaks only for it", () => {
+    const adopted: string[] = [];
+    const pane = new PaneForegroundSession((id) => adopted.push(id));
+
+    // A background session dispatched earlier from this pane reports through
+    // the same settings file: before the pane's own prompt, none of it counts.
+    expect(pane.accepts(hookEvent("PermissionRequest", "bg-1"))).toBe(false);
+    expect(pane.accepts(hookEvent("UserPromptSubmit", "bg-1"))).toBe(false);
+    // Events that carry no id at all still pass.
+    expect(pane.accepts(hookEvent("Notification"))).toBe(true);
+
+    pane.noteUserInput("oi");
+    pane.noteUserInput("\r");
+    vi.advanceTimersByTime(120);
+    expect(pane.accepts(hookEvent("UserPromptSubmit", "fg-1"))).toBe(true);
+    expect(adopted).toEqual(["fg-1"]);
+    expect(pane.id).toBe("fg-1");
+
+    expect(pane.accepts(hookEvent("PermissionRequest", "fg-1"))).toBe(true);
+    expect(pane.accepts(hookEvent("Stop", "fg-1"))).toBe(true);
+    // Once known, the background session stays out.
+    expect(pane.accepts(hookEvent("PermissionRequest", "bg-1"))).toBe(false);
+    expect(pane.accepts(hookEvent("UserPromptSubmit", "bg-1"))).toBe(false);
+  });
+
+  it("learns the new conversation after /clear (and the app's own Clear)", () => {
+    // scratchpad/verif5/clear-probe.cjs: /clear fires no hook of its own; the
+    // next prompt arrives with a brand new session_id.
+    const adopted: string[] = [];
+    const pane = new PaneForegroundSession((id) => adopted.push(id));
+    pane.noteUserInput("primeira pergunta\r");
+    pane.accepts(hookEvent("UserPromptSubmit", "before-clear"));
+
+    pane.noteUserInput("/clear\r");
+    vi.advanceTimersByTime(3000);
+    pane.noteUserInput("segunda pergunta\r");
+    vi.advanceTimersByTime(80);
+    expect(pane.accepts(hookEvent("UserPromptSubmit", "after-clear"))).toBe(true);
+    expect(adopted).toEqual(["before-clear", "after-clear"]);
+
+    expect(pane.accepts(hookEvent("PermissionRequest", "after-clear"))).toBe(true);
+    // The old conversation, still on disk, no longer speaks for the pane.
+    expect(pane.accepts(hookEvent("Stop", "before-clear"))).toBe(false);
+  });
+
+  it("adopts nothing without an Enter of its own close behind", () => {
+    const adopted: string[] = [];
+    const pane = new PaneForegroundSession((id) => adopted.push(id));
+    pane.noteUserInput("\r");
+    vi.advanceTimersByTime(10_001);
+    expect(pane.accepts(hookEvent("UserPromptSubmit", "late"))).toBe(false);
+
+    // A line break inside a bracketed paste submits nothing.
+    pane.noteUserInput("\x1b[200~a\rb\x1b[201~");
+    expect(pane.accepts(hookEvent("UserPromptSubmit", "pasted"))).toBe(false);
+
+    // One Enter, one prompt: a second session's prompt in the same window is
+    // not the pane's.
+    pane.noteUserInput("\r");
+    expect(pane.accepts(hookEvent("UserPromptSubmit", "mine"))).toBe(true);
+    expect(pane.accepts(hookEvent("UserPromptSubmit", "someone-else"))).toBe(false);
+    expect(adopted).toEqual(["mine"]);
+  });
+});
+
+describe("anchorPaneToHookSession", () => {
+  beforeEach(() => {
+    listResumable.mockReset();
+    notePaneResumeAnchor.mockReset();
+    noteConversationTitles.mockReset();
+    resetHookSessionClaimsForTests();
+    paneRuntime = { "pane-1": { status: "running" }, "pane-2": { status: "running" } };
+    paneResumeAnchors = {};
+    notePaneResumeAnchor.mockImplementation((paneId: string, sessionId: string) => {
+      paneResumeAnchors = { ...paneResumeAnchors, [paneId]: sessionId };
+    });
+    vi.stubGlobal("window", {
+      headTerminal: { sessions: { listResumable } },
+    });
+    setCachedPlatformInfoForTests({
+      platform: "linux",
+      homeDir: "/home/test",
+    } as unknown as Parameters<typeof setCachedPlatformInfoForTests>[0]);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    setCachedPlatformInfoForTests(null);
+  });
+
+  const lookup = (paneId: string) => ({
+    paneId,
+    cwd: "/repo",
+    agentProfileId: "claude",
+    isDisposed: () => false,
+  });
+
+  it("anchors the pane on the conversation its hooks proved, and names it", async () => {
+    listResumable.mockResolvedValue([
+      { id: "fg-1", title: "minha pergunta", updatedAt: new Date(6_000).toISOString() },
+    ]);
+    const done = anchorPaneToHookSession({ ...lookup("pane-1"), sessionId: "fg-1" });
+    expect(notePaneResumeAnchor).toHaveBeenCalledExactlyOnceWith("pane-1", "fg-1");
+    await vi.advanceTimersByTimeAsync(2_500);
+    await done;
+    expect(noteConversationTitles).toHaveBeenCalledWith([
+      expect.objectContaining({ id: "fg-1", title: "minha pergunta" }),
+    ]);
+  });
+
+  it("keeps two fresh panes in one folder from swapping conversations", async () => {
+    // e2e ANCHOR-swap: the idle pane's poll adopted the transcript of the
+    // sibling where the user typed first, then the sibling adopted its own —
+    // headers and restarts swapped, and every hook got filtered out.
+    const y = { id: "conv-y", title: "pergunta do Y", updatedAt: new Date(6_000).toISOString() };
+    const x = { id: "conv-x", title: "pergunta do X", updatedAt: new Date(9_000).toISOString() };
+    listResumable.mockResolvedValue([]);
+    const pollX = anchorPaneResumeSession({
+      ...lookup("pane-1"),
+      spawnStartMs: 0,
+      startsNewConversation: true,
+      existingSessionIds: [],
+    });
+    const pollY = anchorPaneResumeSession({
+      ...lookup("pane-2"),
+      spawnStartMs: 0,
+      startsNewConversation: true,
+      existingSessionIds: [],
+    });
+
+    // The user types in Y: its prompt hook claims conv-y right away.
+    const paneY = new PaneForegroundSession((id) => {
+      void anchorPaneToHookSession({ ...lookup("pane-2"), sessionId: id });
+    });
+    paneY.noteUserInput("pergunta do Y\r");
+    paneY.accepts({ ...hookEvent("UserPromptSubmit", "conv-y"), paneId: "pane-2" });
+    listResumable.mockResolvedValue([y]);
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(paneResumeAnchors).toEqual({ "pane-2": "conv-y" });
+
+    // Y clears and asks again: conv-y is no longer its anchor, but it is
+    // still Y's conversation, not one for X's poll to pick up.
+    const y2 = { id: "conv-y2", title: "depois do clear", updatedAt: new Date(8_000).toISOString() };
+    paneY.noteUserInput("/clear\r");
+    paneY.noteUserInput("depois do clear\r");
+    paneY.accepts({ ...hookEvent("UserPromptSubmit", "conv-y2"), paneId: "pane-2" });
+    listResumable.mockResolvedValue([y2, y]);
+    await vi.advanceTimersByTimeAsync(3_000);
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(paneResumeAnchors).toEqual({ "pane-2": "conv-y2" });
+
+    // Later the user types in X.
+    const paneX = new PaneForegroundSession((id) => {
+      void anchorPaneToHookSession({ ...lookup("pane-1"), sessionId: id });
+    });
+    paneX.noteUserInput("pergunta do X\r");
+    paneX.accepts(hookEvent("UserPromptSubmit", "conv-x"));
+    listResumable.mockResolvedValue([x, y2, y]);
+    await vi.advanceTimersByTimeAsync(20_000);
+    await Promise.all([pollX, pollY]);
+
+    expect(paneResumeAnchors).toEqual({ "pane-1": "conv-x", "pane-2": "conv-y2" });
+    expect(notePaneResumeAnchor).not.toHaveBeenCalledWith("pane-1", "conv-y");
+    expect(notePaneResumeAnchor).not.toHaveBeenCalledWith("pane-1", "conv-y2");
+    expect(notePaneResumeAnchor).not.toHaveBeenCalledWith("pane-2", "conv-x");
+  });
+
+  it("stops polling once the pane's hooks anchored it", async () => {
+    listResumable.mockResolvedValue([]);
+    const poll = anchorPaneResumeSession({
+      ...lookup("pane-1"),
+      spawnStartMs: 0,
+      startsNewConversation: false,
+    });
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(listResumable).toHaveBeenCalledTimes(1);
+
+    listResumable.mockResolvedValue([
+      { id: "fg-1", title: "minha pergunta", updatedAt: new Date(6_000).toISOString() },
+    ]);
+    const adoption = anchorPaneToHookSession({ ...lookup("pane-1"), sessionId: "fg-1" });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await Promise.all([poll, adoption]);
+    // The poll's first lookup, then only the adoption's own title lookup
+    // (named on the first try): the poll is over.
+    expect(listResumable).toHaveBeenCalledTimes(2);
+    expect(notePaneResumeAnchor).toHaveBeenCalledExactlyOnceWith("pane-1", "fg-1");
   });
 });
 

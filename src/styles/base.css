@@ -199,54 +199,147 @@ kbd {
 
 /* Shared status primitives */
 
+/* One glyph per tone (StatusDot.tsx), drawn in a fixed 12px box so a chip's
+   text never shifts when the tone changes. The shape carries the meaning as
+   much as the color does: a grid of ten panes, or someone who can't tell
+   green from blue, still reads working / waiting / done at a glance. */
 .status-dot {
-  display: inline-block;
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  color: var(--status-idle);
+}
+
+.status-dot::before,
+.status-dot::after {
+  content: "";
+  grid-area: 1 / 1;
+  box-sizing: border-box;
+  border-radius: 999px;
+}
+
+.status-dot > * {
+  grid-area: 1 / 1;
+  position: relative;
+}
+
+/* Nothing going on: hollow. */
+.status-dot--idle::before {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
-  flex: 0 0 auto;
+  border: 1.5px solid var(--status-idle);
 }
 
-.status-dot--exited {
-  background-color: transparent;
-  border: 1.5px solid currentColor;
+.status-dot--exited::before {
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--status-exited);
 }
 
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+/* Never started this run: dashed, like an outline waiting to be filled. */
+.status-dot--dormant::before {
+  width: 9px;
+  height: 9px;
+  border: 1.5px dashed var(--status-exited);
 }
 
-.status-badge--starting,
-.status-badge--idle,
-.status-badge--exited {
-  color: var(--text-secondary);
-  background: var(--status-idle-subtle);
+.status-dot--starting::before {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--border-strong);
+  border-top-color: var(--text-secondary);
+  animation: spin 0.8s linear infinite;
 }
 
-.status-badge--working {
-  color: var(--status-working);
+/* Working: a solid dot that keeps sending out a ring. */
+.status-dot--working::before {
+  width: 7px;
+  height: 7px;
+  background: var(--status-working);
+}
+
+.status-dot--working::after {
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--status-working);
+  animation: status-ring 1.8s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+/* Waiting on the user: solid, with a steady halo — still, so it doesn't
+   read as work. */
+.status-dot--waiting::before {
+  width: 8px;
+  height: 8px;
+  background: var(--status-waiting);
+  box-shadow: 0 0 0 2.5px var(--status-waiting-halo);
+}
+
+/* Finished unseen: a check mark. */
+.status-dot--done {
+  color: var(--status-done);
+}
+
+.status-dot__check {
+  stroke-width: 3.5;
+}
+
+/* Error: a filled disc with an exclamation mark. */
+.status-dot--error::before {
+  width: 11px;
+  height: 11px;
+  background: var(--status-error);
+}
+
+.status-dot__mark {
+  color: var(--surface-terminal);
+  font-family: Inter, "Segoe UI", sans-serif;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* The agent left and a shell took over: a diamond. */
+.status-dot--fallback::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 1.5px;
+  background: var(--status-fallback);
+  transform: rotate(45deg);
+}
+
+/* Counters in the toolbar ("2 aguardando"): the tone's color on its tint.
+   Two classes, so they win over the toolbar's own base style. */
+.status-count.status-count--working {
+  border-color: transparent;
   background: var(--status-working-subtle);
+  color: var(--status-working);
 }
 
-.status-badge--waiting {
+.status-count.status-count--waiting {
+  border-color: color-mix(in srgb, var(--status-waiting) 45%, transparent);
+  background: var(--status-waiting-strong);
   color: var(--status-waiting);
-  background: var(--status-waiting-subtle);
+  font-weight: 600;
 }
 
-.status-badge--fallback {
-  color: var(--status-fallback);
-  background: var(--status-fallback-subtle);
+.status-count.status-count--done {
+  border-color: transparent;
+  background: var(--status-done-subtle);
+  color: var(--status-done);
 }
 
-.status-badge--error {
-  color: var(--status-error);
-  background: var(--status-error-subtle);
+button.status-count {
+  font: inherit;
+  font-size: var(--font-xs);
+  cursor: pointer;
+  transition: filter var(--transition-fast);
+}
+
+button.status-count:hover {
+  filter: brightness(1.15);
 }
 
 /* Tooltip */

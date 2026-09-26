@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { formatBranchLabel } from "../../core/git-context-utils";
-import { describeMinimizedPane } from "../../core/minimized-panes";
+import { describeMinimizedPane, minimizedPaneTicks } from "../../core/minimized-panes";
 import { landPaneMotion, restorePaneWithMotion } from "../../core/pane-minimize";
 import { basenamePath } from "../../core/path-utils";
 import { resolvePaneCwd } from "../../core/session-layout";
@@ -119,9 +119,7 @@ function MinimizedPaneCard({
     claudeAccountId: session.claudeAccountId,
   });
   const cardRef = useRef<HTMLButtonElement>(null);
-  const now = useNow(
-    runtime?.activity === "working" || minimized?.finishedAt !== undefined,
-  );
+  const now = useNow(minimizedPaneTicks(runtime));
 
   // Mounting is the end of a minimize: the ghost lands here.
   useLayoutEffect(() => {
