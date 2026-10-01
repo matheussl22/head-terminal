@@ -27,9 +27,12 @@ import {
   useRenameRequest,
 } from "../../hooks/useAppShortcuts";
 import { useGitContextWatchers } from "../../hooks/useGitContext";
+import { useSessionHibernation } from "../../hooks/useSessionHibernation";
+import { startRemoteBridge } from "../../core/remote-bridge";
 import { AgentToolbar } from "./AgentToolbar";
 import { CommandPalette } from "./CommandPalette";
 import { SessionSidebar } from "./SessionSidebar";
+import { HibernatedSessionPlaceholder } from "./HibernatedSessionPlaceholder";
 import { SessionWorkspace } from "./SessionWorkspace";
 import { SettingsDialog } from "./SettingsDialog";
 import { useTerminalStatusCounts } from "../ui/StatusDot";
@@ -59,6 +62,8 @@ export function AppShell({
 
   useActivityNotifications();
   useGitContextWatchers(sessions);
+  useSessionHibernation();
+  useEffect(() => startRemoteBridge(), []);
 
   // Trocar de sessão/pane leva o foco do teclado direto ao terminal ativo —
   // sem isso, digitar após selecionar na sidebar ia para o void.
@@ -197,6 +202,9 @@ export function AppShell({
               onCloseSearch={() => setSearchPaneId(null)}
             />
           ))}
+          {activeSessionId && !spawnedSessionIds[activeSessionId] && (
+            <HibernatedSessionPlaceholder sessionId={activeSessionId} />
+          )}
         </main>
       </div>
 

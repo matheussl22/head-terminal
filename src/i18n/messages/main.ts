@@ -43,6 +43,9 @@ const ptBR = {
     httpError: (status: number) => `Erro HTTP ${status}`,
     unreadableResponse: "Não foi possível interpretar a resposta da OpenAI.",
   },
+  remote: {
+    windowClosed: "A janela do Head Terminal não está aberta no computador.",
+  },
   voice: {
     alreadyRecording: "Já existe uma gravação em andamento.",
     startFailed: (detail: string) => `Não foi possível iniciar a gravação: ${detail}`,
@@ -138,6 +141,9 @@ const en: typeof ptBR = {
     network: "Network error reaching OpenAI.",
     httpError: (status) => `HTTP error ${status}`,
     unreadableResponse: "Couldn't read OpenAI's response.",
+  },
+  remote: {
+    windowClosed: "The Head Terminal window is not open on the computer.",
   },
   voice: {
     alreadyRecording: "A recording is already in progress.",

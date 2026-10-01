@@ -53,7 +53,8 @@ function installTerminalMock(
     return unsubscribeExit;
   });
   const onAgent = vi.fn<TerminalApi["onAgent"]>(() => () => undefined);
-  const api: TerminalApi = { spawn, write, resize, kill, onData, onExit, onAgent };
+  const inspect = vi.fn<TerminalApi["inspect"]>().mockResolvedValue({});
+  const api: TerminalApi = { spawn, write, resize, kill, onData, onExit, onAgent, inspect };
   vi.stubGlobal("window", { headTerminal: { terminal: api } });
 
   return {

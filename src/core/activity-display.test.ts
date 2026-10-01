@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  describeHibernatedPaneStatus,
   describePaneStatus,
   describeSessionStatus,
   formatStatusDetail,
@@ -122,5 +123,34 @@ describe("summarizeToneCounts", () => {
     expect(summarizeToneCounts({ working: 2, idle: 3 })).toBe("2 executando");
     expect(summarizeToneCounts({ waiting: 1, done: 2 })).toBe("1 aguardando · 2 concluídos");
     expect(summarizeToneCounts({ idle: 4 })).toBe("");
+  });
+});
+
+describe("hibernated sessions", () => {
+  it("say they sleep, unless a pane finished a turn nobody saw", () => {
+    expect(describeHibernatedPaneStatus(pane("idle", 5))).toMatchObject({
+      tone: "dormant",
+      label: "Hibernada",
+      attention: false,
+    });
+    expect(describeHibernatedPaneStatus(pane("idle", 5, { doneAt: 9 }))).toMatchObject({
+      tone: "done",
+      attention: true,
+      since: 9,
+    });
+  });
+
+  it("let the finished pane speak for the session", () => {
+    const runtime = { a: pane("idle", 1), b: pane("idle", 1, { doneAt: 7 }) };
+    expect(
+      describeSessionStatus(["a", "b"], runtime, { spawned: false, hibernated: true }),
+    ).toMatchObject({ tone: "done", counts: { done: 1, dormant: 1 }, paneCount: 2 });
+    expect(
+      describeSessionStatus(["a"], runtime, { spawned: false, hibernated: true }),
+    ).toMatchObject({ tone: "dormant", label: "Hibernada" });
+    expect(describeSessionStatus(["a"], runtime, { spawned: false })).toMatchObject({
+      tone: "dormant",
+      label: "Não iniciada",
+    });
   });
 });

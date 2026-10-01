@@ -25,6 +25,13 @@ import {
   snapshotExistingSessionIds,
 } from "../core/pane-resume-anchor";
 import { isResumableAgent } from "../core/agent-sessions-bridge";
+import { takeHibernationSnapshot } from "../core/hibernation-snapshots";
+import {
+  notePaneInput,
+  notePanePty,
+  noteSessionUsed,
+  panePtyId,
+} from "../core/session-hibernation";
 import { checkpoint, logError, logEvent } from "../core/logger";
 import { notifyUiReady } from "../core/startup-watchdog";
 import { fitPanes } from "../core/pane-fit-registry";
@@ -340,6 +347,21 @@ export function usePtyProcess({
           return;
         }
 
+        // Back from hibernation: the shell's old scrollback first, then a
+        // line saying so — a fresh terminal would otherwise look like a
+        // session that lost everything. An agent pane redraws its own
+        // conversation when it resumes.
+        const slept = instance.spawnCount.current === 0 ? takeHibernationSnapshot(paneId) : undefined;
+        if (slept) {
+          if (slept.scrollback) {
+            terminal.write(slept.scrollback);
+            terminal.write("\r\n");
+          }
+          terminal.writeln(`\x1b[2m${msg.terminal.notices.woke}\x1b[0m`);
+          // What was replayed is not this process's screen.
+          spawnScreen.holdUntilPainted();
+        }
+
         const spawnStartMs = Date.now();
         const env: Record<string, string> = {};
         if (claudeConfigDir) {
@@ -358,6 +380,7 @@ export function usePtyProcess({
           return;
         }
         bridge = nextBridge;
+        notePanePty(paneId, nextBridge.pty.id);
 
         if (instance.spawnCount.current > 0) {
           // The previous process's screen stays up until this one paints.
@@ -414,6 +437,7 @@ export function usePtyProcess({
             unregisterPtyWriter(paneId);
             instance.writeToPty.current = null;
             instance.resizePty.current = null;
+            notePanePty(paneId, null);
             paneSupervisor.noteExit(paneId);
           }),
         );
@@ -431,6 +455,8 @@ export function usePtyProcess({
           activityDetector.onUserInput(data);
           foregroundSession.noteUserInput(data);
           markPaneSeen(paneId);
+          notePaneInput(paneId);
+          noteSessionUsed(sessionId);
         };
         instance.writeToPty.current = writeUserInput;
         instance.resizePty.current = (cols, rows) => {
@@ -488,6 +514,9 @@ export function usePtyProcess({
       folderTrust?.dispose();
       listeners.forEach((listener) => listener.dispose());
       unregisterPtyWriter(paneId);
+      if (bridge && panePtyId(paneId) === bridge.pty.id) {
+        notePanePty(paneId, null);
+      }
       instance.writeToPty.current = null;
       instance.resizePty.current = null;
       previousDisposeRef.current = Promise.resolve(bridge?.dispose()).catch(

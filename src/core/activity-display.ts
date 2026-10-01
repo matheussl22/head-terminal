@@ -162,6 +162,30 @@ export function describePaneStatus(runtime: PaneStatusRuntime | undefined): Pane
   };
 }
 
+/**
+ * A pane of a hibernated session: asleep, unless it finished a turn nobody
+ * saw — that news outlives the process that made it.
+ */
+export function describeHibernatedPaneStatus(
+  runtime: PaneStatusRuntime | undefined,
+): PaneStatusView {
+  if (runtime?.doneAt !== undefined) {
+    return {
+      tone: "done",
+      label: TONE_LABEL.done,
+      detail: msg.core.status.detail.doneHibernated,
+      attention: true,
+      since: runtime.doneAt,
+    };
+  }
+  return {
+    tone: "dormant",
+    label: msg.core.status.tone.hibernated,
+    detail: msg.core.status.detail.hibernated,
+    attention: false,
+  };
+}
+
 /** "Aguardando você: pede aprovação (Bash) · há 2m" */
 export function formatStatusDetail(view: PaneStatusView, now = Date.now()): string {
   return view.since !== undefined
@@ -235,8 +259,19 @@ function sessionRank(view: PaneStatusView): number {
 export function describeSessionStatus(
   paneIds: string[],
   paneRuntime: Record<string, PaneStatusRuntime | undefined>,
-  options: { spawned?: boolean } = {},
+  options: { spawned?: boolean; hibernated?: boolean } = {},
 ): SessionStatusView {
+  if (options.spawned === false && options.hibernated) {
+    const views = paneIds.map((paneId) => describeHibernatedPaneStatus(paneRuntime[paneId]));
+    const done = views.filter((view) => view.tone === "done");
+    const base = done[0] ?? views[0] ?? describeHibernatedPaneStatus(undefined);
+    return {
+      ...base,
+      counts: done.length > 0 ? { done: done.length, dormant: views.length - done.length } : { dormant: views.length },
+      paneCount: paneIds.length,
+      summary: "",
+    };
+  }
   if (options.spawned === false) {
     const tone: PaneStatusTone = "dormant";
     return {

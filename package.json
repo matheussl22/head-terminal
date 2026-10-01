@@ -22,6 +22,7 @@
     "e2e:win": "node --experimental-websocket scripts/e2e-win.mjs",
     "e2e:clipboard:win": "node --experimental-websocket scripts/e2e-clipboard-paste-win.mjs",
     "e2e:fit-guard:win": "node --experimental-websocket scripts/e2e-fit-guard-win.mjs",
+    "e2e:remote:win": "node --experimental-websocket scripts/e2e-hibernate-remote-win.mjs",
     "package": "cross-env NODE_ENV=production electron-forge package",
     "make": "cross-env NODE_ENV=production electron-forge make",
     "install:mac": "npm run package && bash scripts/install-mac-app.sh",
@@ -37,6 +38,7 @@
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-search": "^0.16.0",
+    "@xterm/addon-serialize": "^0.14.0",
     "@xterm/addon-web-links": "^0.12.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",

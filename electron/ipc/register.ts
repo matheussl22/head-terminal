@@ -32,6 +32,7 @@ import type {
   MigratedPreferences,
   NotificationInput,
   NotificationTarget,
+  PaneProcessInspection,
   PersistedWorkspace,
   PlatformInfo,
   PtyDataEvent,
@@ -53,6 +54,13 @@ import type {
   WritePtyInput,
 } from "../types/api";
 import { IPC_CHANNELS } from "./channels";
+import type {
+  RemoteCommandReply,
+  RemoteScreen,
+  RemoteSnapshot,
+  RemoteStatus,
+} from "../../src/types/remote";
+import type { RemoteRenderer } from "../services/remote-bridge";
 import {
   WINDOWS_SHELL_COMMAND,
   WSL_DISTRO,
@@ -90,6 +98,10 @@ export interface IpcServices {
     resize(ownerId: number, id: string, cols: number, rows: number): void;
     kill(ownerId: number, id: string): Promise<void> | void | boolean | Promise<boolean>;
     cleanup?(ownerId: number): Promise<number> | number | Promise<void> | void;
+    inspect?(
+      ownerId: number,
+      ids: readonly string[],
+    ): Promise<Record<string, PaneProcessInspection>>;
   };
   git?: {
     getContext(cwd: string): Promise<GitContextPayload>;
@@ -186,6 +198,19 @@ export interface IpcServices {
   agentHooks?: {
     getClaudeSettings(paneId: string): Promise<ClaudeHookSettings | null>;
     onEvent(listener: (payload: AgentHookEventPayload) => void): () => void;
+  };
+  remote?: {
+    status(): RemoteStatus;
+    setEnabled(enabled: boolean): Promise<RemoteStatus>;
+    regeneratePin(): RemoteStatus;
+    revokeDevice(id: string): Promise<RemoteStatus>;
+    revokeAllDevices(): Promise<RemoteStatus>;
+    onStatus(listener: (status: RemoteStatus) => void): () => void;
+    publishState(snapshot: RemoteSnapshot): void;
+    publishScreen(screen: RemoteScreen): void;
+    replyCommand(reply: RemoteCommandReply): void;
+    attachRenderer(renderer: RemoteRenderer | null): void;
+    watchedPanes(): string[];
   };
 }
 
@@ -306,6 +331,12 @@ export function registerIpc({
   handle(IPC_CHANNELS.terminal.kill, (_event, value) =>
     services.terminal?.kill(ownerId, asString(value, "id", { maxLength: 256 })) ??
       unsupported("terminal.kill"),
+  );
+  handle(IPC_CHANNELS.terminal.inspect, (_event, value) =>
+    services.terminal?.inspect?.(
+      ownerId,
+      asStringArray(value, "ids", { maxLength: 128, maxItems: 256 }),
+    ) ?? unsupported("terminal.inspect"),
   );
 
   handle(IPC_CHANNELS.git.getContext, (_event, value) =>
@@ -584,6 +615,60 @@ export function registerIpc({
       unsupported("migration.loadPreferences"),
   );
 
+  // The phone remote. What the renderer publishes is its own view of the
+  // sessions, relayed to paired phones as is; only the shape is checked.
+  handle(IPC_CHANNELS.remote.getStatus, () =>
+    services.remote?.status() ?? unsupported("remote.getStatus"),
+  );
+  handle(IPC_CHANNELS.remote.setEnabled, (_event, value) =>
+    services.remote?.setEnabled(asBoolean(value, "enabled")) ??
+      unsupported("remote.setEnabled"),
+  );
+  handle(IPC_CHANNELS.remote.regeneratePin, () =>
+    services.remote?.regeneratePin() ?? unsupported("remote.regeneratePin"),
+  );
+  handle(IPC_CHANNELS.remote.revokeDevice, (_event, value) =>
+    services.remote?.revokeDevice(asString(value, "id", { maxLength: 128 })) ??
+      unsupported("remote.revokeDevice"),
+  );
+  handle(IPC_CHANNELS.remote.revokeAllDevices, () =>
+    services.remote?.revokeAllDevices() ?? unsupported("remote.revokeAllDevices"),
+  );
+  on(IPC_CHANNELS.remote.publishState, (_event, value) => {
+    const snapshot = asRecord(value, "snapshot");
+    if (!Array.isArray(snapshot.sessions)) return;
+    services.remote?.publishState(snapshot as unknown as RemoteSnapshot);
+  });
+  on(IPC_CHANNELS.remote.publishScreen, (_event, value) => {
+    const screen = asRecord(value, "screen");
+    asString(screen.paneId, "paneId", { maxLength: 128 });
+    if (!Array.isArray(screen.lines) || !Array.isArray(screen.styles)) return;
+    services.remote?.publishScreen(screen as unknown as RemoteScreen);
+  });
+  on(IPC_CHANNELS.remote.commandReply, (_event, value) => {
+    const reply = asRecord(value, "reply");
+    const result = asRecord(reply.result, "result");
+    services.remote?.replyCommand({
+      requestId: asString(reply.requestId, "requestId", { maxLength: 128 }),
+      result:
+        result.ok === true
+          ? { ok: true }
+          : { ok: false, error: asString(result.error, "error", { allowEmpty: true, maxLength: 2_000 }) },
+    });
+  });
+  handle(IPC_CHANNELS.remote.getWatched, () => services.remote?.watchedPanes() ?? []);
+  const unsubscribeRemoteStatus = services.remote?.onStatus((status) =>
+    send(IPC_CHANNELS.remote.status, status),
+  );
+  services.remote?.attachRenderer({
+    sendCommand: (request) => {
+      if (trusted.isDestroyed()) return false;
+      trusted.send(IPC_CHANNELS.remote.command, request);
+      return true;
+    },
+    sendWatch: (paneIds) => send(IPC_CHANNELS.remote.watch, paneIds),
+  });
+
   const onWindowClose = (event: Electron.Event) => {
     if (closeApproved || isQuitting()) return;
     event.preventDefault();
@@ -642,6 +727,8 @@ export function registerIpc({
     // a shell per closed window until quit.
     if (window.webContents.isDestroyed()) cleanupOwner();
     unsubscribeAgentHooks?.();
+    unsubscribeRemoteStatus?.();
+    services.remote?.attachRenderer(null);
     registeredHandles.forEach((channel) => ipcMain.removeHandler(channel));
     registeredListeners.forEach(([channel, listener]) =>
       ipcMain.removeListener(channel, listener),

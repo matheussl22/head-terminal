@@ -1,5 +1,12 @@
 import type { LanguagePreference, Locale } from "../../src/i18n/locale";
 import type {
+  RemoteCommandReply,
+  RemoteCommandRequest,
+  RemoteScreen,
+  RemoteSnapshot,
+  RemoteStatus,
+} from "../../src/types/remote";
+import type {
   WorktreeEntry,
   WorktreeInfo,
   WorktreePlan,
@@ -90,6 +97,19 @@ export interface PtyAgentEvent {
   id: string;
   /** `null` once it is gone again. */
   agent: RunningAgent | null;
+}
+
+/** What runs under one pane, read when deciding whether it may sleep. */
+export interface PaneProcessInspection {
+  /** Its root process (the shell node-pty started) is still there. */
+  alive: boolean;
+  /** Resident memory of the root and everything below it. */
+  memoryBytes: number;
+  /** Names of every process below the root, console hosts aside. */
+  children: string[];
+  /** Shells started by a program rather than by a shell — an agent's
+   * background command (a dev server Claude left running). */
+  detachedShells: string[];
 }
 
 export interface GitContextPayload {
@@ -416,6 +436,9 @@ export interface HeadTerminalApi {
     onData(callback: (event: PtyDataEvent) => void): Unsubscribe;
     onExit(callback: (event: PtyExitEvent) => void): Unsubscribe;
     onAgent(callback: (event: PtyAgentEvent) => void): Unsubscribe;
+    /** What runs under each live pane among `ids`; panes without a pty are
+     * left out. Reads the process table, about a second on Windows. */
+    inspect(ids: string[]): Promise<Record<string, PaneProcessInspection>>;
   };
   git: {
     getContext(cwd: string): Promise<GitContextPayload>;
@@ -545,5 +568,24 @@ export interface HeadTerminalApi {
   };
   migration: {
     loadPreferences(): Promise<MigratedPreferences>;
+  };
+  /** The phone remote (see src/types/remote.ts). */
+  remote: {
+    getStatus(): Promise<RemoteStatus>;
+    setEnabled(enabled: boolean): Promise<RemoteStatus>;
+    regeneratePin(): Promise<RemoteStatus>;
+    revokeDevice(id: string): Promise<RemoteStatus>;
+    revokeAllDevices(): Promise<RemoteStatus>;
+    onStatus(callback: (status: RemoteStatus) => void): Unsubscribe;
+    /** The sessions as the phone lists them; sent whenever they change. */
+    publishState(snapshot: RemoteSnapshot): void;
+    /** A watched pane's screen; sent whenever it changes. */
+    publishScreen(screen: RemoteScreen): void;
+    /** The panes some phone is looking at; their screens are wanted. */
+    onWatch(callback: (paneIds: string[]) => void): Unsubscribe;
+    getWatched(): Promise<string[]>;
+    /** A phone's command, answered with `replyCommand`. */
+    onCommand(callback: (request: RemoteCommandRequest) => void): Unsubscribe;
+    replyCommand(reply: RemoteCommandReply): void;
   };
 }

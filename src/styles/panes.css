@@ -1356,3 +1356,43 @@
 .terminal-search-bar__button:hover {
   background: var(--bg-4);
 }
+
+/* The session on screen while it hibernates (HibernatedSessionPlaceholder). */
+.hibernated-session {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+}
+
+.hibernated-session__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 380px;
+  padding: 24px 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-window);
+  text-align: center;
+}
+
+.hibernated-session__card h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-lg);
+  font-weight: 600;
+}
+
+.hibernated-session__card p {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  line-height: 1.5;
+}
+
+.hibernated-session__icon {
+  color: var(--status-idle);
+}

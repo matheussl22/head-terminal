@@ -17,6 +17,7 @@ export const IPC_CHANNELS = {
     data: "terminal:data",
     exit: "terminal:exit",
     agent: "terminal:agent",
+    inspect: "terminal:inspect",
   },
   git: {
     getContext: "git:get-context",
@@ -95,6 +96,24 @@ export const IPC_CHANNELS = {
   },
   migration: {
     loadPreferences: "migration:load-preferences",
+  },
+  remote: {
+    getStatus: "remote:get-status",
+    setEnabled: "remote:set-enabled",
+    regeneratePin: "remote:regenerate-pin",
+    revokeDevice: "remote:revoke-device",
+    revokeAllDevices: "remote:revoke-all-devices",
+    /** Main → renderer: the remote's status changed (PIN, devices, up/down). */
+    status: "remote:status",
+    publishState: "remote:publish-state",
+    publishScreen: "remote:publish-screen",
+    /** Main → renderer: panes whose screens some phone is looking at. */
+    watch: "remote:watch",
+    /** The panes phones look at now, for a renderer that just (re)loaded. */
+    getWatched: "remote:get-watched",
+    /** Main → renderer: a phone's command. */
+    command: "remote:command",
+    commandReply: "remote:command-reply",
   },
 } as const;
 

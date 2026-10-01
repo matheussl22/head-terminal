@@ -19,6 +19,8 @@ import {
   Maximize2,
   MemoryStick,
   Mic,
+  Moon,
+  Smartphone,
   Minimize2,
   Minus,
   PanelLeftClose,
@@ -48,6 +50,15 @@ export function IconPencil({ className, size = 14 }: IconProps) {
 
 export function IconClose({ className, size = 14 }: IconProps) {
   return <X className={className} size={size} aria-hidden />;
+}
+
+/** A session put to sleep to free memory. */
+export function IconHibernate({ className, size = 14 }: IconProps) {
+  return <Moon className={className} size={size} aria-hidden />;
+}
+
+export function IconPhone({ className, size = 14 }: IconProps) {
+  return <Smartphone className={className} size={size} aria-hidden />;
 }
 
 export function IconMic({ className, size = 14 }: IconProps) {

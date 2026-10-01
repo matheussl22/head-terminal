@@ -173,7 +173,7 @@ describe("Electron IPC contract", () => {
     const channels = flattenChannels(IPC_CHANNELS);
 
     expect(new Set(channels).size).toBe(channels.length);
-    expect(channels).toHaveLength(69);
+    expect(channels).toHaveLength(82);
     expect(channels.every((channel) => /^[a-z][a-z-]*:[a-z][a-z-]*$/.test(channel))).toBe(true);
   });
 
@@ -192,6 +192,9 @@ describe("Electron IPC contract", () => {
       IPC_CHANNELS.live.endRequested,
       IPC_CHANNELS.live.delegationProgress,
       IPC_CHANNELS.agentHooks.event,
+      IPC_CHANNELS.remote.status,
+      IPC_CHANNELS.remote.watch,
+      IPC_CHANNELS.remote.command,
     ]);
     const expected = flattenChannels(IPC_CHANNELS).filter(
       (channel) => !mainToRendererOnly.has(channel),

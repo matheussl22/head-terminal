@@ -3,7 +3,12 @@ import { execFile, execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 
-import type { RunningAgent } from "../types/api";
+import type { PaneProcessInspection, RunningAgent } from "../types/api";
+import {
+  inspectProcessTree,
+  readProcessTable as readProcessRows,
+  type ProcessRow,
+} from "./process-tree";
 import {
   killWindowsProcessTree,
   POWERSHELL_COMMAND,
@@ -126,6 +131,9 @@ export interface PtyServiceOptions {
   readProcessTable?: () => Promise<string>;
   /** How often that table is read while panes exist; 0 turns it off. */
   agentPollMs?: number;
+  /** Every process with its parent, name and memory, read to see what runs
+   * under a pane before it is put to sleep. Defaults to the OS table. */
+  readProcessRows?: () => Promise<ProcessRow[]>;
 }
 
 interface PtyEntry {
@@ -432,6 +440,7 @@ export class PtyService {
   private readonly pathExists: (path: string) => boolean;
   private readonly readProcessTable: () => Promise<string>;
   private readonly agentPollMs: number;
+  private readonly readProcessRows: () => Promise<ProcessRow[]>;
   private agentPollTimer: ReturnType<typeof setInterval> | null = null;
   private agentPollBusy = false;
 
@@ -451,6 +460,7 @@ export class PtyService {
     this.pathExists = options.pathExists ?? existsSync;
     this.readProcessTable = options.readProcessTable ?? readPosixProcessTable;
     this.agentPollMs = options.agentPollMs ?? AGENT_POLL_MS;
+    this.readProcessRows = options.readProcessRows ?? (() => readProcessRows(this.platform));
   }
 
   spawn(ownerId: number, request: PtySpawnRequest): PtySpawnResult {
@@ -596,6 +606,23 @@ export class PtyService {
       entries.map(([key, entry]) => this.detachEntry(key, entry, true)),
     );
     return entries.length;
+  }
+
+  /**
+   * What runs under each of the owner's live panes among `ids` (unknown or
+   * dead ones are left out), from one read of the process table.
+   */
+  async inspect(ownerId: number, ids: readonly string[]): Promise<Record<string, PaneProcessInspection>> {
+    assertOwnerId(ownerId);
+    const roots: Array<[string, number]> = [];
+    for (const id of ids) {
+      assertPaneId(id);
+      const entry = this.entries.get(registryKey(ownerId, id));
+      if (entry && entry.process.pid > 0) roots.push([id, entry.process.pid]);
+    }
+    if (roots.length === 0) return {};
+    const rows = await this.readProcessRows();
+    return Object.fromEntries(roots.map(([id, pid]) => [id, inspectProcessTree(rows, pid)]));
   }
 
   has(ownerId: number, id: string): boolean {

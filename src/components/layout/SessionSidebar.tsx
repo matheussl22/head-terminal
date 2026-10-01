@@ -11,6 +11,7 @@ import {
 } from "react";
 
 import {
+  describeHibernatedPaneStatus,
   describePaneStatus,
   describeSessionStatus,
   formatStatusDetail,
@@ -43,6 +44,7 @@ import {
   isolateSessionInWorktree,
 } from "../../core/worktree";
 import { duplicateSessionIsolated } from "../../actions/duplicateSession";
+import { hibernateSessionFromMenu } from "../../actions/hibernateSession";
 import {
   SIDEBAR_WIDTH_DEFAULT,
   clampSidebarWidth,
@@ -62,6 +64,7 @@ import {
   IconAgentCursor,
   IconAgentShell,
   IconClose,
+  IconHibernate,
   IconPencil,
   IconPlus,
   IconSidebarCollapse,
@@ -214,17 +217,24 @@ const SessionListItem = memo(function SessionListItem({
   const statusKey = useSessionStore(
     (state) =>
       `${state.spawnedSessionIds[session.id] ? 1 : 0}|` +
+      `${state.hibernatedSessions[session.id] ? 1 : 0}|` +
       paneIds.map((paneId) => paneStatusKey(state.paneRuntime[paneId])).join(","),
   );
   // Rebuilt only when the key above changes; the store is read directly so
   // the selector itself can stay a cheap string.
-  const { status, paneViews } = useMemo(() => {
+  const { status, paneViews, hibernated } = useMemo(() => {
     const state = useSessionStore.getState();
     const spawned = Boolean(state.spawnedSessionIds[session.id]);
+    const hibernated = !spawned && Boolean(state.hibernatedSessions[session.id]);
     return {
-      status: describeSessionStatus(paneIds, state.paneRuntime, { spawned }),
+      hibernated,
+      status: describeSessionStatus(paneIds, state.paneRuntime, { spawned, hibernated }),
       paneViews: paneIds.map((paneId) =>
-        spawned ? describePaneStatus(state.paneRuntime[paneId]) : DORMANT_PANE,
+        spawned
+          ? describePaneStatus(state.paneRuntime[paneId])
+          : hibernated
+            ? describeHibernatedPaneStatus(state.paneRuntime[paneId])
+            : DORMANT_PANE,
       ),
     };
     // statusKey stands for everything read from the store here; the views
@@ -433,6 +443,11 @@ const SessionListItem = memo(function SessionListItem({
               })}
             </span>
             <SessionStatusLine view={status} />
+            {hibernated && (
+              <span className="session-sidebar__hibernated" title={msg.core.status.detail.hibernated}>
+                <IconHibernate size={11} />
+              </span>
+            )}
           </span>
         </div>
 
@@ -812,6 +827,15 @@ export function SessionSidebar({
             // a original já está na árvore, então a cópia ganha a sua.
             void duplicateSessionIsolated(session);
           }}
+          onHibernate={
+            useSessionStore.getState().spawnedSessionIds[contextMenu.session.id]
+              ? () => {
+                  const { session } = contextMenu;
+                  setContextMenu(null);
+                  void hibernateSessionFromMenu(session.id);
+                }
+              : undefined
+          }
           onClose={() => {
             void closeSessionWithWorktreeReview(contextMenu.session.id);
             setContextMenu(null);

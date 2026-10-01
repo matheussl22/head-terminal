@@ -47,7 +47,37 @@ const ptBR = {
     changeFolder: "Alterar pasta…",
     isolate: "Isolar em worktree…",
     duplicate: "Duplicar",
+    hibernate: "Hibernar agora",
     close: "Fechar sessão",
+  },
+  hibernate: {
+    confirmTitle: "Hibernar a sessão?",
+    confirmDetail:
+      "Hibernar encerra os processos da sessão. Os agents retomam a conversa ao reabrir; o que estiver rodando agora é interrompido.",
+    confirm: "Hibernar mesmo assim",
+    cancel: "Cancelar",
+    placeholderTitle: "Sessão hibernada",
+    placeholderBody:
+      "Os terminais desta sessão foram encerrados para liberar memória. Ao retomar, cada agent volta na mesma conversa.",
+    resume: "Retomar sessão",
+    blocked: {
+      busy: (pane: number) => `O terminal ${pane} está trabalhando ou esperando você.`,
+      processes: (pane: number, what: string) =>
+        `O terminal ${pane} ainda tem processos rodando${what ? ` (${what})` : ""}.`,
+      unanchored: (pane: number) =>
+        `A conversa do terminal ${pane} não foi identificada: ao retomar, ele começa uma nova.`,
+      profile: (pane: number) => `O terminal ${pane} não consegue retomar de onde parou.`,
+      watched: (pane: number) => `O terminal ${pane} está aberto no celular ou gravando voz.`,
+      notSpawned: "A sessão já está parada.",
+      recent: "A sessão foi usada há pouco.",
+    },
+  },
+  remote: {
+    paneGone: "Esse terminal não existe mais.",
+    sessionGone: "Essa sessão não existe mais.",
+    paneAsleep: "A sessão está hibernada — acorde-a primeiro.",
+    paneNotRunning: "O terminal não está rodando agora.",
+    unknownCommand: "Comando desconhecido.",
   },
   meter: {
     cpu: "CPU",
@@ -125,7 +155,37 @@ const en: typeof ptBR = {
     changeFolder: "Change folder…",
     isolate: "Isolate in worktree…",
     duplicate: "Duplicate",
+    hibernate: "Hibernate now",
     close: "Close session",
+  },
+  hibernate: {
+    confirmTitle: "Hibernate the session?",
+    confirmDetail:
+      "Hibernating stops the session's processes. Agents resume their conversation when reopened; whatever is running now is interrupted.",
+    confirm: "Hibernate anyway",
+    cancel: "Cancel",
+    placeholderTitle: "Session hibernated",
+    placeholderBody:
+      "This session's terminals were stopped to free memory. When resumed, each agent comes back on the same conversation.",
+    resume: "Resume session",
+    blocked: {
+      busy: (pane) => `Terminal ${pane} is working or waiting for you.`,
+      processes: (pane, what) =>
+        `Terminal ${pane} still has processes running${what ? ` (${what})` : ""}.`,
+      unanchored: (pane) =>
+        `Terminal ${pane}'s conversation was never identified: it would start a new one.`,
+      profile: (pane) => `Terminal ${pane} cannot resume where it left off.`,
+      watched: (pane) => `Terminal ${pane} is open on a phone or recording voice.`,
+      notSpawned: "The session is already stopped.",
+      recent: "The session was used a moment ago.",
+    },
+  },
+  remote: {
+    paneGone: "That terminal no longer exists.",
+    sessionGone: "That session no longer exists.",
+    paneAsleep: "The session is hibernated — wake it first.",
+    paneNotRunning: "The terminal is not running right now.",
+    unknownCommand: "Unknown command.",
   },
   meter: {
     cpu: "CPU",

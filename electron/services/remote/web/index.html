@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0b0c0e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Head Terminal">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+  <meta name="referrer" content="no-referrer">
+  <title>Head Terminal</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="app" id="app">
+
+    <!-- Boot: until /api/me answers. -->
+    <section class="screen screen-boot" id="screen-boot">
+      <div class="boot">
+        <img class="boot-logo" src="/icon.svg" alt="" width="56" height="56">
+        <p class="boot-text" id="boot-text" data-t="connecting">Conectando…</p>
+        <button class="btn btn-ghost" id="boot-retry" type="button" data-t="retry" hidden>Tentar de novo</button>
+      </div>
+    </section>
+
+    <!-- Pairing: no cookie yet. -->
+    <section class="screen screen-pair" id="screen-pair" hidden>
+      <form class="pair" id="pair-form" novalidate>
+        <img class="pair-logo" src="/icon.svg" alt="" width="64" height="64">
+        <h1 class="pair-title" data-t="pairTitle">Conectar este celular</h1>
+        <p class="pair-sub" data-t="pairSubtitle">Digite o PIN para controlar suas sessões daqui.</p>
+
+        <label class="field">
+          <span class="field-label" data-t="pinLabel">PIN</span>
+          <input class="pin-input" id="pin-input" name="pin" type="text" inputmode="numeric" pattern="[0-9]*"
+                 maxlength="7" autocomplete="one-time-code" autocapitalize="off" spellcheck="false"
+                 placeholder="000000" autofocus required>
+        </label>
+
+        <label class="field">
+          <span class="field-label" data-t="nameLabel">Nome deste aparelho</span>
+          <input class="text-input" id="name-input" name="name" type="text" maxlength="64"
+                 autocomplete="off" autocapitalize="words" spellcheck="false">
+        </label>
+
+        <p class="pair-error" id="pair-error" role="alert" hidden></p>
+
+        <button class="btn btn-primary btn-block" id="pair-submit" type="submit" data-t="pairButton">Parear</button>
+
+        <p class="pair-hint" data-t="pairHint">O PIN aparece no Head Terminal em Configurações › Celular.</p>
+      </form>
+    </section>
+
+    <!-- Sessions list. -->
+    <section class="screen screen-sessions" id="screen-sessions" hidden>
+      <header class="bar">
+        <div class="bar-brand">
+          <img src="/icon.svg" alt="" width="24" height="24">
+          <span class="bar-title" data-t="sessions">Sessões</span>
+        </div>
+        <span class="conn" id="conn-pill" data-state="connecting">
+          <span class="conn-dot"></span><span class="conn-text" id="conn-text"></span>
+        </span>
+        <button class="icon-btn" id="sessions-menu-btn" type="button" data-t-aria="more" aria-haspopup="menu"></button>
+      </header>
+      <main class="list" id="session-list"></main>
+    </section>
+
+    <!-- One terminal. -->
+    <section class="screen screen-terminal" id="screen-terminal" hidden>
+      <header class="bar term-bar">
+        <button class="icon-btn" id="term-back" type="button" data-t-aria="back"></button>
+        <div class="term-heading">
+          <div class="term-heading-main" id="term-title"></div>
+          <div class="term-heading-sub"><span class="term-session" id="term-session"></span><span class="st" id="term-status"></span></div>
+        </div>
+        <button class="icon-btn" id="term-menu-btn" type="button" data-t-aria="more" aria-haspopup="menu"></button>
+      </header>
+      <div class="offline-banner" id="term-offline" hidden><span class="conn-dot"></span><span id="term-offline-text"></span></div>
+
+      <div class="term-wrap">
+        <div class="term" id="term" tabindex="-1" aria-live="off"><div class="term-lines" id="term-lines"></div></div>
+        <div class="term-empty" id="term-empty" hidden></div>
+        <button class="live-btn" id="live-btn" type="button" hidden></button>
+      </div>
+
+      <div class="keys" id="keys" role="toolbar"></div>
+
+      <div class="rec-strip" id="rec-strip" hidden>
+        <span class="rec-dot"></span><span class="rec-text" id="rec-text"></span>
+      </div>
+      <form class="composer" id="composer">
+        <button class="icon-btn toggle" id="enter-toggle" type="button" aria-pressed="true" data-t-aria="enterOnSend"></button>
+        <textarea class="composer-input" id="composer-input" rows="1" autocomplete="off" autocapitalize="sentences"
+                  spellcheck="true" enterkeyhint="enter"></textarea>
+        <button class="icon-btn mic-btn" id="mic-btn" type="button" data-t-aria="mic"></button>
+        <button class="send-btn" id="send-btn" type="submit" data-t-aria="send"></button>
+      </form>
+    </section>
+
+    <div class="menu-scrim" id="menu-scrim" hidden></div>
+    <div class="menu" id="menu" role="menu" hidden></div>
+    <div class="toast" id="toast" role="status" hidden></div>
+  </div>
+  <noscript><p class="noscript">Head Terminal precisa de JavaScript.</p></noscript>
+</body>
+</html>

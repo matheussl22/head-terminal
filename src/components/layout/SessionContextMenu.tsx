@@ -12,6 +12,8 @@ interface SessionContextMenuProps {
   /** Ausente quando a sessão já está numa árvore isolada ou fora de um repo. */
   onIsolate?: () => void;
   onDuplicate: () => void;
+  /** Ausente quando a sessão não está rodando. */
+  onHibernate?: () => void;
   onClose: () => void;
   onDismiss: () => void;
 }
@@ -25,6 +27,7 @@ export function SessionContextMenu({
   onChangeFolder,
   onIsolate,
   onDuplicate,
+  onHibernate,
   onClose,
   onDismiss,
 }: SessionContextMenuProps) {
@@ -75,6 +78,11 @@ export function SessionContextMenu({
       <button type="button" onClick={onDuplicate}>
         {msg.app.sessionMenu.duplicate}
       </button>
+      {onHibernate && (
+        <button type="button" onClick={onHibernate}>
+          {msg.app.sessionMenu.hibernate}
+        </button>
+      )}
       <button type="button" className="session-context-menu__danger" onClick={onClose}>
         {msg.app.sessionMenu.close}
       </button>

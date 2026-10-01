@@ -23,6 +23,7 @@ const ptBR = {
       fallback: "Shell",
       exited: "Encerrado",
       dormant: "Não iniciada",
+      hibernated: "Hibernada",
     },
     blocked: {
       approval: "pede aprovação",
@@ -47,6 +48,8 @@ const ptBR = {
       agentExited: "O agent saiu — shell ativo",
       exited: "Processo encerrado",
       dormant: "Sessão ainda não iniciada — abre ao selecionar",
+      hibernated: "Hibernada para liberar memória — retoma a conversa ao selecionar",
+      doneHibernated: "Concluído e hibernada — retoma a conversa ao selecionar",
     },
     detailSince: (detail: string, duration: string) => `${detail} · há ${duration}`,
     summary: {
@@ -221,6 +224,7 @@ const en: typeof ptBR = {
       fallback: "Shell",
       exited: "Exited",
       dormant: "Not started",
+      hibernated: "Hibernated",
     },
     blocked: {
       approval: "needs approval",
@@ -244,6 +248,8 @@ const en: typeof ptBR = {
       agentExited: "The agent exited — shell active",
       exited: "Process exited",
       dormant: "Session not started yet — opens when selected",
+      hibernated: "Hibernated to free memory — resumes the conversation when selected",
+      doneHibernated: "Done and hibernated — resumes the conversation when selected",
     },
     detailSince: (detail, duration) => `${detail} · ${duration}`,
     summary: {

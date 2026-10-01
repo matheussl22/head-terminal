@@ -19,6 +19,7 @@ const LAST_ORNITH_GGUF_KEY = "head-terminal.last-ornith-gguf";
 const LAST_QWEN27_GGUF_KEY = "head-terminal.last-qwen27-gguf";
 const LAST_WSL_DISTRO_KEY = "head-terminal.last-wsl-distro";
 const MIGRATION_APPLIED_KEY = "head-terminal.migration.preferences.v1";
+const HIBERNATE_AFTER_KEY = "head-terminal.hibernate-after-minutes";
 
 const MIGRATABLE_KEYS = new Set([
   SIDEBAR_COLLAPSED_KEY,
@@ -201,6 +202,23 @@ export function loadOptionAsMeta(): boolean {
 export function saveOptionAsMeta(enabled: boolean): void {
   optionAsMetaCache = enabled;
   storageSet(OPTION_AS_META_KEY, enabled ? "1" : "0");
+}
+
+/** Minutes a session may sit unused before its terminals are put to sleep;
+ * 0 never does. */
+export const HIBERNATE_AFTER_OPTIONS = [0, 15, 30, 60, 120, 240] as const;
+export const DEFAULT_HIBERNATE_AFTER_MINUTES = 30;
+
+export function loadHibernateAfterMinutes(): number {
+  const stored = storageGet(HIBERNATE_AFTER_KEY);
+  const parsed = stored === null ? Number.NaN : Number(stored);
+  return (HIBERNATE_AFTER_OPTIONS as readonly number[]).includes(parsed)
+    ? parsed
+    : DEFAULT_HIBERNATE_AFTER_MINUTES;
+}
+
+export function saveHibernateAfterMinutes(minutes: number): void {
+  storageSet(HIBERNATE_AFTER_KEY, String(minutes));
 }
 
 export function loadRecentCwds(): string[] {

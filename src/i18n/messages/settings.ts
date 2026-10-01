@@ -25,6 +25,42 @@ const ptBR = {
   optionAsMeta: "Option como Meta",
   optionAsMetaHint:
     "⌥ vira Meta (⌥P, ⌥T e ⌥O do Claude Code) em vez de digitar ç e símbolos — o macOptionIsMeta do VS Code",
+  hibernate: "Hibernar sessões sem uso",
+  hibernateHint:
+    "Encerra os processos de uma sessão parada há esse tempo para liberar memória; ao abrir, cada agent retoma a mesma conversa",
+  hibernateOff: "Nunca",
+  hibernateMinutes: (minutes: number) =>
+    minutes < 60 ? `Após ${minutes} min` : `Após ${minutes / 60} h`,
+  phone: "Celular",
+  phoneDescription:
+    "Controle as sessões pelo navegador do celular, na sua rede local. Nada sai da sua rede.",
+  phoneEnable: "Acesso pelo celular",
+  phoneEnableHint:
+    "Abre um servidor HTTPS na rede local; só aparelhos pareados com o PIN controlam os terminais",
+  phoneStarting: "Iniciando…",
+  phoneAddress: "Endereço",
+  phoneAddressHint: "Abra no navegador do celular conectado ao mesmo Wi-Fi",
+  phoneCopy: "Copiar",
+  phoneCopied: "Copiado",
+  phonePin: "PIN de pareamento",
+  phonePinHint: "Muda a cada aparelho pareado",
+  phoneNewPin: "Gerar outro",
+  phoneScan: "Escaneie com a câmera do celular para abrir e parear de uma vez",
+  phoneSteps: [
+    "Conecte o celular ao mesmo Wi-Fi deste computador.",
+    "Escaneie o QR ou abra o endereço no navegador.",
+    "Aceite o aviso de certificado: ele é gerado por este app, só para a sua rede.",
+    "Se o QR não parear sozinho, digite o PIN.",
+  ],
+  phoneFirewall:
+    "No Windows, permita o Head Terminal em redes privadas quando o firewall perguntar.",
+  phoneDevices: "Aparelhos pareados",
+  phoneNoDevices: "Nenhum aparelho pareado ainda.",
+  phoneLastSeen: (when: string) => `visto ${when}`,
+  phoneRevoke: "Desconectar",
+  phoneRevokeAll: "Desconectar todos",
+  phoneVoiceHint:
+    "A voz pelo celular usa a mesma chave OpenAI das Integrações; sem ela, use o ditado do teclado do celular.",
   language: "Idioma",
   languageHint: "Muda o app inteiro na hora",
   languageAuto: (name: string) => `Automático — ${name}`,
@@ -95,6 +131,42 @@ const en: typeof ptBR = {
   optionAsMeta: "Option as Meta",
   optionAsMetaHint:
     "⌥ acts as Meta (Claude Code's ⌥P, ⌥T and ⌥O) instead of typing ç and symbols — VS Code's macOptionIsMeta",
+  hibernate: "Hibernate unused sessions",
+  hibernateHint:
+    "Stops the processes of a session left alone this long to free memory; when opened, each agent resumes the same conversation",
+  hibernateOff: "Never",
+  hibernateMinutes: (minutes) =>
+    minutes < 60 ? `After ${minutes} min` : `After ${minutes / 60} h`,
+  phone: "Phone",
+  phoneDescription:
+    "Control your sessions from your phone's browser, on your local network. Nothing leaves your network.",
+  phoneEnable: "Phone access",
+  phoneEnableHint:
+    "Opens an HTTPS server on the local network; only devices paired with the PIN control the terminals",
+  phoneStarting: "Starting…",
+  phoneAddress: "Address",
+  phoneAddressHint: "Open it in the browser of a phone on the same Wi-Fi",
+  phoneCopy: "Copy",
+  phoneCopied: "Copied",
+  phonePin: "Pairing PIN",
+  phonePinHint: "Changes with every paired device",
+  phoneNewPin: "New PIN",
+  phoneScan: "Scan it with the phone's camera to open and pair in one go",
+  phoneSteps: [
+    "Connect the phone to the same Wi-Fi as this computer.",
+    "Scan the QR code or open the address in the browser.",
+    "Accept the certificate warning: this app made it, for your network only.",
+    "If the QR code does not pair on its own, type the PIN.",
+  ],
+  phoneFirewall:
+    "On Windows, allow Head Terminal on private networks when the firewall asks.",
+  phoneDevices: "Paired devices",
+  phoneNoDevices: "No paired devices yet.",
+  phoneLastSeen: (when) => `seen ${when}`,
+  phoneRevoke: "Disconnect",
+  phoneRevokeAll: "Disconnect all",
+  phoneVoiceHint:
+    "Voice from the phone uses the same OpenAI key as Integrations; without one, use the phone keyboard's dictation.",
   language: "Language",
   languageHint: "Changes the whole app right away",
   languageAuto: (name) => `Automatic — ${name}`,

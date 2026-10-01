@@ -4,6 +4,7 @@
 const ptBR = {
   pane: {
     ariaLabel: "Terminal do agent",
+    numbered: (index: number) => `Terminal ${index}`,
   },
   overlay: {
     reconnecting: (seconds: number, attempt: number) =>
@@ -126,12 +127,14 @@ const ptBR = {
     processExited: (code: number) => `[Processo encerrado com código ${code}]`,
     spawnFailed: "Falha ao iniciar o PTY",
     error: (message: string) => `[Erro] ${message}`,
+    woke: "── retomado após hibernar ──",
   },
 };
 
 const en: typeof ptBR = {
   pane: {
     ariaLabel: "Agent terminal",
+    numbered: (index) => `Terminal ${index}`,
   },
   overlay: {
     reconnecting: (seconds, attempt) => `Reconnecting in ${seconds}s (attempt ${attempt}/5)`,
@@ -250,6 +253,7 @@ const en: typeof ptBR = {
     processExited: (code) => `[Process exited with code ${code}]`,
     spawnFailed: "Failed to start the PTY",
     error: (message) => `[Error] ${message}`,
+    woke: "── resumed after hibernating ──",
   },
 };
 

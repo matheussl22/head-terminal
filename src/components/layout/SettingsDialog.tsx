@@ -37,12 +37,16 @@ import { setThemePreference } from "../../core/theme-manager";
 import { isMacHost } from "../../core/platform-info";
 import { forEachTerminal } from "../../core/terminal-registry";
 import {
+  DEFAULT_HIBERNATE_AFTER_MINUTES,
+  HIBERNATE_AFTER_OPTIONS,
   loadCopyOnSelect,
+  loadHibernateAfterMinutes,
   loadFontSize,
   loadOptionAsMeta,
   loadRendererPreference,
   loadThemePreference,
   saveCopyOnSelect,
+  saveHibernateAfterMinutes,
   saveFontSize,
   saveOptionAsMeta,
   saveRendererPreference,
@@ -54,11 +58,13 @@ import {
   IconClose,
   IconLock,
   IconPencil,
+  IconPhone,
   IconPlug,
   IconPlus,
   IconSliders,
   IconTrash,
 } from "../ui/Icons";
+import { RemoteSettings } from "./RemoteSettings";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -71,7 +77,7 @@ interface McpAgentState {
   loading: boolean;
 }
 
-type SettingsSection = "terminal" | "profiles" | "integrations";
+type SettingsSection = "terminal" | "profiles" | "integrations" | "phone";
 
 function statusClass(status: string): string {
   if (status.includes("✔")) return "settings-mcp-status--ok";
@@ -148,6 +154,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [renderer, setRenderer] = useState<TerminalRenderer>("auto");
   const [copyOnSelect, setCopyOnSelect] = useState(false);
   const [optionAsMeta, setOptionAsMeta] = useState(false);
+  const [hibernateAfter, setHibernateAfter] = useState(DEFAULT_HIBERNATE_AFTER_MINUTES);
   const [claudeAccounts, setClaudeAccounts] = useState<ClaudeAccountProfile[]>([]);
   const [claudeAccountDrafts, setClaudeAccountDrafts] = useState<
     Record<string, string>
@@ -183,6 +190,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     setRenderer(loadRendererPreference());
     setCopyOnSelect(loadCopyOnSelect());
     setOptionAsMeta(loadOptionAsMeta());
+    setHibernateAfter(loadHibernateAfterMinutes());
     setNewClaudeAccountName("");
     setAddingProfile(false);
     setEditingAccountId(null);
@@ -418,6 +426,14 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
               <IconPlug size={16} />
               {msg.settings.integrations}
             </button>
+            <button
+              type="button"
+              className={activeSection === "phone" ? "settings-nav__item settings-nav__item--active" : "settings-nav__item"}
+              onClick={() => setActiveSection("phone")}
+            >
+              <IconPhone size={16} />
+              {msg.settings.phone}
+            </button>
           </nav>
 
           <main className="settings-content">
@@ -562,6 +578,28 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                       />
                     </label>
                   )}
+                  <label className="settings-row">
+                    <span>
+                      <strong>{msg.settings.hibernate}</strong>
+                      <small>{msg.settings.hibernateHint}</small>
+                    </span>
+                    <select
+                      value={hibernateAfter}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        setHibernateAfter(value);
+                        saveHibernateAfterMinutes(value);
+                      }}
+                    >
+                      {HIBERNATE_AFTER_OPTIONS.map((minutes) => (
+                        <option key={minutes} value={minutes}>
+                          {minutes === 0
+                            ? msg.settings.hibernateOff
+                            : msg.settings.hibernateMinutes(minutes)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
 
               </section>
@@ -826,6 +864,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                 </div>
               </section>
             )}
+
+            {activeSection === "phone" && <RemoteSettings />}
           </main>
         </div>
 

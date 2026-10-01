@@ -924,3 +924,10 @@
 .session-context-menu__danger {
   color: var(--status-error) !important;
 }
+
+/* A session whose terminals were put to sleep (see session-hibernation.ts). */
+.session-sidebar__hibernated {
+  display: inline-flex;
+  flex: none;
+  color: var(--status-idle);
+}

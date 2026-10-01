@@ -33,6 +33,8 @@ Windows and Linux: build from source with `npm ci && npm run make`.
 - persisted sessions, pinning, renaming, reordering and quick switching;
 - resizable horizontal and vertical splits, each with its own PTY;
 - lazy spawn, per-pane restart and scrollback preservation;
+- idle sessions hibernate to free memory (Settings › Terminal, 30 min by default): their agents, MCP servers and terminals are stopped, and selecting the session resumes each pane on its own conversation. Nothing is stopped mid-turn, while waiting on you, or with a dev server or background command still running;
+- phone remote (Settings › Phone): an HTTPS page on your local network, paired by QR code or PIN, lists every session and terminal with its status, streams a terminal's screen, and sends text, voice and keys (Enter, Esc, arrows, 1/2/3 for approvals) to it;
 - minimizing a pane (the `—` in its header) takes it off the session's area while its agent keeps running: a card in the session says whether it is still working, finished, or stopped on an approval, and brings it back on click. The pty keeps its size meanwhile, so the agent never sees a resize;
 - the agent conversation a pane is on is shown in its header, renamable by hand, and the name also applies in the resume list;
 - Antigravity, Cursor Agent, Claude Code, Codex and shell profiles;

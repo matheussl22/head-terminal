@@ -56,6 +56,8 @@ import * as systemService from "./services/system-service";
 import { ensureAgentClis } from "./services/agent-cli-install-service";
 import { LiveBrainstormService } from "./services/live-brainstorm-service";
 import { VoiceService } from "./services/voice-service";
+import { RemoteBridge } from "./services/remote-bridge";
+import { RemoteServer } from "./services/remote/remote-server";
 import { WorkspaceService } from "./services/workspace-service";
 import { bindWindowsTaskbarLaunch } from "./services/windows-launcher";
 import { AGENT_HOOK_PANE_ENV } from "../src/types/agent-hooks";
@@ -408,6 +410,37 @@ async function createServices(): Promise<{
   // Claude pane finds them ready instead of waiting on them.
   void agentHooks.warmUp().catch(() => undefined);
 
+  // The phone remote: off until Settings turns it on, then back on at every
+  // start. Smoke and E2E runs never open a LAN port.
+  const remoteBridge = new RemoteBridge(
+    (bytes, mimeType) => voice.transcribeAudio(bytes, mimeType),
+    () => msg.main.remote.windowClosed,
+  );
+  const remoteServer = new RemoteServer({
+    host: remoteBridge,
+    userDataPath,
+    // Tests and development pin it to loopback: no LAN port, no firewall prompt.
+    ...(process.env.HEAD_TERMINAL_REMOTE_BIND
+      ? { bindAddress: process.env.HEAD_TERMINAL_REMOTE_BIND }
+      : {}),
+    log(event, meta) {
+      diagnostics.appendEvent(JSON.stringify({
+        ts: new Date().toISOString(),
+        event,
+        ...meta,
+      }));
+    },
+  });
+  if (!smokeTest && !process.env.HEAD_TERMINAL_E2E_CDP) {
+    void remoteServer.init().catch((error) => {
+      diagnostics.appendEvent(JSON.stringify({
+        ts: new Date().toISOString(),
+        event: "remote.init_failed",
+        reason: error instanceof Error ? error.message : String(error),
+      }));
+    });
+  }
+
   const ipcServices: IpcServices = {
     terminal: pty,
     git,
@@ -484,6 +517,19 @@ async function createServices(): Promise<{
       loadPreferences: () => migration.loadMigratedPreferences(),
     },
     agentHooks,
+    remote: {
+      status: () => remoteServer.status(),
+      setEnabled: (enabled) => remoteServer.setEnabled(enabled),
+      regeneratePin: () => remoteServer.regeneratePin(),
+      revokeDevice: (id) => remoteServer.revokeDevice(id),
+      revokeAllDevices: () => remoteServer.revokeAllDevices(),
+      onStatus: (listener) => remoteServer.onStatus(listener),
+      publishState: (snapshot) => remoteBridge.publishState(snapshot),
+      publishScreen: (screen) => remoteBridge.publishScreen(screen),
+      replyCommand: (reply) => remoteBridge.replyCommand(reply),
+      attachRenderer: (renderer) => remoteBridge.attachRenderer(renderer),
+      watchedPanes: () => remoteBridge.watchedPanes(),
+    },
   };
 
   void ensureAgentClis()
@@ -516,6 +562,7 @@ async function createServices(): Promise<{
         await pty.dispose();
         git.dispose();
         await agentHooks.close();
+        await remoteServer.close().catch(() => undefined);
         await Promise.all([
           voice.dispose(),
           live.dispose(),

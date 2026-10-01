@@ -1185,3 +1185,104 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Settings › Celular (RemoteSettings.tsx). */
+.remote-settings__error {
+  color: var(--status-error);
+  font-size: var(--font-sm);
+}
+
+.remote-settings__pairing {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.remote-settings__qr {
+  flex: none;
+  width: 168px;
+  height: 168px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  /* A QR code reads dark-on-light; scanners struggle with it inverted. */
+  background: #ffffff;
+  color: #000000;
+}
+
+.remote-settings__details {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.remote-settings__details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.remote-settings__details strong {
+  color: var(--text-primary);
+  font-size: var(--font-md);
+}
+
+.remote-settings__details small {
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}
+
+.remote-settings__urls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.remote-settings__urls li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.remote-settings__urls code {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--font-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: all;
+}
+
+.remote-settings__pin-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.remote-settings__pin {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  user-select: all;
+}
+
+.remote-settings__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  line-height: 1.45;
+}

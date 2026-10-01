@@ -130,6 +130,12 @@ interface SessionStore {
    * its pty is not told the canvas changed. Not persisted — a restart comes
    * back with every terminal visible. */
   minimizedPanes: Record<string, MinimizedPane>;
+  /** sessionId -> when its terminals were put to sleep (see
+   * session-hibernation.ts). Such a session is back to the never-opened
+   * state — its processes and terminals are gone, each pane set to resume
+   * its own conversation — and wakes when selected. Not persisted: after a
+   * restart every session but the active one starts that way anyway. */
+  hibernatedSessions: Record<string, number>;
   addSession: (session: AgentSession) => void;
   hydrateWorkspace: (
     sessions: AgentSession[],
@@ -184,6 +190,11 @@ interface SessionStore {
    * the same width, those of a column the same height (see equalizeLayout).
    * Minimized panes are left out of the count. */
   equalizeSessionLayout: (sessionId: string) => void;
+  /** Stops every terminal of a session, keeping what is needed to bring each
+   * pane back on its own conversation. False when there was nothing to stop. */
+  hibernateSession: (sessionId: string) => boolean;
+  /** Starts a session's terminals without putting it on screen. */
+  wakeSession: (sessionId: string) => void;
   restartPane: (
     paneId: string,
     options?: { continueConversation?: boolean },
@@ -316,6 +327,16 @@ function syncActivePane(
     minimizedPanes,
     maximizedPaneIds[session.id],
   );
+}
+
+/** A copy without `key` — the same object when it was not there. */
+function withoutKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in record)) {
+    return record;
+  }
+  const next = { ...record };
+  delete next[key];
+  return next;
 }
 
 function sessionHasPane(session: AgentSession, paneId: string): boolean {
@@ -523,6 +544,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   paneGitContext: {},
   maximizedPaneIds: {},
   minimizedPanes: {},
+  hibernatedSessions: {},
 
   addSession: (session) =>
     set((state) => {
@@ -596,6 +618,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       conversationLabels,
       conversationTitles: {},
       pendingConversationLabels: {},
+      hibernatedSessions: {},
     });
     logSpawnState(
       "session.spawn_state",
@@ -628,6 +651,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           ...state.spawnedSessionIds,
           [sessionId]: true,
         },
+        // Picking a sleeping session is what wakes it.
+        hibernatedSessions: withoutKey(state.hibernatedSessions, sessionId),
         // The pane that gets the keyboard is the one the user now looks at —
         // unless every pane is in the dock and the keyboard sits on one of
         // them, out of sight.
@@ -858,6 +883,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
       const maximizedPaneIds = { ...state.maximizedPaneIds };
       delete maximizedPaneIds[sessionId];
+      const hibernatedSessions = withoutKey(state.hibernatedSessions, sessionId);
 
       let activeSessionId = state.activeSessionId;
       let activePaneId = state.activePaneId;
@@ -879,6 +905,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           // in the sidebar — after an app restart only the one that was
           // active had spawned, and the canvas would come up empty.
           spawnedSessionIds[nextSession.id] = true;
+          delete hibernatedSessions[nextSession.id];
           activated = nextSession.id;
           // The pane that gets the keyboard is the one the user now looks at.
           paneRuntime = clearDoneAtIfOnScreen(
@@ -900,6 +927,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         spawnedSessionIds,
         sessionGitContext,
         maximizedPaneIds,
+        hibernatedSessions,
         ...cleanup,
         paneRuntime,
       };
@@ -944,6 +972,59 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const next = { sessions: nextSessions };
       persistWorkspaceState({ ...state, ...next });
       return next;
+    }),
+
+  hibernateSession: (sessionId) => {
+    let hibernated = false;
+    set((state) => {
+      const session = state.sessions.find((item) => item.id === sessionId);
+      if (!session || !state.spawnedSessionIds[sessionId]) {
+        return state;
+      }
+      hibernated = true;
+      // Each pane comes back the way the app brings it back after a restart
+      // (see hydrateWorkspace): on its own conversation when that is known,
+      // otherwise with the very arguments its last spawn had.
+      const restoredPaneIds = { ...state.restoredPaneIds };
+      const paneResumeSessionIds = { ...state.paneResumeSessionIds };
+      for (const paneId of collectPaneIds(session.layout)) {
+        const anchor = state.paneResumeAnchors[paneId];
+        if (anchor) {
+          restoredPaneIds[paneId] = true;
+          paneResumeSessionIds[paneId] = anchor;
+        }
+      }
+      const spawnedSessionIds = withoutKey(state.spawnedSessionIds, sessionId);
+      logSpawnState("session.spawn_state", sessionId, spawnedSessionIds, {
+        source: "hibernate",
+      });
+      return {
+        spawnedSessionIds,
+        restoredPaneIds,
+        paneResumeSessionIds,
+        hibernatedSessions: { ...state.hibernatedSessions, [sessionId]: Date.now() },
+      };
+    });
+    return hibernated;
+  },
+
+  wakeSession: (sessionId) =>
+    set((state) => {
+      if (
+        state.spawnedSessionIds[sessionId] ||
+        !state.sessions.some((item) => item.id === sessionId)
+      ) {
+        return state;
+      }
+      const spawnedSessionIds = { ...state.spawnedSessionIds, [sessionId]: true };
+      logSpawnState("session.spawn_state", sessionId, spawnedSessionIds, {
+        source: "wake",
+      });
+      checkpointSessionSpawn(sessionId);
+      return {
+        spawnedSessionIds,
+        hibernatedSessions: withoutKey(state.hibernatedSessions, sessionId),
+      };
     }),
 
   restartPane: (paneId, options) =>

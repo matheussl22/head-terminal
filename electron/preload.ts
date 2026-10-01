@@ -11,6 +11,10 @@ import type {
   PtyExitEvent,
   Unsubscribe,
 } from "./types/api";
+import type {
+  RemoteCommandRequest,
+  RemoteStatus,
+} from "../src/types/remote";
 
 type Delivery = (payload: unknown) => void;
 
@@ -101,6 +105,7 @@ const api: HeadTerminalApi = {
       subscribe<PtyExitEvent>(IPC_CHANNELS.terminal.exit, callback),
     onAgent: (callback) =>
       subscribe<PtyAgentEvent>(IPC_CHANNELS.terminal.agent, callback),
+    inspect: (ids) => ipcRenderer.invoke(IPC_CHANNELS.terminal.inspect, ids),
   },
   git: {
     getContext: (cwd) => ipcRenderer.invoke(IPC_CHANNELS.git.getContext, cwd),
@@ -223,6 +228,24 @@ const api: HeadTerminalApi = {
   migration: {
     loadPreferences: () =>
       ipcRenderer.invoke(IPC_CHANNELS.migration.loadPreferences),
+  },
+  remote: {
+    getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.remote.getStatus),
+    setEnabled: (enabled) => ipcRenderer.invoke(IPC_CHANNELS.remote.setEnabled, enabled),
+    regeneratePin: () => ipcRenderer.invoke(IPC_CHANNELS.remote.regeneratePin),
+    revokeDevice: (id) => ipcRenderer.invoke(IPC_CHANNELS.remote.revokeDevice, id),
+    revokeAllDevices: () => ipcRenderer.invoke(IPC_CHANNELS.remote.revokeAllDevices),
+    onStatus: (callback) =>
+      subscribe<RemoteStatus>(IPC_CHANNELS.remote.status, callback),
+    publishState: (snapshot) =>
+      ipcRenderer.send(IPC_CHANNELS.remote.publishState, snapshot),
+    publishScreen: (screen) =>
+      ipcRenderer.send(IPC_CHANNELS.remote.publishScreen, screen),
+    onWatch: (callback) => subscribe<string[]>(IPC_CHANNELS.remote.watch, callback),
+    getWatched: () => ipcRenderer.invoke(IPC_CHANNELS.remote.getWatched),
+    onCommand: (callback) =>
+      subscribe<RemoteCommandRequest>(IPC_CHANNELS.remote.command, callback),
+    replyCommand: (reply) => ipcRenderer.send(IPC_CHANNELS.remote.commandReply, reply),
   },
 };
 
