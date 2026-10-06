@@ -708,6 +708,13 @@
   width: 230px;
 }
 
+/* As wide as its longest option, and a long hint beside it wraps instead of
+   squeezing it: "One project at a time" is never cut. */
+.settings-row select.settings-select--fit {
+  flex: none;
+  width: auto;
+}
+
 .settings-row input[type="checkbox"] {
   width: 16px;
   height: 16px;

@@ -565,6 +565,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                       <small>{msg.settings.projectsHint}</small>
                     </span>
                     <select
+                      className="settings-select--fit"
                       value={projectsEnabled ? projectsView : "off"}
                       onChange={(event) => {
                         const store = useSessionStore.getState();
