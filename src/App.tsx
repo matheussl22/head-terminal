@@ -38,6 +38,20 @@ function App() {
   const addSession = useSessionStore((state) => state.addSession);
   const hydrateWorkspaceState = useSessionStore((state) => state.hydrateWorkspace);
   const setRunEverything = useSessionStore((state) => state.setRunEverything);
+  // Projects mode: an empty project is a normal screen, not a failed boot,
+  // and its new sessions open in its own folder when it has one.
+  const projectsEnabled = useSessionStore((state) => state.projectsEnabled);
+  const hasProjects = useSessionStore((state) => state.projects.length > 0);
+  /** The project a session is being created in from its header's "+";
+   * otherwise it lands in the active project. */
+  const [createProjectId, setCreateProjectId] = useState<string | null>(null);
+  const projectCwd = useSessionStore((state) =>
+    state.projectsEnabled
+      ? state.projects.find(
+          (project) => project.id === (createProjectId ?? state.activeProjectId),
+        )?.cwd
+      : undefined,
+  );
   const [bootstrapped, setBootstrapped] = useState(false);
   const [defaultCwd, setDefaultCwd] = useState<string | null>(null);
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
@@ -95,7 +109,12 @@ function App() {
             logError("workspace.migration_save_failed", error);
           });
         }
-        if (persisted && persisted.sessions.length > 0) {
+        // Projects kept with no session left in any of them still come back.
+        const hasSavedWork = Boolean(
+          persisted &&
+            (persisted.sessions.length > 0 || (persisted.projects?.length ?? 0) > 0),
+        );
+        if (persisted && hasSavedWork) {
           const restored = hydrateWorkspace(persisted);
           hydrateWorkspaceState(
             restored.sessions,
@@ -103,13 +122,17 @@ function App() {
             restored.activePaneId,
             restored.paneResumeSessionIds,
             restored.conversationLabels,
+            { projects: restored.projects, activeProjectId: restored.activeProjectId },
           );
           checkpoint("js.bootstrap.workspace_ok", {
             sessionCount: restored.sessions.length,
             activeSessionId: restored.activeSessionId,
             activePaneId: restored.activePaneId,
           });
-        } else {
+        }
+        const { sessions: hydrated, projectsEnabled: projectsOn } =
+          useSessionStore.getState();
+        if (hydrated.length === 0 && !(projectsOn && hasSavedWork)) {
           const smokeTest = document.documentElement.dataset.headTerminalSmoke === "1";
           const session = createInitialSession(
             cwd,
@@ -149,7 +172,8 @@ function App() {
     };
   }, [addSession, hydrateWorkspaceState, setRunEverything]);
 
-  const handleCreateSession = useCallback(() => {
+  const handleCreateSession = useCallback((projectId?: string) => {
+    setCreateProjectId(projectId ?? null);
     setCreateOpen(true);
   }, []);
 
@@ -191,16 +215,10 @@ function App() {
       },
     ) => {
       const title = nextAgentSessionTitle(agentProfileId, sessions, extras?.wslDistro);
-      addSession(
-        createInitialSession(
-          cwd,
-          title,
-          agentProfileId,
-          extras,
-        ),
-      );
+      const session = createInitialSession(cwd, title, agentProfileId, extras);
+      addSession(createProjectId ? { ...session, projectId: createProjectId } : session);
     },
-    [addSession, sessions],
+    [addSession, createProjectId, sessions],
   );
 
   if (!bootstrapped) {
@@ -212,7 +230,11 @@ function App() {
     );
   }
 
-  if (bootstrapError || sessions.length === 0 || !defaultCwd) {
+  if (
+    bootstrapError ||
+    (sessions.length === 0 && !(projectsEnabled && hasProjects)) ||
+    !defaultCwd
+  ) {
     return (
       <BootScreen
         error={bootstrapError ?? msg.app.sessionsLoadFailed}
@@ -230,10 +252,11 @@ function App() {
       />
       <CreateSessionDialog
         open={createOpen}
-        defaultCwd={requestedCwd ?? defaultCwd}
+        defaultCwd={requestedCwd ?? projectCwd ?? defaultCwd}
         onClose={() => {
           setCreateOpen(false);
           setRequestedCwd(null);
+          setCreateProjectId(null);
         }}
         onCreate={handleCreateConfirm}
       />

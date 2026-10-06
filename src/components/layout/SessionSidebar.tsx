@@ -71,13 +71,16 @@ import {
   IconSidebarExpand,
 } from "../ui/Icons";
 import { StatusDot, useTerminalStatusCounts } from "../ui/StatusDot";
+import { ProjectGroups } from "./ProjectGroups";
+import { ProjectDropTargets, ProjectSwitcher } from "./ProjectSwitcher";
 import { SessionContextMenu } from "./SessionContextMenu";
 import { SystemResourceMeter } from "./SystemResourceMeter";
 import { UsageMeter } from "./UsageMeter";
 
 interface SessionSidebarProps {
   sessions: AgentSession[];
-  onCreateSession: () => void;
+  /** With a project: the new session goes there (grouped view's "+"). */
+  onCreateSession: (projectId?: string) => void;
   renameSessionId: string | null;
   onRenameComplete: () => void;
   onRenameRequest: (sessionId: string) => void;
@@ -178,6 +181,8 @@ interface SessionListItemProps {
   sessionIndex: number;
   isActive: boolean;
   collapsed: boolean;
+  /** Grouped view: one line while the session has nothing to report. */
+  dense?: boolean;
   forceRename: boolean;
   onSelect: () => void;
   onSelectPane: (paneId: string) => void;
@@ -197,6 +202,7 @@ const SessionListItem = memo(function SessionListItem({
   sessionIndex,
   isActive,
   collapsed,
+  dense = false,
   forceRename,
   onSelect,
   onSelectPane,
@@ -314,6 +320,9 @@ const SessionListItem = memo(function SessionListItem({
     );
   }
 
+  // The status line only while the session works, waits, finished or failed.
+  const quiet = dense && !RING_TONES.has(status.tone);
+
   return (
     <li
       data-session-id={session.id}
@@ -328,7 +337,7 @@ const SessionListItem = memo(function SessionListItem({
           (isActive
             ? "session-sidebar__item session-sidebar__item--active"
             : "session-sidebar__item") +
-          ""
+          (quiet ? " session-sidebar__item--quiet" : "")
         }
         onContextMenu={(event) => onContextMenu(event, session)}
       >
@@ -385,6 +394,12 @@ const SessionListItem = memo(function SessionListItem({
                 {session.title}
               </span>
             )}
+            {/* One-line row: no status line to carry the hibernated mark. */}
+            {quiet && hibernated && (
+              <span className="session-sidebar__hibernated" title={msg.core.status.detail.hibernated}>
+                <IconHibernate size={11} />
+              </span>
+            )}
             <span
               className="session-sidebar__agent-chip"
               title={claudeInShell ? msg.sidebar.claudeInShell : session.agentProfileId}
@@ -405,50 +420,52 @@ const SessionListItem = memo(function SessionListItem({
             )}
           </div>
 
-          <span
-            className={`session-sidebar__status session-sidebar__status--${status.tone}`}
-          >
+          {!quiet && (
             <span
-              className={
-                paneViews.length > 12
-                  ? "session-sidebar__pane-dots session-sidebar__pane-dots--crowded"
-                  : paneViews.length > 6
-                    ? "session-sidebar__pane-dots session-sidebar__pane-dots--dense"
-                    : "session-sidebar__pane-dots"
-              }
-              aria-hidden
+              className={`session-sidebar__status session-sidebar__status--${status.tone}`}
             >
-              {paneViews.map((paneView, index) => {
-                const minimized = minimizedKey[index] === "1";
-                return (
-                  <button
-                    key={paneIds[index]}
-                    type="button"
-                    tabIndex={-1}
-                    className={
-                      `session-sidebar__pane-dot session-sidebar__pane-dot--${paneView.tone}` +
-                      (minimized ? " session-sidebar__pane-dot--minimized" : "")
-                    }
-                    title={
-                      msg.sidebar.paneDot(index + 1, paneView.detail) +
-                      (minimized ? msg.sidebar.paneDotMinimized : "")
-                    }
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      // Minimized or not, the dot shows that terminal.
-                      onSelectPane(paneIds[index]);
-                    }}
-                  />
-                );
-              })}
-            </span>
-            <SessionStatusLine view={status} />
-            {hibernated && (
-              <span className="session-sidebar__hibernated" title={msg.core.status.detail.hibernated}>
-                <IconHibernate size={11} />
+              <span
+                className={
+                  paneViews.length > 12
+                    ? "session-sidebar__pane-dots session-sidebar__pane-dots--crowded"
+                    : paneViews.length > 6
+                      ? "session-sidebar__pane-dots session-sidebar__pane-dots--dense"
+                      : "session-sidebar__pane-dots"
+                }
+                aria-hidden
+              >
+                {paneViews.map((paneView, index) => {
+                  const minimized = minimizedKey[index] === "1";
+                  return (
+                    <button
+                      key={paneIds[index]}
+                      type="button"
+                      tabIndex={-1}
+                      className={
+                        `session-sidebar__pane-dot session-sidebar__pane-dot--${paneView.tone}` +
+                        (minimized ? " session-sidebar__pane-dot--minimized" : "")
+                      }
+                      title={
+                        msg.sidebar.paneDot(index + 1, paneView.detail) +
+                        (minimized ? msg.sidebar.paneDotMinimized : "")
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        // Minimized or not, the dot shows that terminal.
+                        onSelectPane(paneIds[index]);
+                      }}
+                    />
+                  );
+                })}
               </span>
-            )}
-          </span>
+              <SessionStatusLine view={status} />
+              {hibernated && (
+                <span className="session-sidebar__hibernated" title={msg.core.status.detail.hibernated}>
+                  <IconHibernate size={11} />
+                </span>
+              )}
+            </span>
+          )}
         </div>
 
         {!isEditing && (
@@ -505,7 +522,24 @@ export function SessionSidebar({
     y: number;
   } | null>(null);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const projectsEnabled = useSessionStore((state) => state.projectsEnabled);
+  const activeProjectId = useSessionStore((state) => state.activeProjectId);
+  const projects = useSessionStore((state) => state.projects);
+  const projectsView = useSessionStore((state) => state.projectsView);
+  // Grouped view: every project in the list, each under its own header.
+  const grouped = projectsEnabled && projectsView === "grouped";
+  // One project at a time lists the project on screen; the profile filter and
+  // the count then apply to its sessions. The grouped view lists them all.
+  const projectSessions = useMemo(
+    () =>
+      grouped || !projectsEnabled
+        ? sessions
+        : sessions.filter((session) => session.projectId === activeProjectId),
+    [activeProjectId, grouped, projectsEnabled, sessions],
+  );
   const claudeProfiles = loadClaudeAccountProfiles();
+  // The chips come from every session, in any project: a project whose
+  // sessions all run on one profile must not take them away.
   const accountOptions = claudeAccountFilterOptions(sessions, claudeProfiles);
   // O filtro só vale enquanto os chips estão na tela: recolhido, ou com um
   // perfil só, a lista nunca esconde sessões sem mostrar por quê.
@@ -514,7 +548,7 @@ export function SessionSidebar({
     showAccountFilter && accountOptions.some((option) => option.id === accountFilter)
       ? accountFilter
       : null;
-  const visibleSessions = filterSessionsByClaudeAccount(sessions, activeAccountFilter);
+  const visibleSessions = filterSessionsByClaudeAccount(projectSessions, activeAccountFilter);
   const counts = useTerminalStatusCounts();
   // A ordem é sempre a do store (pin + drag manual) — sem reordenação
   // automática; quem precisa de atenção sinaliza pela cor do status, não por posição.
@@ -582,13 +616,60 @@ export function SessionSidebar({
       if (dragFrom === null || dragFrom === toIndex) {
         return;
       }
-      reorderSessions(dragFrom, toIndex);
+      const store = useSessionStore.getState();
+      const dragged = store.sessions[dragFrom];
+      const target = store.sessions[toIndex];
+      // Grouped view, dropped on a session of another project: it moves there
+      // and takes that session's place.
+      if (grouped && dragged && target?.projectId && dragged.projectId !== target.projectId) {
+        store.moveSessionToProject(dragged.id, target.projectId);
+        const moved = useSessionStore.getState().sessions;
+        reorderSessions(
+          moved.findIndex((session) => session.id === dragged.id),
+          moved.findIndex((session) => session.id === target.id),
+        );
+      } else {
+        reorderSessions(dragFrom, toIndex);
+      }
       setDragFrom(null);
     },
-    [dragFrom, reorderSessions],
+    [dragFrom, grouped, reorderSessions],
   );
 
   const dismissContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const renderSessionItem = (session: AgentSession) => (
+    <SessionListItem
+      key={session.id}
+      session={session}
+      claudeAccountName={
+        session.agentProfileId === "claude"
+          ? getClaudeAccountProfile(session.claudeAccountId)?.name
+          : undefined
+      }
+      // Índice no store, não na lista filtrada: é nele que o drag reordena.
+      sessionIndex={sessions.indexOf(session)}
+      collapsed={collapsed}
+      dense={grouped}
+      isActive={session.id === activeSessionId}
+      forceRename={renameSessionId === session.id}
+      onSelect={() => setActiveSessionId(session.id)}
+      onSelectPane={focusSessionPane}
+      onRename={(title) => renameSession(session.id, title)}
+      onRemove={() => void closeSessionWithWorktreeReview(session.id)}
+      onRenameComplete={onRenameComplete}
+      onContextMenu={handleContextMenu}
+      onDragStart={setDragFrom}
+      onDragEnd={() => setDragFrom(null)}
+      onDragOver={(event, index) => {
+        event.preventDefault();
+        if (dragFrom !== null && dragFrom !== index) {
+          event.dataTransfer.dropEffect = "move";
+        }
+      }}
+      onDrop={handleDrop}
+    />
+  );
 
   return (
     <aside
@@ -607,18 +688,21 @@ export function SessionSidebar({
             {msg.sidebar.title}
             {/* Quantas sessões a lista tem (com filtro, quantas dele sobraram),
                 depois os terminais aguardando você e os executando. */}
-            {sessions.length > 0 && (
+            {projectSessions.length > 0 && (
               <span
                 className="session-sidebar__count-badge session-sidebar__count-badge--total"
                 title={
-                  visibleSessions.length === sessions.length
-                    ? msg.sidebar.count(sessions.length)
-                    : msg.sidebar.countFiltered(visibleSessions.length, sessions.length)
+                  visibleSessions.length === projectSessions.length
+                    ? msg.sidebar.count(projectSessions.length)
+                    : msg.sidebar.countFiltered(
+                        visibleSessions.length,
+                        projectSessions.length,
+                      )
                 }
               >
-                {visibleSessions.length === sessions.length
-                  ? sessions.length
-                  : `${visibleSessions.length}/${sessions.length}`}
+                {visibleSessions.length === projectSessions.length
+                  ? projectSessions.length
+                  : `${visibleSessions.length}/${projectSessions.length}`}
               </span>
             )}
             {counts.waiting > 0 && (
@@ -646,7 +730,7 @@ export function SessionSidebar({
               type="button"
               className="session-sidebar__new"
               title={msg.sidebar.newSessionHint(formatShortcut("Ctrl+Shift+N"))}
-              onClick={onCreateSession}
+              onClick={() => onCreateSession()}
             >
               <IconPlus size={12} />
               <span>{msg.sidebar.newSession}</span>
@@ -664,6 +748,8 @@ export function SessionSidebar({
           </button>
         </div>
       </div>
+
+      {projectsEnabled && !grouped && <ProjectSwitcher collapsed={collapsed} />}
 
       {showAccountFilter && (
         <div
@@ -696,39 +782,35 @@ export function SessionSidebar({
         </div>
       )}
 
-      <ul className="session-sidebar__list" ref={listRef}>
-        {visibleSessions.map((session) => (
-          <SessionListItem
-            key={session.id}
-            session={session}
-            claudeAccountName={
-              session.agentProfileId === "claude"
-                ? getClaudeAccountProfile(session.claudeAccountId)?.name
-                : undefined
+      {grouped ? (
+        <ProjectGroups
+          sessions={visibleSessions}
+          filtering={activeAccountFilter !== null}
+          collapsed={collapsed}
+          dragSession={dragFrom !== null ? (sessions[dragFrom] ?? null) : null}
+          onDropSession={(projectId) => {
+            if (dragFrom !== null && sessions[dragFrom]) {
+              useSessionStore.getState().moveSessionToProject(sessions[dragFrom].id, projectId);
             }
-            // Índice no store, não na lista filtrada: é nele que o drag reordena.
-            sessionIndex={sessions.indexOf(session)}
-            collapsed={collapsed}
-            isActive={session.id === activeSessionId}
-            forceRename={renameSessionId === session.id}
-            onSelect={() => setActiveSessionId(session.id)}
-            onSelectPane={focusSessionPane}
-            onRename={(title) => renameSession(session.id, title)}
-            onRemove={() => void closeSessionWithWorktreeReview(session.id)}
-            onRenameComplete={onRenameComplete}
-            onContextMenu={handleContextMenu}
-            onDragStart={setDragFrom}
-            onDragEnd={() => setDragFrom(null)}
-            onDragOver={(event, index) => {
-              event.preventDefault();
-              if (dragFrom !== null && dragFrom !== index) {
-                event.dataTransfer.dropEffect = "move";
-              }
-            }}
-            onDrop={handleDrop}
-          />
-        ))}
-      </ul>
+            setDragFrom(null);
+          }}
+          onCreateSession={(projectId) => onCreateSession(projectId)}
+          renderSession={renderSessionItem}
+        />
+      ) : (
+        <ul className="session-sidebar__list" ref={listRef}>
+          {visibleSessions.map(renderSessionItem)}
+        </ul>
+      )}
+
+      {/* Below the list, so it opens without shifting the session being dragged. */}
+      {projectsEnabled && dragFrom !== null && sessions[dragFrom] && (
+        <ProjectDropTargets
+          session={sessions[dragFrom]}
+          collapsed={collapsed}
+          onDropped={() => setDragFrom(null)}
+        />
+      )}
 
       <div className="session-sidebar__footer">
         {collapsed && (
@@ -737,7 +819,7 @@ export function SessionSidebar({
             className="session-sidebar__compact-new"
             title={msg.sidebar.newSessionHint(formatShortcut("Ctrl+Shift+N"))}
             aria-label={msg.sidebar.newSessionAria}
-            onClick={onCreateSession}
+            onClick={() => onCreateSession()}
           >
             <IconPlus size={16} />
           </button>
@@ -785,6 +867,15 @@ export function SessionSidebar({
           x={contextMenu.x}
           y={contextMenu.y}
           pinned={Boolean(contextMenu.session.pinned)}
+          moveTargets={
+            projectsEnabled
+              ? projects.filter((project) => project.id !== contextMenu.session.projectId)
+              : undefined
+          }
+          onMoveToProject={(projectId) => {
+            useSessionStore.getState().moveSessionToProject(contextMenu.session.id, projectId);
+            setContextMenu(null);
+          }}
           onDismiss={dismissContextMenu}
           onRename={() => {
             onRenameRequest(contextMenu.session.id);

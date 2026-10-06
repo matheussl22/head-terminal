@@ -931,3 +931,560 @@
   flex: none;
   color: var(--status-idle);
 }
+
+.session-context-menu button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.session-context-menu button:disabled:hover {
+  background: transparent;
+}
+
+.session-context-menu__separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border-subtle);
+}
+
+.session-context-menu__label {
+  padding: 4px 10px 2px;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.session-context-menu button.session-context-menu__indented {
+  padding-left: 18px;
+}
+
+/* Projects mode: the project on screen, above the session list. */
+
+.project-switcher {
+  padding: var(--space-2) var(--space-2) 0;
+}
+
+.project-switcher__current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-switcher__current:hover,
+.project-switcher__current[aria-expanded="true"] {
+  background: var(--bg-4);
+}
+
+.project-switcher__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher__caret {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.project-switcher__badge,
+.project-switcher__item-waiting {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--status-waiting-strong);
+  color: var(--status-waiting);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.project-switcher--collapsed {
+  display: flex;
+  justify-content: center;
+}
+
+.project-switcher--collapsed .project-switcher__current {
+  position: relative;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.project-switcher--collapsed .project-switcher__badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+}
+
+.project-switcher__initial {
+  font-size: var(--font-sm);
+  font-weight: 700;
+}
+
+.session-context-menu.project-switcher__menu {
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+.session-context-menu .project-switcher__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-context-menu .project-switcher__item--active {
+  background: var(--bg-4);
+  font-weight: 600;
+}
+
+.project-switcher__item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-switcher__item-count {
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-weight: 400;
+}
+
+.project-switcher__input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  outline: none;
+}
+
+/* Projects mode, while a session is dragged: where it can be dropped. */
+
+.project-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0 var(--space-2) var(--space-2);
+  padding: var(--space-2);
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-2);
+}
+
+.project-drop--collapsed {
+  flex-direction: column;
+  margin: 0 4px var(--space-2);
+  padding: 4px;
+}
+
+.project-drop__label {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.project-drop__target {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 4px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: var(--bg-3, var(--bg-2));
+  color: var(--text-primary);
+  font-size: var(--font-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    background var(--transition-fast, 120ms),
+    border-color var(--transition-fast, 120ms);
+}
+
+.project-drop--collapsed .project-drop__target {
+  width: 28px;
+  padding: 4px 0;
+  text-align: center;
+  font-weight: 700;
+}
+
+.project-drop__target--new {
+  border-style: dashed;
+  color: var(--text-secondary);
+}
+
+.project-drop__target--over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text-primary);
+}
+
+/* Projects mode, grouped view: a tree. Each project is a header row — chevron,
+   name, its numbers — and its sessions hang under it, indented along a guide
+   line. The whole thing scrolls as one list, with the header of the project
+   being scrolled through stuck to the top. */
+
+/* No top padding: a header stuck to the top must have nothing scrolling
+   above it. The first project keeps its distance with a margin instead.
+   The tints are mixed from the text color, not taken from the --bg-* steps:
+   some themes (Solarized) keep those steps a hair apart, and a bar or a line
+   in a color that close to the sidebar's simply isn't there. */
+.project-groups {
+  --project-header-bg: color-mix(in srgb, var(--text-primary) 7%, var(--surface-sidebar));
+  --project-header-hover: color-mix(in srgb, var(--text-primary) 11%, var(--surface-sidebar));
+  --project-header-raised: color-mix(in srgb, var(--text-primary) 17%, var(--surface-sidebar));
+  --project-guide: color-mix(in srgb, var(--text-primary) 14%, var(--surface-sidebar));
+
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.project-group:first-child {
+  margin-top: 6px;
+}
+
+.project-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The header itself is square and the sidebar's color, so a session
+   scrolling under a stuck header can't peek out at its rounded corners; the
+   tinted bar is its ::before, painted between that and the header's content. */
+.project-group__header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  padding: 0 4px 0 0;
+  background: var(--surface-sidebar);
+}
+
+.project-group__header::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--project-header-bg);
+}
+
+.project-group__header:hover::before,
+.project-group__header:focus-within::before,
+.project-group__header--menu::before {
+  background: var(--project-header-hover);
+}
+
+.project-group__header--drop::before,
+.project-group__header--drop:hover::before {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--surface-sidebar));
+}
+
+.project-group__toggle {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 100%;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-md);
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-group__chevron {
+  flex: none;
+  color: var(--text-muted);
+  transition: transform var(--transition-fast, 120ms);
+}
+
+.project-group--folded .project-group__chevron {
+  transform: rotate(-90deg);
+}
+
+.project-group__header--active .project-group__chevron {
+  color: var(--accent);
+}
+
+.project-group__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-group--folded .project-group__name {
+  color: var(--text-secondary);
+}
+
+/* The numbers sit at the right edge until the pointer comes in; then the
+   actions take their place. */
+.project-group__meta,
+.project-group__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.project-group__actions {
+  display: none;
+  gap: 0;
+}
+
+.project-group__header:hover .project-group__actions,
+.project-group__header:focus-within .project-group__actions,
+.project-group__header--menu .project-group__actions {
+  display: flex;
+}
+
+.project-group__header:hover .project-group__count,
+.project-group__header:focus-within .project-group__count,
+.project-group__header--menu .project-group__count {
+  display: none;
+}
+
+.project-group__count,
+.project-group__signal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.project-group__count {
+  background: var(--project-header-raised);
+  color: var(--text-secondary);
+}
+
+.project-group__signal--waiting {
+  background: var(--status-waiting-strong);
+  color: var(--status-waiting);
+}
+
+.project-group__signal--working {
+  background: var(--status-working-subtle);
+  color: var(--status-working);
+}
+
+.project-group__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.project-group__action:hover,
+.project-group__action[aria-expanded="true"] {
+  background: var(--project-header-raised);
+  color: var(--text-primary);
+}
+
+/* The project's sessions, hanging from the chevron along a guide line. */
+.session-sidebar__list.project-group__list {
+  flex: none;
+  gap: 2px;
+  overflow: visible;
+  margin: 4px 0 0 12px;
+  padding: 0 0 2px 6px;
+  border-left: 1px solid var(--project-guide);
+}
+
+.project-group__empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0 12px;
+  padding: 4px 0 4px 12px;
+  border-left: 1px solid var(--project-guide);
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.project-group__empty-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+  cursor: pointer;
+}
+
+.project-group__empty-action:hover {
+  background: var(--project-header-hover);
+  color: var(--text-primary);
+}
+
+.project-group__rename {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  outline: none;
+}
+
+.project-groups__new {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-groups__new:hover {
+  background: var(--bg-3);
+  color: var(--text-primary);
+}
+
+.project-groups__new-input {
+  flex: none;
+}
+
+/* Under a project the sessions are the lighter level of the tree. */
+.project-group__list .session-sidebar__title {
+  font-weight: 500;
+}
+
+.project-group__list .session-sidebar__item--active .session-sidebar__title {
+  font-weight: 600;
+}
+
+/* In the grouped view a session with nothing to report is one line: the
+   status line only shows up while it works, waits, finished or failed. */
+.session-sidebar__item--quiet .session-sidebar__select {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.session-sidebar__item--quiet .session-sidebar__actions {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Collapsed rail: each project is a chip with its initial, folding the
+   compact sessions under it. */
+.session-sidebar--collapsed .project-groups {
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+}
+
+.session-sidebar--collapsed .project-group {
+  align-items: center;
+}
+
+.session-sidebar--collapsed .project-group__header {
+  position: static;
+  justify-content: center;
+  height: auto;
+  padding: 0;
+  background: transparent;
+}
+
+.session-sidebar--collapsed .project-group__header::before {
+  display: none;
+}
+
+.session-sidebar--collapsed .project-group__toggle {
+  position: relative;
+  flex: none;
+  justify-content: center;
+  width: 30px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  background: var(--bg-3);
+}
+
+.session-sidebar--collapsed .project-group__header--active .project-group__toggle {
+  border-color: var(--accent);
+}
+
+.session-sidebar--collapsed .project-group__list {
+  margin: 4px 0 0;
+  padding: 0;
+  border-left: 0;
+}
+
+.project-group__initial {
+  font-size: var(--font-xs);
+  font-weight: 700;
+}
+
+.project-group--folded .project-group__initial {
+  opacity: 0.55;
+}
+
+.project-group__signal--corner {
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+}

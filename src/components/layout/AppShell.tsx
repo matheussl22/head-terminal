@@ -35,12 +35,36 @@ import { SessionSidebar } from "./SessionSidebar";
 import { HibernatedSessionPlaceholder } from "./HibernatedSessionPlaceholder";
 import { SessionWorkspace } from "./SessionWorkspace";
 import { SettingsDialog } from "./SettingsDialog";
+import { IconPlus } from "../ui/Icons";
 import { useTerminalStatusCounts } from "../ui/StatusDot";
+
+/** Projects mode, a project with no session yet: what fills the canvas. */
+function EmptyProject({
+  name,
+  cwd,
+  onCreateSession,
+}: {
+  name: string;
+  cwd?: string;
+  onCreateSession: () => void;
+}) {
+  return (
+    <div className="app-shell__empty-project">
+      <strong>{msg.sidebar.projects.emptyTitle(name)}</strong>
+      <span>{msg.sidebar.projects.emptyHint}</span>
+      {cwd && <span className="app-shell__empty-project-folder">{cwd}</span>}
+      <button type="button" className="session-sidebar__new" onClick={() => onCreateSession()}>
+        <IconPlus size={12} />
+        <span>{msg.sidebar.newSessionAria}</span>
+      </button>
+    </div>
+  );
+}
 
 interface AppShellProps {
   sessions: AgentSession[];
   activeSessionId: string | null;
-  onCreateSession: () => void;
+  onCreateSession: (projectId?: string) => void;
 }
 
 export function AppShell({
@@ -51,6 +75,10 @@ export function AppShell({
   // The window title is set from an effect, not rendered: redo it on a switch.
   useLocale();
   const spawnedSessionIds = useSessionStore((state) => state.spawnedSessionIds);
+  const projectsEnabled = useSessionStore((state) => state.projectsEnabled);
+  const activeProject = useSessionStore((state) =>
+    state.projects.find((project) => project.id === state.activeProjectId),
+  );
   // By terminal, like the toolbar chips: two agents running in one session
   // are two, not one.
   const statusCounts = useTerminalStatusCounts();
@@ -192,6 +220,13 @@ export function AppShell({
           onRenameRequest={requestRename}
         />
         <main className="app-shell__main">
+          {projectsEnabled && activeSessionId === null && activeProject && (
+            <EmptyProject
+              name={activeProject.name}
+              cwd={activeProject.cwd}
+              onCreateSession={onCreateSession}
+            />
+          )}
           {sessions.map((session) => (
             <SessionWorkspace
               key={session.id}

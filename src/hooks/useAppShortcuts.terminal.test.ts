@@ -131,6 +131,61 @@ describe("useKeyboardShortcuts with the keyboard in a pane", () => {
     expect(state().activeSessionId).toBe("one");
   });
 
+  it("goes through the project on screen only, in projects mode", () => {
+    mount("darwin");
+    // "one", "two", "three" land in the first project; "four" and "five" in
+    // a second one, created and on screen.
+    act(() => {
+      state().setProjectsEnabled(true);
+      state().addProject("Outro");
+      for (const id of ["four", "five"]) {
+        state().addSession(
+          createEmptySession({ id, title: id, cwd: "/tmp", agentProfileId: "claude" }),
+        );
+      }
+    });
+    expect(state().activeSessionId).toBe("five");
+
+    press(terminal, { key: "1", code: "Digit1", metaKey: true });
+    expect(state().activeSessionId).toBe("four");
+    press(terminal, { key: "3", code: "Digit3", metaKey: true });
+    expect(state().activeSessionId).toBe("four");
+
+    press(terminal, { key: "Tab", code: "Tab", ctrlKey: true });
+    expect(state().activeSessionId).toBe("five");
+    press(terminal, { key: "Tab", code: "Tab", ctrlKey: true });
+    expect(state().activeSessionId).toBe("four");
+    press(terminal, { key: "{", code: "BracketLeft", metaKey: true, shiftKey: true });
+    expect(state().activeSessionId).toBe("five");
+  });
+
+  it("goes through the unfolded projects in order, in the grouped view", () => {
+    mount("darwin");
+    let general = "";
+    act(() => {
+      state().setProjectsEnabled(true);
+      state().setProjectsView("grouped");
+      general = state().activeProjectId!;
+      const other = state().addProject("Outro", undefined, { activate: false });
+      state().addSession({
+        ...createEmptySession({ id: "four", title: "four", cwd: "/tmp", agentProfileId: "claude" }),
+        projectId: other,
+      });
+    });
+
+    press(terminal, { key: "2", code: "Digit2", metaKey: true });
+    expect(state().activeSessionId).toBe("two");
+    press(terminal, { key: "4", code: "Digit4", metaKey: true });
+    expect(state().activeSessionId).toBe("four");
+
+    // Folding "one", "two" and "three" away leaves "four" alone in the order.
+    act(() => state().toggleProjectCollapsed(general));
+    press(terminal, { key: "2", code: "Digit2", metaKey: true });
+    expect(state().activeSessionId).toBe("four");
+    press(terminal, { key: "1", code: "Digit1", metaKey: true });
+    expect(state().activeSessionId).toBe("four");
+  });
+
   it("uses Ctrl off macOS", () => {
     mount("linux");
     press(terminal, { key: "f", code: "KeyF", metaKey: true });

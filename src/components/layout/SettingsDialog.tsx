@@ -146,6 +146,8 @@ function ThemeCard({ theme, label, hint, active, onSelect }: ThemeCardProps) {
 
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const sessions = useSessionStore((state) => state.sessions);
+  const projectsEnabled = useSessionStore((state) => state.projectsEnabled);
+  const projectsView = useSessionStore((state) => state.projectsView);
   const [activeSection, setActiveSection] =
     useState<SettingsSection>("profiles");
   const [fontSize, setFontSize] = useState(12);
@@ -556,6 +558,29 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                         saveCopyOnSelect(event.target.checked);
                       }}
                     />
+                  </label>
+                  <label className="settings-row">
+                    <span>
+                      <strong>{msg.settings.projects}</strong>
+                      <small>{msg.settings.projectsHint}</small>
+                    </span>
+                    <select
+                      value={projectsEnabled ? projectsView : "off"}
+                      onChange={(event) => {
+                        const store = useSessionStore.getState();
+                        const value = event.target.value;
+                        if (value === "off") {
+                          store.setProjectsEnabled(false);
+                          return;
+                        }
+                        store.setProjectsView(value === "grouped" ? "grouped" : "single");
+                        store.setProjectsEnabled(true);
+                      }}
+                    >
+                      <option value="off">{msg.settings.projectsOff}</option>
+                      <option value="single">{msg.settings.projectsSingle}</option>
+                      <option value="grouped">{msg.settings.projectsGrouped}</option>
+                    </select>
                   </label>
                   {isMacHost() && (
                     <label className="settings-row">

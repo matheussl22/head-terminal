@@ -123,3 +123,78 @@ describe("workspaceFromStore fed the whole session store (the close-time flush)"
     );
   });
 });
+
+describe("workspace projects persistence", () => {
+  function claude(id: string, projectId?: string) {
+    return createEmptySession({
+      id,
+      title: id,
+      cwd: "/repo",
+      agentProfileId: "claude",
+      ...(projectId ? { projectId } : {}),
+    });
+  }
+
+  it("leaves projects out of the file until there is one", () => {
+    const session = claude("a");
+    const persisted = workspaceFromStore({
+      sessions: [session],
+      activeSessionId: "a",
+      activePaneId: null,
+      projects: [],
+      activeProjectId: null,
+    });
+    expect(persisted).not.toHaveProperty("projects");
+    expect(persisted).not.toHaveProperty("activeProjectId");
+  });
+
+  it("round-trips projects, each session's project and the project on screen", () => {
+    const persisted = workspaceFromStore({
+      sessions: [claude("a", "p1"), claude("b", "p2")],
+      activeSessionId: "b",
+      activePaneId: null,
+      projects: [
+        { id: "p1", name: "Composer", cwd: "/repo", lastSessionId: "a" },
+        { id: "p2", name: "Pessoal", collapsed: true },
+      ],
+      activeProjectId: "p2",
+    });
+
+    const restored = hydrateWorkspace(JSON.parse(JSON.stringify(persisted)));
+    expect(restored.sessions.map((session) => session.projectId)).toEqual(["p1", "p2"]);
+    expect(restored.projects).toEqual([
+      { id: "p1", name: "Composer", cwd: "/repo", lastSessionId: "a" },
+      { id: "p2", name: "Pessoal", collapsed: true },
+    ]);
+    expect(restored.activeProjectId).toBe("p2");
+    expect(restored.activeSessionId).toBe("b");
+  });
+
+  it("keeps an empty project on screen instead of jumping to another project's session", () => {
+    const restored = hydrateWorkspace({
+      version: 1,
+      activeSessionId: null,
+      activePaneId: null,
+      sessions: [claude("a", "p1")],
+      projects: [
+        { id: "p1", name: "Composer" },
+        { id: "p2", name: "Vazio" },
+      ],
+      activeProjectId: "p2",
+    });
+    expect(restored.activeSessionId).toBeNull();
+    expect(restored.activeProjectId).toBe("p2");
+  });
+
+  it("falls back to the first project when the one on screen is gone", () => {
+    const restored = hydrateWorkspace({
+      version: 1,
+      activeSessionId: "a",
+      activePaneId: null,
+      sessions: [claude("a", "p1")],
+      projects: [{ id: "p1", name: "Composer" }],
+      activeProjectId: "deleted",
+    });
+    expect(restored.activeProjectId).toBe("p1");
+  });
+});

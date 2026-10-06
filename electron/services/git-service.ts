@@ -49,7 +49,11 @@ export async function executeGit(
   try {
     // Paths in `args` are POSIX and stay POSIX: in WSL mode this is the git
     // inside the distro, so nothing the user sees needs translating.
-    const { stdout, stderr } = await runCommand("git", args, {
+    // `--no-optional-locks` stops read-only commands such as `status` from
+    // taking .git/index.lock to refresh the index. That lock lands in the
+    // directory git-watch-service observes, so every refresh woke the watcher
+    // up again. Locks that a write needs are not optional and still apply.
+    const { stdout, stderr } = await runCommand("git", ["--no-optional-locks", ...args], {
       maxBuffer: GIT_MAX_BUFFER,
       timeoutMs: options.timeoutMs ?? GIT_TIMEOUT_MS,
     });

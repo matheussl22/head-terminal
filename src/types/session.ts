@@ -52,4 +52,20 @@ export interface AgentSession {
   wslDistro?: string;
   layout: LayoutNode;
   pinned?: boolean;
+  /** The project this session belongs to. Only read in projects mode; kept
+   * while the mode is off so turning it back on restores the grouping. */
+  projectId?: string;
+}
+
+/** A set of sessions in projects mode: on screen on its own, or under its
+ * header in the grouped view. */
+export interface Project {
+  id: string;
+  name: string;
+  /** Where the project's new sessions open. Absent: the app's default. */
+  cwd?: string;
+  /** The session it was showing, for when the user comes back to it. */
+  lastSessionId?: string;
+  /** Grouped view: its sessions are folded under its header. */
+  collapsed?: boolean;
 }

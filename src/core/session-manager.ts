@@ -26,12 +26,19 @@ import { gitContextsEqual } from "./git-context-utils";
 import type { MinimizedPane } from "./minimized-panes";
 import { samePath } from "./path-utils";
 import {
+  loadProjectsEnabled,
+  loadProjectsView,
   loadRunEverything,
+  saveProjectsEnabled,
+  saveProjectsView,
   saveRunEverything,
+  type ProjectsView,
 } from "./ui-preferences";
+import { msg } from "../i18n";
 import type { GitContext } from "../types/git-context";
 import type {
   AgentSession,
+  Project,
   SessionStatus,
   SplitDirection,
   WorktreeRef,
@@ -91,6 +98,105 @@ export function createPaneRuntime(): PaneRuntime {
   };
 }
 
+/** The sessions the sidebar shows and ⌘1–9 / Ctrl+Tab go through, in its
+ * order: all of them; in projects mode only the active project's, or — in the
+ * grouped view — project by project, without the folded ones. */
+export function sessionsInView(state: {
+  sessions: AgentSession[];
+  projectsEnabled: boolean;
+  projectsView: ProjectsView;
+  projects: Project[];
+  activeProjectId: string | null;
+}): AgentSession[] {
+  if (!state.projectsEnabled) {
+    return state.sessions;
+  }
+  if (state.projectsView === "single") {
+    return state.sessions.filter((session) => session.projectId === state.activeProjectId);
+  }
+  return state.projects
+    .filter((project) => !project.collapsed)
+    .flatMap((project) =>
+      state.sessions.filter((session) => session.projectId === project.id),
+    );
+}
+
+/** Grouped view: unfolds the project, so the session taking the screen is
+ * one the sidebar shows. */
+function withExpanded(projects: Project[], projectId: string | undefined): Project[] {
+  if (!projectId || !projects.some((project) => project.id === projectId && project.collapsed)) {
+    return projects;
+  }
+  return projects.map((project) => {
+    if (project.id !== projectId) {
+      return project;
+    }
+    const { collapsed: _folded, ...unfolded } = project;
+    return unfolded;
+  });
+}
+
+/**
+ * Projects mode needs every session in a project: makes sure one exists (the
+ * first one is created for the sessions already there) and gives each session
+ * without a known project the active one, or the first. Done once, when the
+ * mode turns on or the workspace loads, so a session never moves on its own
+ * later when projects are reordered or removed.
+ */
+function withProjectsNormalized(
+  sessions: AgentSession[],
+  projects: Project[],
+  activeProjectId: string | null,
+): { sessions: AgentSession[]; projects: Project[]; activeProjectId: string } {
+  const ensured =
+    projects.length > 0
+      ? projects
+      : [{ id: crypto.randomUUID(), name: msg.core.projects.defaultName }];
+  const known = new Set(ensured.map((project) => project.id));
+  const fallback =
+    activeProjectId && known.has(activeProjectId) ? activeProjectId : ensured[0].id;
+  let changed = false;
+  const assigned = sessions.map((session) => {
+    if (session.projectId && known.has(session.projectId)) {
+      return session;
+    }
+    changed = true;
+    return { ...session, projectId: fallback };
+  });
+  return {
+    sessions: changed ? assigned : sessions,
+    projects: ensured,
+    activeProjectId: fallback,
+  };
+}
+
+/** Notes the session a project is showing, to come back to it later. */
+function withLastSession(projects: Project[], session: AgentSession | null): Project[] {
+  const projectId = session?.projectId;
+  if (!session || !projectId) {
+    return projects;
+  }
+  const project = projects.find((item) => item.id === projectId);
+  if (!project || project.lastSessionId === session.id) {
+    return projects;
+  }
+  return projects.map((item) =>
+    item.id === projectId ? { ...item, lastSessionId: session.id } : item,
+  );
+}
+
+/** The session to show for a project: the one it showed last, its first, or
+ * none at all. */
+function projectSessionToShow(
+  sessions: AgentSession[],
+  projects: Project[],
+  projectId: string,
+): AgentSession | null {
+  const inProject = sessions.filter((session) => session.projectId === projectId);
+  const last = projects.find((project) => project.id === projectId)?.lastSessionId;
+  return inProject.find((session) => session.id === last) ?? inProject[0] ?? null;
+}
+
 interface SessionStore {
   sessions: AgentSession[];
   activeSessionId: string | null;
@@ -136,6 +242,15 @@ interface SessionStore {
    * its own conversation — and wakes when selected. Not persisted: after a
    * restart every session but the active one starts that way anyway. */
   hibernatedSessions: Record<string, number>;
+  /** Projects mode (a setting, off by default): every session belongs to a
+   * project and only the active project's sessions are on screen. Off, the
+   * projects are kept but nothing reads them. */
+  projectsEnabled: boolean;
+  /** One project on screen behind a switcher, or all of them in the sidebar,
+   * each folding under its header. */
+  projectsView: ProjectsView;
+  projects: Project[];
+  activeProjectId: string | null;
   addSession: (session: AgentSession) => void;
   hydrateWorkspace: (
     sessions: AgentSession[],
@@ -143,7 +258,30 @@ interface SessionStore {
     activePaneId: string | null,
     paneResumeAnchors?: Record<string, string>,
     conversationLabels?: Record<string, string>,
+    projectState?: { projects: Project[]; activeProjectId: string | null },
   ) => void;
+  setProjectsEnabled: (enabled: boolean) => void;
+  setProjectsView: (view: ProjectsView) => void;
+  /** Grouped view: folds or unfolds the project's sessions under its header. */
+  toggleProjectCollapsed: (projectId: string) => void;
+  /** Creates a project and shows it — empty, until a session is created in
+   * it — unless `activate` is false. Returns its id. */
+  addProject: (name: string, cwd?: string, options?: { activate?: boolean }) => string;
+  renameProject: (projectId: string, name: string) => void;
+  /** Where the project's new sessions open; `undefined` goes back to the
+   * app's default folder. */
+  setProjectCwd: (projectId: string, cwd: string | undefined) => void;
+  /** Only an empty project can go, and never the last one: false when
+   * refused. */
+  removeProject: (projectId: string) => boolean;
+  /** Shows the project with the session it was showing, its first one, or
+   * none when it is empty. */
+  setActiveProjectId: (projectId: string) => void;
+  /** Moves the session with everything it has — panes, processes,
+   * conversations — to the end of the project's list. The screen stays on the
+   * project it shows: a session moved out of it while on screen gives its
+   * place to another of the project's. */
+  moveSessionToProject: (sessionId: string, projectId: string) => void;
   setActiveSessionId: (sessionId: string) => void;
   setActivePaneId: (paneId: string) => void;
   renameSession: (sessionId: string, title: string) => void;
@@ -395,6 +533,8 @@ function persistWorkspaceState(
     activePaneId: state.activePaneId,
     paneResumeAnchors: state.paneResumeAnchors,
     conversationLabels: state.conversationLabels,
+    projects: state.projects,
+    activeProjectId: state.activeProjectId,
   });
 
   if (options?.immediate) {
@@ -545,6 +685,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   maximizedPaneIds: {},
   minimizedPanes: {},
   hibernatedSessions: {},
+  projectsEnabled: loadProjectsEnabled(),
+  projectsView: loadProjectsView(),
+  projects: [],
+  activeProjectId: null,
 
   addSession: (session) =>
     set((state) => {
@@ -554,15 +698,33 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         paneRuntime[paneId] = createPaneRuntime();
       }
 
+      // In projects mode a new session — from the dialog, a duplicate, a
+      // folder sent by Finder — lands in the project on screen.
+      let projects = state.projects;
+      let activeProjectId = state.activeProjectId;
+      let added = session;
+      if (state.projectsEnabled) {
+        const normalized = withProjectsNormalized(
+          [session],
+          state.projects,
+          state.activeProjectId,
+        );
+        projects = normalized.projects;
+        added = normalized.sessions[0];
+        activeProjectId = added.projectId ?? normalized.activeProjectId;
+      }
+
       const next = {
-        sessions: [...state.sessions, session],
-        activeSessionId: session.id,
+        sessions: [...state.sessions, added],
+        activeSessionId: added.id,
         activePaneId: paneIds[0] ?? null,
         paneRuntime,
         spawnedSessionIds: {
           ...state.spawnedSessionIds,
-          [session.id]: true,
+          [added.id]: true,
         },
+        projects: withLastSession(projects, added),
+        activeProjectId,
       };
       persistWorkspaceState({ ...state, ...next }, { immediate: true });
       checkpointSessionSpawn(session.id);
@@ -575,7 +737,31 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     activePaneId,
     paneResumeAnchors = {},
     conversationLabels = {},
+    projectState,
   ) => {
+    let projects = projectState?.projects ?? [];
+    let activeProjectId = projectState?.activeProjectId ?? null;
+    if (get().projectsEnabled) {
+      const normalized = withProjectsNormalized(sessions, projects, activeProjectId);
+      sessions = normalized.sessions;
+      projects = normalized.projects;
+      // The screen shows the active session's project; with none active (an
+      // empty project was on screen), the project that was.
+      const active = sessions.find((session) => session.id === activeSessionId);
+      activeProjectId = active?.projectId ?? normalized.activeProjectId;
+      if (!active) {
+        const shown = projectSessionToShow(sessions, projects, activeProjectId);
+        activeSessionId = shown?.id ?? null;
+        activePaneId = shown ? (collectPaneIds(shown.layout)[0] ?? null) : null;
+      }
+    } else if (
+      !sessions.some((session) => session.id === activeSessionId) &&
+      sessions.length > 0
+    ) {
+      activeSessionId = sessions[0].id;
+      activePaneId = collectPaneIds(sessions[0].layout)[0] ?? null;
+    }
+
     const paneRuntime: Record<string, PaneRuntime> = {};
     const restoredPaneIds: Record<string, boolean> = {};
     const paneResumeSessionIds: Record<string, string> = {};
@@ -619,6 +805,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       conversationTitles: {},
       pendingConversationLabels: {},
       hibernatedSessions: {},
+      projects,
+      activeProjectId,
     });
     logSpawnState(
       "session.spawn_state",
@@ -632,6 +820,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       sessions,
       activeSessionId,
       activePaneId,
+      projects,
+      activeProjectId,
     });
   },
 
@@ -644,9 +834,22 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         state.minimizedPanes,
         state.maximizedPaneIds,
       );
+      // A session from another project — a notification click, a pane dot —
+      // takes its project to the screen with it.
+      const projectId = session?.projectId;
       const next = {
         activeSessionId: sessionId,
         activePaneId,
+        activeProjectId:
+          projectId && state.projects.some((project) => project.id === projectId)
+            ? projectId
+            : state.activeProjectId,
+        projects: withLastSession(
+          state.projectsEnabled && state.projectsView === "grouped"
+            ? withExpanded(state.projects, projectId)
+            : state.projects,
+          session,
+        ),
         spawnedSessionIds: {
           ...state.spawnedSessionIds,
           [sessionId]: true,
@@ -891,7 +1094,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       let activated: string | null = null;
 
       if (activeSessionId === sessionId) {
-        const nextSession = remaining[0] ?? null;
+        // In projects mode the next session is one of the same project. Shown
+        // on its own, the project stays on screen — empty when this was its
+        // last; in the grouped view, where all of them are, any other will do.
+        const sameProject = remaining.find((item) => item.projectId === session.projectId);
+        const nextSession =
+          (!state.projectsEnabled
+            ? remaining[0]
+            : (sameProject ??
+              (state.projectsView === "grouped"
+                ? (sessionsInView({ ...state, sessions: remaining })[0] ?? remaining[0])
+                : undefined))) ?? null;
         activeSessionId = nextSession?.id ?? null;
         activePaneId = nextSession
           ? firstPaneOnScreen(
@@ -920,6 +1133,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         }
       }
 
+      const shown = remaining.find((item) => item.id === activeSessionId) ?? null;
       const next = {
         sessions: remaining,
         activeSessionId,
@@ -930,6 +1144,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         hibernatedSessions,
         ...cleanup,
         paneRuntime,
+        projects: withLastSession(
+          state.projectsEnabled && state.projectsView === "grouped"
+            ? withExpanded(state.projects, shown?.projectId)
+            : state.projects,
+          shown,
+        ),
+        activeProjectId: shown?.projectId ?? state.activeProjectId,
       };
       persistWorkspaceState({ ...state, ...next }, { immediate: true });
       if (activated) {
@@ -1026,6 +1247,205 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         hibernatedSessions: withoutKey(state.hibernatedSessions, sessionId),
       };
     }),
+
+  setProjectsEnabled: (enabled) => {
+    saveProjectsEnabled(enabled);
+    if (!enabled) {
+      set({ projectsEnabled: false });
+      // Back to the flat list, which always has a session on screen — even
+      // coming from an empty project.
+      const { activeSessionId, sessions } = get();
+      if (activeSessionId === null && sessions.length > 0) {
+        get().setActiveSessionId(sessions[0].id);
+      }
+      return;
+    }
+    set((state) => {
+      const normalized = withProjectsNormalized(
+        state.sessions,
+        state.projects,
+        state.activeProjectId,
+      );
+      const active = normalized.sessions.find(
+        (session) => session.id === state.activeSessionId,
+      );
+      const next = {
+        projectsEnabled: true,
+        sessions: normalized.sessions,
+        projects: withLastSession(normalized.projects, active ?? null),
+        activeProjectId: active?.projectId ?? normalized.activeProjectId,
+      };
+      persistWorkspaceState({ ...state, ...next }, { immediate: true });
+      return next;
+    });
+  },
+
+  setProjectsView: (view) =>
+    set((state) => {
+      saveProjectsView(view);
+      if (view !== "grouped") {
+        return { projectsView: view };
+      }
+      // The project of the session on screen must not be folded away.
+      const active = state.sessions.find((session) => session.id === state.activeSessionId);
+      const projects = withExpanded(state.projects, active?.projectId);
+      if (projects !== state.projects) {
+        persistWorkspaceState({ ...state, projects });
+      }
+      return { projectsView: view, projects };
+    }),
+
+  toggleProjectCollapsed: (projectId) =>
+    set((state) => {
+      const next = {
+        projects: state.projects.map((project) => {
+          if (project.id !== projectId) {
+            return project;
+          }
+          if (!project.collapsed) {
+            return { ...project, collapsed: true };
+          }
+          const { collapsed: _folded, ...unfolded } = project;
+          return unfolded;
+        }),
+      };
+      persistWorkspaceState({ ...state, ...next });
+      return next;
+    }),
+
+  addProject: (name, cwd, options) => {
+    const project: Project = { id: crypto.randomUUID(), name, ...(cwd ? { cwd } : {}) };
+    set((state) => {
+      const projects = [...state.projects, project];
+      const next =
+        options?.activate === false
+          ? { projects }
+          : { projects, activeProjectId: project.id, activeSessionId: null, activePaneId: null };
+      persistWorkspaceState({ ...state, ...next }, { immediate: true });
+      return next;
+    });
+    return project.id;
+  },
+
+  renameProject: (projectId, name) =>
+    set((state) => {
+      const next = {
+        projects: state.projects.map((project) =>
+          project.id === projectId ? { ...project, name } : project,
+        ),
+      };
+      persistWorkspaceState({ ...state, ...next });
+      return next;
+    }),
+
+  setProjectCwd: (projectId, cwd) =>
+    set((state) => {
+      const next = {
+        projects: state.projects.map((project) => {
+          if (project.id !== projectId) {
+            return project;
+          }
+          const { cwd: _previous, ...rest } = project;
+          return cwd ? { ...rest, cwd } : rest;
+        }),
+      };
+      persistWorkspaceState({ ...state, ...next });
+      return next;
+    }),
+
+  removeProject: (projectId) => {
+    const state = get();
+    if (
+      state.projects.length <= 1 ||
+      !state.projects.some((project) => project.id === projectId) ||
+      state.sessions.some((session) => session.projectId === projectId)
+    ) {
+      return false;
+    }
+    const projects = state.projects.filter((project) => project.id !== projectId);
+    set(() => {
+      const next = { projects };
+      persistWorkspaceState({ ...get(), ...next }, { immediate: true });
+      return next;
+    });
+    if (state.activeProjectId === projectId) {
+      get().setActiveProjectId(projects[0].id);
+    }
+    return true;
+  },
+
+  setActiveProjectId: (projectId) => {
+    const state = get();
+    if (!state.projects.some((project) => project.id === projectId)) {
+      return;
+    }
+    const shown = projectSessionToShow(state.sessions, state.projects, projectId);
+    if (shown) {
+      // Spawns it if it never ran, syncs the pane and takes the project along.
+      get().setActiveSessionId(shown.id);
+      return;
+    }
+    set((current) => {
+      const next = { activeProjectId: projectId, activeSessionId: null, activePaneId: null };
+      persistWorkspaceState({ ...current, ...next });
+      return next;
+    });
+  },
+
+  moveSessionToProject: (sessionId, projectId) => {
+    const state = get();
+    const session = state.sessions.find((item) => item.id === sessionId);
+    if (
+      !session ||
+      session.projectId === projectId ||
+      !state.projects.some((project) => project.id === projectId)
+    ) {
+      return;
+    }
+    set((current) => {
+      const next = {
+        sessions: [
+          ...current.sessions.filter((item) => item.id !== sessionId),
+          { ...session, projectId },
+        ],
+      };
+      persistWorkspaceState({ ...current, ...next });
+      return next;
+    });
+    if (!state.projectsEnabled || state.activeSessionId !== sessionId) {
+      return;
+    }
+    if (state.projectsView === "grouped") {
+      // Still on screen, under its new header: the project goes with it.
+      set((latest) => {
+        const moved = latest.sessions.find((item) => item.id === sessionId) ?? null;
+        const next = {
+          activeProjectId: projectId,
+          projects: withLastSession(withExpanded(latest.projects, projectId), moved),
+        };
+        persistWorkspaceState({ ...latest, ...next });
+        return next;
+      });
+      return;
+    }
+    const current = get();
+    const replacement = current.sessions.find(
+      (item) => item.projectId === state.activeProjectId,
+    );
+    if (replacement) {
+      current.setActiveSessionId(replacement.id);
+      return;
+    }
+    set((latest) => {
+      const next = {
+        activeProjectId: state.activeProjectId,
+        activeSessionId: null,
+        activePaneId: null,
+      };
+      persistWorkspaceState({ ...latest, ...next });
+      return next;
+    });
+  },
 
   restartPane: (paneId, options) =>
     set((state) => {

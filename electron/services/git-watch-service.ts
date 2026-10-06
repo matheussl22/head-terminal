@@ -228,7 +228,15 @@ export class GitWatchService {
         const watcher = watchFs(
           directory,
           { persistent: false, encoding: "utf8" },
-          () => this.scheduleRefresh(repoRoot, repoWatch),
+          (_event, filename) => {
+            // Git wraps every write in a short-lived `<name>.lock` and then
+            // renames it onto the real name, which reports the change on its
+            // own. The lock event alone only adds a refresh per git command.
+            if (filename?.endsWith(".lock")) {
+              return;
+            }
+            this.scheduleRefresh(repoRoot, repoWatch);
+          },
         );
         // A watcher error must not crash the Electron main process. Polling in
         // the renderer remains the fallback if an underlying watch is lost.

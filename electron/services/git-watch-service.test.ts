@@ -96,6 +96,49 @@ describe("GitWatchService", () => {
     );
   });
 
+  it("goes quiet after a change instead of waking itself with its own git calls", async () => {
+    const repo = await createRepo();
+    const service = new GitWatchService();
+    services.push(service);
+    const listener = vi.fn<(event: GitContextChangedEvent) => void>();
+    service.onChanged(listener);
+
+    await service.watch({ watchId: "pane:1", cwd: repo });
+    await writeFile(join(repo, "new.txt"), "new");
+    git(repo, "add", "new.txt");
+    await vi.waitFor(
+      () => {
+        expect(listener.mock.calls.at(-1)?.[0].context.isDirty).toBe(true);
+      },
+      { timeout: 3_000 },
+    );
+
+    // Let the events of `git add` drain. Nothing touches the repository after
+    // that, so any further refresh is the watcher feeding on itself.
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    listener.mockClear();
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("ignores the lock files git creates and removes around a write", async () => {
+    const repo = await createRepo();
+    const service = new GitWatchService();
+    services.push(service);
+    const listener = vi.fn<(event: GitContextChangedEvent) => void>();
+    service.onChanged(listener);
+
+    await service.watch({ watchId: "pane:1", cwd: repo });
+    listener.mockClear();
+
+    const lock = join(repo, ".git", "index.lock");
+    await writeFile(lock, "");
+    await rm(lock);
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("detaches a reused watch id from its previous repository", async () => {
     const firstRepo = await createRepo();
     const secondRepo = await createRepo();

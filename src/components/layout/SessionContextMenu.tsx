@@ -14,6 +14,9 @@ interface SessionContextMenuProps {
   onDuplicate: () => void;
   /** Ausente quando a sessão não está rodando. */
   onHibernate?: () => void;
+  /** Projects mode: the other projects this session can move to. */
+  moveTargets?: Array<{ id: string; name: string }>;
+  onMoveToProject?: (projectId: string) => void;
   onClose: () => void;
   onDismiss: () => void;
 }
@@ -28,6 +31,8 @@ export function SessionContextMenu({
   onIsolate,
   onDuplicate,
   onHibernate,
+  moveTargets,
+  onMoveToProject,
   onClose,
   onDismiss,
 }: SessionContextMenuProps) {
@@ -82,6 +87,23 @@ export function SessionContextMenu({
         <button type="button" onClick={onHibernate}>
           {msg.app.sessionMenu.hibernate}
         </button>
+      )}
+      {moveTargets && moveTargets.length > 0 && onMoveToProject && (
+        <>
+          <div className="session-context-menu__separator" role="separator" />
+          <div className="session-context-menu__label">{msg.sidebar.projects.moveTo}</div>
+          {moveTargets.map((project) => (
+            <button
+              key={project.id}
+              type="button"
+              className="session-context-menu__indented"
+              onClick={() => onMoveToProject(project.id)}
+            >
+              {project.name}
+            </button>
+          ))}
+          <div className="session-context-menu__separator" role="separator" />
+        </>
       )}
       <button type="button" className="session-context-menu__danger" onClick={onClose}>
         {msg.app.sessionMenu.close}

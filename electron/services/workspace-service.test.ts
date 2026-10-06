@@ -104,6 +104,37 @@ describe("workspace-service", () => {
     ).rejects.toThrow("Workspace inválido");
   });
 
+  it("round-trips projects and rejects malformed ones", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "ht-workspace-"));
+    cleanup.push(directory);
+    const service = new WorkspaceService({ userDataPath: directory });
+    const withProjects = {
+      ...workspace,
+      sessions: [{ ...workspace.sessions[0], projectId: "project-1" }],
+      projects: [
+        { id: "project-1", name: "Composer", cwd: "/repo", lastSessionId: "session-1" },
+        { id: "project-2", name: "Pessoal", collapsed: true },
+      ],
+      activeProjectId: "project-1",
+    } satisfies PersistedWorkspace;
+
+    await service.save(withProjects);
+    await expect(service.load()).resolves.toEqual(withProjects);
+
+    for (const broken of [
+      { ...withProjects, projects: [{ id: "project-1" }] },
+      { ...withProjects, projects: [{ id: "project-1", name: "" }] },
+      { ...withProjects, projects: "Composer" },
+      { ...withProjects, activeProjectId: 7 },
+      { ...withProjects, projects: [{ id: "project-1", name: "Composer", collapsed: "yes" }] },
+      { ...withProjects, sessions: [{ ...withProjects.sessions[0], projectId: 7 }] },
+    ]) {
+      await expect(
+        service.save(broken as unknown as PersistedWorkspace),
+      ).rejects.toThrow("Workspace inválido");
+    }
+  });
+
   it("rejects unsupported schemas before touching disk", async () => {
     const directory = await mkdtemp(join(tmpdir(), "ht-workspace-"));
     cleanup.push(directory);

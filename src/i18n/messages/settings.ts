@@ -22,6 +22,12 @@ const ptBR = {
   rendererAuto: "Automática",
   copyOnSelect: "Copiar ao selecionar",
   copyOnSelectHint: "Envia o texto selecionado para a área de transferência",
+  projects: "Projetos",
+  projectsHint:
+    "Agrupa as sessões em projetos, cada um com seus terminais: um por vez na barra lateral, ou todos, cada um recolhível",
+  projectsOff: "Desligado",
+  projectsSingle: "Um projeto por vez",
+  projectsGrouped: "Todos, recolhíveis",
   optionAsMeta: "Option como Meta",
   optionAsMetaHint:
     "⌥ vira Meta (⌥P, ⌥T e ⌥O do Claude Code) em vez de digitar ç e símbolos — o macOptionIsMeta do VS Code",
@@ -128,6 +134,12 @@ const en: typeof ptBR = {
   rendererAuto: "Automatic",
   copyOnSelect: "Copy on select",
   copyOnSelectHint: "Sends the selected text to the clipboard",
+  projects: "Projects",
+  projectsHint:
+    "Groups sessions into projects, each with its own terminals: one at a time in the sidebar, or all of them, each collapsible",
+  projectsOff: "Off",
+  projectsSingle: "One project at a time",
+  projectsGrouped: "All, collapsible",
   optionAsMeta: "Option as Meta",
   optionAsMetaHint:
     "⌥ acts as Meta (Claude Code's ⌥P, ⌥T and ⌥O) instead of typing ç and symbols — VS Code's macOptionIsMeta",

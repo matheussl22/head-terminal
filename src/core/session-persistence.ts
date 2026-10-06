@@ -1,6 +1,6 @@
 import { debounce } from "./debounce";
 import { logError } from "./logger";
-import type { AgentSession, LayoutNode, WorktreeRef } from "../types/session";
+import type { AgentSession, LayoutNode, Project, WorktreeRef } from "../types/session";
 import { collectPaneIds } from "./session-layout";
 
 function resolveStorageKey(): string {
@@ -26,6 +26,15 @@ export interface PersistedSession {
   worktree?: WorktreeRef;
   layout: LayoutNode;
   pinned?: boolean;
+  projectId?: string;
+}
+
+export interface PersistedProject {
+  id: string;
+  name: string;
+  cwd?: string;
+  lastSessionId?: string;
+  collapsed?: boolean;
 }
 
 export interface PersistedWorkspace {
@@ -40,6 +49,10 @@ export interface PersistedWorkspace {
   /** CLI session id -> name the user gave that conversation, so a renamed
    * conversation stays renamed in the pane header and the resume dropdown. */
   conversationLabels?: Record<string, string>;
+  /** Projects mode. Absent until the first project exists, and kept while
+   * the mode is off so turning it back on finds the same projects. */
+  projects?: PersistedProject[];
+  activeProjectId?: string | null;
 }
 
 function toPersistedSession(session: AgentSession): PersistedSession {
@@ -56,6 +69,17 @@ function toPersistedSession(session: AgentSession): PersistedSession {
     worktree: session.worktree,
     layout: session.layout,
     pinned: session.pinned,
+    projectId: session.projectId,
+  };
+}
+
+function toPersistedProject(project: Project): PersistedProject {
+  return {
+    id: project.id,
+    name: project.name,
+    cwd: project.cwd,
+    lastSessionId: project.lastSessionId,
+    collapsed: project.collapsed,
   };
 }
 
@@ -69,8 +93,10 @@ export function workspaceFromStore(state: {
    * as-is without silently persisting the wrong map. */
   paneResumeAnchors?: Record<string, string>;
   conversationLabels?: Record<string, string>;
+  projects?: Project[];
+  activeProjectId?: string | null;
 }): PersistedWorkspace {
-  return {
+  const workspace: PersistedWorkspace = {
     version: 1,
     activeSessionId: state.activeSessionId,
     activePaneId: state.activePaneId,
@@ -78,6 +104,11 @@ export function workspaceFromStore(state: {
     paneResumeSessionIds: state.paneResumeAnchors,
     conversationLabels: state.conversationLabels,
   };
+  if (state.projects && state.projects.length > 0) {
+    workspace.projects = state.projects.map(toPersistedProject);
+    workspace.activeProjectId = state.activeProjectId ?? null;
+  }
+  return workspace;
 }
 
 export function hydrateWorkspace(workspace: PersistedWorkspace): {
@@ -86,16 +117,30 @@ export function hydrateWorkspace(workspace: PersistedWorkspace): {
   activePaneId: string | null;
   paneResumeSessionIds: Record<string, string>;
   conversationLabels: Record<string, string>;
+  projects: Project[];
+  activeProjectId: string | null;
 } {
   const sessions: AgentSession[] = workspace.sessions.map((session) => ({
     ...session,
   }));
+  const projects: Project[] = (workspace.projects ?? []).map((project) => ({
+    ...project,
+  }));
+  const activeProjectId = projects.some(
+    (project) => project.id === workspace.activeProjectId,
+  )
+    ? (workspace.activeProjectId ?? null)
+    : (projects[0]?.id ?? null);
 
+  // With projects, no session on screen is a real state (an empty project
+  // was): the store picks one for the mode it runs in.
   const activeSessionId = sessions.some(
     (session) => session.id === workspace.activeSessionId,
   )
     ? workspace.activeSessionId
-    : (sessions[0]?.id ?? null);
+    : projects.length > 0
+      ? null
+      : (sessions[0]?.id ?? null);
 
   const activeSession =
     sessions.find((session) => session.id === activeSessionId) ?? null;
@@ -138,6 +183,8 @@ export function hydrateWorkspace(workspace: PersistedWorkspace): {
     activePaneId,
     paneResumeSessionIds,
     conversationLabels,
+    projects,
+    activeProjectId,
   };
 }
 

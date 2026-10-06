@@ -161,6 +161,9 @@ const ptBR = {
   sessions: {
     copyTitle: (title: string) => `${title} (cópia)`,
   },
+  projects: {
+    defaultName: "Geral",
+  },
   worktree: {
     createFailedTitle: "Não foi possível criar o worktree",
     createFailedMessage: (cwd: string) => `O git recusou criar a árvore isolada de ${cwd}.`,
@@ -360,6 +363,9 @@ const en: typeof ptBR = {
   },
   sessions: {
     copyTitle: (title) => `${title} (copy)`,
+  },
+  projects: {
+    defaultName: "General",
   },
   worktree: {
     createFailedTitle: "Couldn't create the worktree",

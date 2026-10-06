@@ -1,9 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { fitPanes } from "../core/pane-fit-registry";
 import { isMacHost } from "../core/platform-info";
 import { collectPaneIds } from "../core/session-layout";
-import { isPaneOnScreen, useSessionStore } from "../core/session-manager";
+import {
+  isPaneOnScreen,
+  sessionsInView,
+  useSessionStore,
+} from "../core/session-manager";
 import { closePaneWithWorktreeReview } from "../core/worktree";
 import {
   notifyPaneDone,
@@ -168,7 +172,25 @@ export function useKeyboardShortcuts(options: {
   onSearch: () => void;
   onCloseSearch: () => void;
 }): void {
-  const sessions = useSessionStore((state) => state.sessions);
+  const allSessions = useSessionStore((state) => state.sessions);
+  const projectsEnabled = useSessionStore((state) => state.projectsEnabled);
+  const projectsView = useSessionStore((state) => state.projectsView);
+  const projects = useSessionStore((state) => state.projects);
+  const activeProjectId = useSessionStore((state) => state.activeProjectId);
+  // ⌘1–9, Ctrl+Tab and ⌘⇧[ / ⌘⇧] go through the sessions the sidebar shows,
+  // in its order: in projects mode only the project on screen, or the
+  // unfolded projects of the grouped view.
+  const sessions = useMemo(
+    () =>
+      sessionsInView({
+        sessions: allSessions,
+        projectsEnabled,
+        projectsView,
+        projects,
+        activeProjectId,
+      }),
+    [activeProjectId, allSessions, projects, projectsEnabled, projectsView],
+  );
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const setActiveSessionId = useSessionStore((state) => state.setActiveSessionId);
   const splitActivePane = useSessionStore((state) => state.splitActivePane);

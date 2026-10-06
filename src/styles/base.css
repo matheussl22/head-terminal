@@ -424,3 +424,33 @@ button.status-count:hover {
   color: var(--text-secondary);
   pointer-events: none;
 }
+
+/* Projects mode, a project with no session yet. */
+.app-shell__empty-project {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  text-align: center;
+}
+
+.app-shell__empty-project strong {
+  color: var(--text-primary);
+  font-size: var(--font-md, 15px);
+}
+
+.app-shell__empty-project-folder {
+  color: var(--text-muted);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-xs);
+}
+
+.app-shell__empty-project .session-sidebar__new {
+  margin-top: 8px;
+}

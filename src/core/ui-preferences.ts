@@ -3,6 +3,8 @@ import { isThemePreference, type ThemePreference } from "../config/themes";
 const SIDEBAR_COLLAPSED_KEY = "head-terminal.sidebar.collapsed";
 const SIDEBAR_WIDTH_KEY = "head-terminal.sidebar.width";
 const RUN_EVERYTHING_KEY = "head-terminal.run-everything";
+const PROJECTS_ENABLED_KEY = "head-terminal.projects.enabled";
+const PROJECTS_VIEW_KEY = "head-terminal.projects.view";
 const PANE_HEADERS_KEY = "head-terminal.pane-headers.enabled";
 const OPENAI_API_KEY_KEY = "head-terminal.openai-api-key";
 const FONT_SIZE_KEY = "head-terminal.font-size";
@@ -125,6 +127,28 @@ export function loadRunEverything(): boolean {
 
 export function saveRunEverything(enabled: boolean): void {
   storageSet(RUN_EVERYTHING_KEY, enabled ? "1" : "0");
+}
+
+/** Projects mode: sessions grouped in projects, one project on screen at a
+ * time. Off by default — the app is then the flat list of sessions it was. */
+export function loadProjectsEnabled(): boolean {
+  return storageGet(PROJECTS_ENABLED_KEY) === "1";
+}
+
+export function saveProjectsEnabled(enabled: boolean): void {
+  storageSet(PROJECTS_ENABLED_KEY, enabled ? "1" : "0");
+}
+
+/** How projects mode shows the projects: one at a time behind a switcher, or
+ * all of them in the sidebar, each folding under its header. */
+export type ProjectsView = "single" | "grouped";
+
+export function loadProjectsView(): ProjectsView {
+  return storageGet(PROJECTS_VIEW_KEY) === "grouped" ? "grouped" : "single";
+}
+
+export function saveProjectsView(view: ProjectsView): void {
+  storageSet(PROJECTS_VIEW_KEY, view);
 }
 
 export function loadOpenAiApiKey(): string {

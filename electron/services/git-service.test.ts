@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -72,6 +72,16 @@ describe("git-service", () => {
     const detached = await getGitContext(repo);
     expect(detached.branch).toBeNull();
     expect(detached.headRef).toBe(detached.headShort);
+  });
+
+  it("reads the context without taking git's optional index lock", async () => {
+    const repo = await createRepo();
+    // Creating and removing .git/index.lock would bump the directory's mtime,
+    // and git-watch-service would see it as a change.
+    const gitDir = join(repo, ".git");
+    const before = (await stat(gitDir, { bigint: true })).mtimeNs;
+    await getGitContext(repo);
+    expect((await stat(gitDir, { bigint: true })).mtimeNs).toBe(before);
   });
 
   it("combines tracked diff and untracked annotations", async () => {

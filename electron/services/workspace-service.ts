@@ -57,6 +57,14 @@ export function isPersistedWorkspace(value: unknown): value is PersistedWorkspac
   if (value.sessions.length > 500) return false;
   if (!isPaneResumeSessionIds(value.paneResumeSessionIds)) return false;
   if (!isConversationLabels(value.conversationLabels)) return false;
+  if (!isProjects(value.projects)) return false;
+  if (
+    value.activeProjectId !== undefined
+    && value.activeProjectId !== null
+    && !isBoundedString(value.activeProjectId, 256)
+  ) {
+    return false;
+  }
   return value.sessions.every((session) =>
     isRecord(session)
     && isBoundedString(session.id, 256)
@@ -74,6 +82,7 @@ export function isPersistedWorkspace(value: unknown): value is PersistedWorkspac
     && (session.wslDistro === undefined
       || isBoundedString(session.wslDistro, 64))
     && (session.pinned === undefined || typeof session.pinned === "boolean")
+    && (session.projectId === undefined || isBoundedString(session.projectId, 256))
     && isWorktreeRef(session.worktree)
     && isLayoutNode(session.layout));
 }
@@ -87,6 +96,21 @@ function isPaneResumeSessionIds(value: unknown): boolean {
     ([paneId, sessionId]) =>
       isBoundedString(paneId, 256) && isBoundedString(sessionId, 256),
   );
+}
+
+/** Projects mode's projects. The renderer never makes this many; the bound
+ * keeps a hand-edited workspace file from growing without limit. */
+function isProjects(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!Array.isArray(value) || value.length > 200) return false;
+  return value.every((project) =>
+    isRecord(project)
+    && isBoundedString(project.id, 256)
+    && isBoundedString(project.name, 256)
+    && (project.cwd === undefined || isBoundedString(project.cwd, 16_384))
+    && (project.lastSessionId === undefined
+      || isBoundedString(project.lastSessionId, 256))
+    && (project.collapsed === undefined || typeof project.collapsed === "boolean"));
 }
 
 /** CLI session id -> user-chosen conversation name. The renderer caps both

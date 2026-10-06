@@ -396,6 +396,7 @@ export interface PersistedWorkspace {
     wslDistro?: string;
     layout: unknown;
     pinned?: boolean;
+    projectId?: string;
   }>;
   /** paneId -> last known CLI session id, so a restart can `--resume` each
    * pane's own conversation instead of a blanket `--continue` that collides
@@ -404,6 +405,15 @@ export interface PersistedWorkspace {
   /** CLI session id -> name the user gave that conversation, so a renamed
    * conversation stays renamed across restarts. */
   conversationLabels?: Record<string, string>;
+  /** Projects mode: each session's `projectId` points into this list. */
+  projects?: Array<{
+    id: string;
+    name: string;
+    cwd?: string;
+    lastSessionId?: string;
+    collapsed?: boolean;
+  }>;
+  activeProjectId?: string | null;
 }
 
 export type MigratedPreferences = Record<string, string>;
