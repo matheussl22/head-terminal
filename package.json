@@ -5,7 +5,7 @@
   "author": "Matheus",
   "license": "PolyForm-Noncommercial-1.0.0",
   "private": true,
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "commonjs",
   "main": ".vite/build/main.js",
   "scripts": {
