@@ -21,6 +21,7 @@ import { attachOrphanCompositionEndGuard } from "../core/terminal-composition-gu
 import { attachTerminalPasteSurface } from "../core/terminal-clipboard";
 import { isBareMouseHoverReport, isFocusReport } from "../core/pty-text";
 import { trackCursorVisibility } from "../core/remote-screen";
+import { answerKeyboardProtocolQuery } from "../core/terminal-key-query";
 
 /**
  * One xterm instance per pane. It outlives the PTY: process restarts swap the
@@ -143,6 +144,7 @@ export function useTerminalInstance(
     );
     const pasteCleanup = attachTerminalPasteSurface(container, terminal);
     const cursorTracking = trackCursorVisibility(terminal);
+    const keyQuery = answerKeyboardProtocolQuery(terminal);
     const focusTerminal = () => {
       terminal.focus();
     };
@@ -156,6 +158,7 @@ export function useTerminalInstance(
       compositionCleanup();
       pasteCleanup();
       cursorTracking.dispose();
+      keyQuery.dispose();
       dataListener.dispose();
       resizeListener.dispose();
       unregisterPaneFitter(paneId);

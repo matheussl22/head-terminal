@@ -999,6 +999,7 @@ describe("user input", () => {
     expect(isTerminalReply("\x1b[?1;2c")).toBe(true);
     expect(isTerminalReply("\x1b]11;rgb:0000/0000/0000\x1b\\")).toBe(true);
     expect(isTerminalReply("\x1b[I")).toBe(true);
+    expect(isTerminalReply("\x1b[?0u")).toBe(true);
     expect(isTerminalReply("a")).toBe(false);
     expect(isTerminalReply("\r")).toBe(false);
     expect(isTerminalReply("\x1b[A")).toBe(false);

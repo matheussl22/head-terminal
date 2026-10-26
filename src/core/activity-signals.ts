@@ -680,9 +680,10 @@ export function classifyHookEvent(event: AgentHookEvent): HookSignal {
 // ---------------------------------------------------------------------------
 
 // Answers xterm writes on its own behalf: cursor position and device
-// attribute reports, DEC mode reports, OSC color replies, DCS replies, focus.
+// attribute reports, DEC mode reports, OSC color replies, DCS replies, focus,
+// and the kitty keyboard flags the pane answers for it (terminal-key-query).
 const TERMINAL_REPLY =
-  /^(?:\x1b\[\??\d+(?:;\d+)*R|\x1b\[[?>=]?[\d;]*c|\x1b\[\d*n|\x1b\[\??[\d;]*\$y|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[\s\S]*?\x1b\\|\x1b\[[IO])+$/;
+  /^(?:\x1b\[\??\d+(?:;\d+)*R|\x1b\[[?>=]?[\d;]*c|\x1b\[\d*n|\x1b\[\??[\d;]*\$y|\x1b\[\?\d+u|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1bP[\s\S]*?\x1b\\|\x1b\[[IO])+$/;
 
 /** Data xterm sends to the pty that no person typed. */
 export function isTerminalReply(data: string): boolean {
