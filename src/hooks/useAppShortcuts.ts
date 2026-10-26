@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { fitPanes } from "../core/pane-fit-registry";
 import { isMacHost } from "../core/platform-info";
 import { collectPaneIds } from "../core/session-layout";
 import {
@@ -18,11 +17,8 @@ import {
 } from "../core/notifications";
 import { revealPane, toggleActivePaneMinimized } from "../core/pane-minimize";
 import { hasPrimaryModifier, splitShortcutDirection } from "../core/shortcuts";
-import { forEachTerminal } from "../core/terminal-registry";
-import {
-  loadFontSize,
-  saveFontSize,
-} from "../core/ui-preferences";
+import { DEFAULT_FONT_SIZE, applyFontSize } from "../core/terminal-font-size";
+import { loadFontSize } from "../core/ui-preferences";
 import { toggleVoiceInput } from "../core/voice-input";
 
 const NOTIFY_DEBOUNCE_MS = 300;
@@ -261,36 +257,19 @@ export function useKeyboardShortcuts(options: {
 
       if (!isInput && mod && (event.key === "=" || event.key === "+")) {
         event.preventDefault();
-        const next = loadFontSize() + 1;
-        saveFontSize(next);
-        forEachTerminal((_paneId, handle) => {
-          handle.terminal.options.fontSize = next;
-        });
-        const paneIds = useSessionStore
-          .getState()
-          .getTargetPaneIds();
-        fitPanes(paneIds);
+        applyFontSize(loadFontSize() + 1);
         return;
       }
 
       if (!isInput && mod && event.key === "-") {
         event.preventDefault();
-        const next = loadFontSize() - 1;
-        saveFontSize(next);
-        forEachTerminal((_paneId, handle) => {
-          handle.terminal.options.fontSize = next;
-        });
-        fitPanes(useSessionStore.getState().getTargetPaneIds());
+        applyFontSize(loadFontSize() - 1);
         return;
       }
 
       if (!isInput && mod && event.key === "0") {
         event.preventDefault();
-        saveFontSize(12);
-        forEachTerminal((_paneId, handle) => {
-          handle.terminal.options.fontSize = 12;
-        });
-        fitPanes(useSessionStore.getState().getTargetPaneIds());
+        applyFontSize(DEFAULT_FONT_SIZE);
         return;
       }
 

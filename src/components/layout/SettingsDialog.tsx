@@ -35,6 +35,7 @@ import {
 } from "../../i18n";
 import { setThemePreference } from "../../core/theme-manager";
 import { isMacHost } from "../../core/platform-info";
+import { applyFontSize } from "../../core/terminal-font-size";
 import { forEachTerminal } from "../../core/terminal-registry";
 import {
   DEFAULT_HIBERNATE_AFTER_MINUTES,
@@ -47,7 +48,6 @@ import {
   loadThemePreference,
   saveCopyOnSelect,
   saveHibernateAfterMinutes,
-  saveFontSize,
   saveOptionAsMeta,
   saveRendererPreference,
   type TerminalRenderer,
@@ -523,7 +523,9 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                       onChange={(event) => {
                         const value = Number(event.target.value);
                         setFontSize(value);
-                        saveFontSize(value);
+                        // Open terminals too: saving alone only reached
+                        // panes created afterwards.
+                        applyFontSize(value);
                       }}
                     />
                   </label>
